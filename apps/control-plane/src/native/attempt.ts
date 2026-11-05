@@ -375,7 +375,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         return fillLogin(state.input.targetConfig!,pages[0]!,input,async name=>{const value=await readTargetSecret(this.env,name);this.credentialRedactions.push(value);return value;},()=>this.active());
       }}))]:[]),
       ...(state.input.targetConfig?.access?.login?.verification?[openCodeTool("pentcloud_browser_verify",aiTool({
-        description:"Fill a target's authenticator or forwarded email code privately, or follow its unique same-target email verification link. Inspect the challenge page first. Use codeSelector for a code; use followLink:true only for a magic-link login. No code, seed or email content is returned. Email waits up to 25 seconds; retry if still waiting, without resubmitting login.",
+        description:"Fill a target's authenticator or forwarded email code privately, or follow its unique same-target email verification link. Inspect the challenge page first. codeSelector must match the single code input, or ALL one-character digit inputs in DOM order. Forms may submit automatically; inspect before retrying. Use followLink:true only for a magic-link login. No code, seed or email content is returned. Email waits up to 25 seconds; retry if still waiting, without resubmitting login.",
         inputSchema:jsonSchema<{pageURL:string;codeSelector?:string;followLink?:boolean}>({type:"object",properties:{pageURL:{type:"string",maxLength:2048},codeSelector:{type:"string",maxLength:512},followLink:{type:"boolean"}},required:["pageURL"],additionalProperties:false}),
         execute:async input=>{
           await this.active();const target=state.input.targetConfig!,verification=target.access!.login!.verification!;
