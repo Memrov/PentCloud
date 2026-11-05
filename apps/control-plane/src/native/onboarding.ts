@@ -5,6 +5,7 @@ import { normalizeCatalog, type OpenCodeRoute, type OpenCodeModel, type PinnedMo
 import type {SourceContext} from "./source-context";
 import {validateTargetAccess,targetSecretBindings,parseTargetHeaders,resolveTargetHeaders,type TargetAccess,type ProgramScope} from "../../../../shared/target-access";
 import {performTargetFetch} from "./target-fetch";
+import {authenticator} from './target-verification';
 
 import {MODEL_ROLES,type ModelRole} from "./onboarding-roles";
 export {MODEL_ROLES,type ModelRole} from "./onboarding-roles";
@@ -64,11 +65,11 @@ export class OnboardingStore {
   }
   async checkTargetSecret(id:string,revision:number,kind:string,actor:string){
     const target=this.target(id);if(target.archived||target.revision!==revision)throw new Error("409: Target changed or archived; reload");
-    if(!["username","password","api","headers"].includes(kind))throw new Error("400: Unknown target secret");
+    if(!["username","password","api","headers","totp"].includes(kind))throw new Error("400: Unknown target secret");
     const names=await targetSecretBindings(id),access=target.access;
-    const binding=kind==="username"?access?.login?.usernameBinding??names.username:kind==="password"?access?.login?.passwordBinding??names.password:kind==="api"?access?.api?.binding??names.api:access?.headerBinding??names.headers;
+    const binding=kind==='totp'?(access?.login?.verification?.kind==='totp'?access.login.verification.binding:names.totp):kind==="username"?access?.login?.usernameBinding??names.username:kind==="password"?access?.login?.passwordBinding??names.password:kind==="api"?access?.api?.binding??names.api:access?.headerBinding??names.headers;
     let status:"ready"|"missing"|"invalid"="missing";
-    try{const value=await this.io.readTargetSecret?.(binding);if(value){status="invalid";if(value.length<=8192&&!/[\r\n\0]/.test(value)&&value.trim()){if(kind==="headers")parseTargetHeaders(value);status="ready";}}}catch(error){if(error instanceof Error&&error.message==="409: Target secret has invalid format")status="invalid"; /* Never return provider errors or values. */ }
+    try{const value=await this.io.readTargetSecret?.(binding);if(value){status="invalid";if(value.length<=8192&&!/[\r\n\0]/.test(value)&&value.trim()){if(kind==="headers")parseTargetHeaders(value);if(kind==='totp')authenticator(value);status="ready";}}}catch(error){if(error instanceof Error&&error.message==="409: Target secret has invalid format")status="invalid"; /* Never return provider errors or values. */ }
     const current=this.target(id);if(current.archived||current.revision!==revision)throw new Error("409: Target changed during verification; check again");
     this.audit("target.secret.check",id,actor);
     return {binding,status,ready:status==="ready",authenticated:false,checkedAt:this.now()};

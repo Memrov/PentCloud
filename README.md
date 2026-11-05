@@ -51,7 +51,10 @@ policy and Cloudflare model-secret bindings, then show the app URL and any
 setup steps I still need to complete. Do not start a scan or paid model test
 without asking me. If I need target login or API credentials, guide me through
 PENTCLOUD_TARGET_ secret bindings in docs/cloudflare-setup.md; save only their
-names on my target. Use docs/operations/debugging.md if setup fails.
+names on my target. For bounty programs, check researcher API access separately
+from target login. Help me claim permitted test credentials once and configure
+optional authenticator or email verification using that setup guide. Preserve
+existing MX/mailbox services. Use docs/operations/debugging.md if setup fails.
 ```
 
 </details>

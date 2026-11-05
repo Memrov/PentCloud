@@ -17,6 +17,12 @@ function fixture(fetcher?:typeof fetch) {
   return {store,records,setTargetSecret:(value:string)=>{targetSecret=value;},setBoundKey:(value:string)=>{bound=value;},advance:(ms:number)=>{time+=ms;}};
 }
 describe('saved targets and credential readiness',()=>{
+  it('validates the optional authenticator seed without persisting it',async()=>{
+    const {store,records,setTargetSecret}=fixture();const t=store.saveTarget({id:'target-totp',kind:'website',name:'Example',url:'example.com'},null,'owner');
+    setTargetSecret('not a seed');expect(await store.checkTargetSecret(t.id,t.revision,'totp','owner')).toMatchObject({status:'invalid'});
+    const seed='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';setTargetSecret(seed);expect(await store.checkTargetSecret(t.id,t.revision,'totp','owner')).toMatchObject({status:'ready',authenticated:false});
+    expect(JSON.stringify([...records.values()])).not.toContain(seed);
+  });
   it('checks native credential readiness without claiming a login or persisting values',async()=>{
     const {store,records}=fixture();const t=store.saveTarget({id:'target-secrets',kind:'website',name:'Example',url:'example.com'},null,'owner');
     const result=await store.checkTargetSecret(t.id,t.revision,'password','owner');

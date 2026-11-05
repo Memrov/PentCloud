@@ -1,5 +1,5 @@
 import {it,expect} from "vitest";
-import {validateBrowserState,assertBrowserCommand,fillLogin} from "../src/native/browser-target-access";
+import {validateBrowserState,assertBrowserCommand,fillLogin,fillVerification} from "../src/native/browser-target-access";
 const target={url:"https://example.com/",access:{headers:[],login:{url:"https://example.com/login",usernameBinding:"PENTCLOUD_TARGET_USER",passwordBinding:"PENTCLOUD_TARGET_PASS"}}};
 it("retains native browser clicks, typing and viewport control",()=>{
  for(const method of ["Input.dispatchMouseEvent","Input.dispatchKeyEvent","Input.insertText","Emulation.setDeviceMetricsOverride"])expect(()=>assertBrowserCommand(target,method)).not.toThrow();
@@ -25,4 +25,10 @@ it("pins the inspected login URL across asynchronous secret resolution",async()=
  const page={url:()=>url,evaluate:async()=>{evaluated=true;}};
  await expect(fillLogin(target,page as never,{pageURL:url,usernameSelector:'#user',passwordSelector:'#pass'},async()=>{url='https://example.com/untrusted';return 'secret';})).rejects.toThrow(/page|target/i);
  expect(evaluated).toBe(false);
+});
+it('fills a trusted verification code without returning it, fenced across async work',async()=>{
+ let url='https://example.com/verify',filled='';const page={url:()=>url,evaluate:async(_fn:unknown,args:{code:string})=>{filled=args.code;}};
+ const result=await fillVerification(target,page as never,{pageURL:url,codeSelector:'#code'},async()=> '384217');
+ expect(filled).toBe('384217');expect(JSON.stringify(result)).not.toContain(filled);
+ filled='';await expect(fillVerification(target,page as never,{pageURL:url,codeSelector:'#code'},async()=>{url='https://outside.test/';return '384217';})).rejects.toThrow();expect(filled).toBe('');
 });

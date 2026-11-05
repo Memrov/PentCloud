@@ -4,7 +4,8 @@ export interface ProgramScope {
  id:string;name:string;platform:string;url:string;catalogCommit:string;sourceCommit:string;sha256:string;publishedAt:string;importedAt:number;
  allow:ScopeRule[];deny:ScopeRule[];instructions:string[];unsupportedAssets:number;
 }
-export interface TargetLogin {url:string;usernameBinding:string;passwordBinding:string}
+export type LoginVerification={kind:"totp";binding:string}|{kind:"email";sender:string};
+export interface TargetLogin {url:string;usernameBinding:string;passwordBinding:string;verification?:LoginVerification}
 export interface TargetHeader {name:string;value:string}
 export interface TargetAPICredential {url:string;binding:string;header:string;scheme:"bearer"|"header"}
 export interface TargetAccess {program?:ProgramScope;headers:TargetHeader[];headerBinding?:string;login?:TargetLogin;api?:TargetAPICredential}
@@ -91,6 +92,15 @@ export function validateTargetAccess(url:string,raw:unknown):TargetAccess {
   const login=data.login;assertTargetRequest({url,access:next},login.url);
   if(!bindingName.test(login.usernameBinding)||!bindingName.test(login.passwordBinding))throw new Error("400: Use PENTCLOUD_TARGET_ Cloudflare bindings for login credentials");
   next.login={url:publicURL(login.url).href,usernameBinding:login.usernameBinding,passwordBinding:login.passwordBinding};
+  if(login.verification){
+   const v=login.verification;
+   if(v.kind==="totp"&&bindingName.test(v.binding))next.login.verification={kind:"totp",binding:v.binding};
+   else if(v.kind==="email"&&typeof v.sender==="string"&&v.sender.length<=254&&!/[\s\r\n<>]/.test(v.sender)){
+    const sender=v.sender.toLowerCase(),domain=sender.includes("@")?sender.split("@")[1]!:sender;
+    if(sender.split("@").length>2||!domain.includes(".")||publicURL("https://"+domain+"/").hostname!==domain)throw new Error("400: Invalid email verification sender");
+    next.login.verification={kind:"email",sender};
+   }else throw new Error("400: Invalid login verification settings");
+  }
  }
  if(data.api){
   const api=data.api;assertTargetRequest({url,access:next},api.url);
@@ -118,7 +128,7 @@ export async function readTargetSecret(env:object,name:string):Promise<string>{
 export async function targetSecretBindings(id:string){
  const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(id));
  const prefix="PENTCLOUD_TARGET_"+[...new Uint8Array(bytes)].slice(0,12).map(v=>v.toString(16).padStart(2,"0")).join("").toUpperCase();
- return {username:prefix+"_USERNAME",password:prefix+"_PASSWORD",api:prefix+"_API_KEY",headers:prefix+"_HEADERS"};
+ return {username:prefix+"_USERNAME",password:prefix+"_PASSWORD",api:prefix+"_API_KEY",headers:prefix+"_HEADERS",totp:prefix+"_TOTP"};
 }
 export function parseTargetHeaders(value:string):TargetHeader[]{
  let data:unknown;try{data=JSON.parse(value);}catch{throw new Error("409: Required headers secret must be a JSON object of header names and values");}
@@ -129,4 +139,4 @@ export async function resolveTargetHeaders<T extends ScopedTarget>(target:T,reso
  if(!target.access?.headerBinding)return target;
  return {...target,access:{...target.access,headers:[...target.access.headers,...parseTargetHeaders(await resolve(target.access.headerBinding))]}};
 }
-export function targetAccessBrief(target:ScopedTarget){return {url:target.url,scope:target.access?"Browser and managed HTTP requests stay within this saved target and imported exclusions. Browser WebSockets are unavailable. Kali has direct Internet access: scope is NOT enforced there. Abide by the program rules with every tool.":"Target is guidance, not universal host confinement",...(target.access?.program?{program:target.access.program.name,scopeRevision:target.access.program.catalogCommit,instructions:target.access.program.instructions}:{}),...(target.access?.login?{login:"Use pentcloud_browser_login to fill Cloudflare-held credentials, then submit and inspect the result. Login is fresh for each run and shared only within this run."}:{}),...(target.access?.api?{api:"Use pentcloud_api_request for Cloudflare-held target API credentials."}:{})};}
+export function targetAccessBrief(target:ScopedTarget){return {url:target.url,scope:target.access?"Browser and managed HTTP requests stay within this saved target and imported exclusions. Browser WebSockets are unavailable. Kali has direct Internet access: scope is NOT enforced there. Abide by the program rules with every tool.":"Target is guidance, not universal host confinement",...(target.access?.program?{program:target.access.program.name,scopeRevision:target.access.program.catalogCommit,instructions:target.access.program.instructions}:{}),...(target.access?.login?{login:"Use pentcloud_browser_login to fill Cloudflare-held credentials, then submit and inspect the result. If verification is configured, use pentcloud_browser_verify on its challenge page. Never ask for codes or secrets in chat. Login is fresh for each run and shared only within this run."}:{}),...(target.access?.api?{api:"Use pentcloud_api_request for Cloudflare-held target API credentials."}:{})};}

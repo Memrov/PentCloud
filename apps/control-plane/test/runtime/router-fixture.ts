@@ -63,6 +63,7 @@ export class RouterControl extends DurableObject<RuntimeFixtureEnv> {
   async onboardingSnapshot(runId?:string){this.record("onboardingSnapshot",runId);return {targets:[],credentials:[],defaults:[]};}
   async onboardingExport(){this.record("onboardingExport");return {version:1,targets:[],credentials:[],setups:[]};}
   async onboardingAction(action:string,value:Record<string,unknown>,actor:string){this.record("onboardingAction",action,value,actor);return {id:value.id,version:1};}
+  async receiveVerificationEmail(delivery:unknown){this.record('receiveVerificationEmail',delivery);return {accepted:true};}
   async activateAnalysis(id:string,revision:number,requestId:string,ack:boolean){this.record("activateAnalysis",id,revision,requestId,ack);return {run,rootJob:job};}
   async modelCatalog(){return {models:[{id:"opencode-go:deepseek-v4-pro",reasoningEfforts:["default"]}],fetchedAt:new Date(0).toISOString(),stale:false};}
   async clearCalls() {

@@ -25,7 +25,8 @@ import { Browser, browserRun,type BrowserRunOptions,type BrowserConnection } fro
 import {connect as connectPlaywright,type Browser as PlaywrightBrowser,type BrowserContext} from "@cloudflare/playwright";
 import {Buffer} from "node:buffer";
 import {browserGuardrails,readTargetSecret,resolveTargetHeaders,assertTargetRequest,requestHeaders,type ScopedTarget} from "../../../../shared/target-access";
-import {guardBrowserCDP,fillLogin,type LoginFields} from "./browser-target-access";
+import {guardBrowserCDP,fillLogin,fillVerification,type LoginFields} from "./browser-target-access";
+import {targetCode} from './target-verification';
 import {interceptBrowserContext} from "./browser-interception";
 import {performTargetFetch} from "./target-fetch";
 import { createAITools } from "@cloudflare/computer/tools/ai-sdk";
@@ -369,10 +370,36 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         execute:({source_id,path,offset})=>this.coordinator().readSourceContext(state.input.id,source_id,kind==="tree"?"tree":"file",path??"",offset??0),
       }))):[]),
       ...evidence,...kali,
-      ...(state.input.targetConfig?.access?.login?[openCodeTool("pentcloud_browser_login",aiTool({description:"Fill the current target's login form with Cloudflare-held credentials. Inspect the page first, supply CSS selectors for its username/password fields, then submit using the browser tool and verify success. No password is returned. Login starts fresh for each run and is privately reused only among that run's agents.",inputSchema:jsonSchema<LoginFields>({type:"object",properties:{pageURL:{type:"string",maxLength:2048},usernameSelector:{type:"string",maxLength:512},passwordSelector:{type:"string",maxLength:512}},required:["pageURL","usernameSelector","passwordSelector"],additionalProperties:false}),execute:async input=>{
-        await this.active();const {context}=await this.scopedBrowserContext(),pages=context.pages().filter(page=>page.url()===input.pageURL);if(pages.length!==1)throw new Error("409: Choose one unambiguous login page");
-        return fillLogin(state.input.targetConfig!,pages[0]!,input,async name=>{const value=await readTargetSecret(this.env,name);this.credentialRedactions.push(value);return value;});
+      ...(state.input.targetConfig?.access?.login?[openCodeTool("pentcloud_browser_login",aiTool({description:"Fill the current target's login form with Cloudflare-held credentials. Inspect the page first, supply CSS selectors for its username/password fields, then submit using the browser tool and verify success. No password is returned. Login starts fresh for each run and is privately reused only among that run's agents.",inputSchema:jsonSchema<LoginFields>({type:"object",properties:{pageURL:{type:"string",maxLength:2048},usernameSelector:{type:"string",maxLength:512},passwordSelector:{type:"string",maxLength:512}},required:["pageURL","usernameSelector","passwordSelector"],additionalProperties:false}),execute:async (input,call)=>{
+        await this.active();if(state.input.targetConfig?.access?.login?.verification?.kind==="email")await this.coordinator().beginLoginEmail(state.input.id,call.toolCallId);const {context}=await this.scopedBrowserContext(),pages=context.pages().filter(page=>page.url()===input.pageURL);if(pages.length!==1)throw new Error("409: Choose one unambiguous login page");
+        return fillLogin(state.input.targetConfig!,pages[0]!,input,async name=>{const value=await readTargetSecret(this.env,name);this.credentialRedactions.push(value);return value;},()=>this.active());
       }}))]:[]),
+      ...(state.input.targetConfig?.access?.login?.verification?[openCodeTool("pentcloud_browser_verify",aiTool({
+        description:"Fill a target's authenticator or forwarded email code privately, or follow its unique same-target email verification link. Inspect the challenge page first. Use codeSelector for a code; use followLink:true only for a magic-link login. No code, seed or email content is returned. Email waits up to 25 seconds; retry if still waiting, without resubmitting login.",
+        inputSchema:jsonSchema<{pageURL:string;codeSelector?:string;followLink?:boolean}>({type:"object",properties:{pageURL:{type:"string",maxLength:2048},codeSelector:{type:"string",maxLength:512},followLink:{type:"boolean"}},required:["pageURL"],additionalProperties:false}),
+        execute:async input=>{
+          await this.active();const target=state.input.targetConfig!,verification=target.access!.login!.verification!;
+          if(input.followLink===!!input.codeSelector)throw Error('400: Choose a code field or a verification link');
+          const {context}=await this.scopedBrowserContext(),pages=context.pages().filter(p=>p.url()===input.pageURL);
+          if(pages.length!==1)throw Error('409: Choose one unambiguous verification page');const page=pages[0]!;assertTargetRequest(target,input.pageURL);
+          const message=verification.kind==='email'?await this.coordinator().loginEmail(state.input.id):undefined;
+          await this.active();if(verification.kind==='email'&&!message)return {waiting:true,message:'Waiting for a fresh verification email. Retry this helper; do not restart login.'};
+          if(message){if(message.code)this.credentialRedactions.push(message.code);for(const link of message.links){this.credentialRedactions.push(link);for(const value of new URL(link).searchParams.values())if(value)this.credentialRedactions.push(value);}}
+          if(input.followLink){
+            if(verification.kind!=='email')throw Error('400: Authenticator verification requires a code field');
+            const links=message!.links.filter(url=>{try{assertTargetRequest(target,url);return new URL(url).origin===new URL(target.url).origin&&new URL(url).protocol==='https:';}catch{return false;}});
+            if(links.length!==1)throw Error('409: No unique same-target verification link; use the code field or review the login method');
+            if(page.url()!==input.pageURL)throw Error('409: Verification page changed; inspect again');
+            try{await page.goto(links[0]!);}catch{throw Error('503: Verification navigation failed; inspect the browser result before retrying');}
+            await this.active();await this.coordinator().consumeLoginEmail(state.input.id,message!.id);return {opened:true,message:'Verification link opened. Inspect the browser to confirm authentication.'};
+          }
+          const result=await fillVerification(target,page,{pageURL:input.pageURL,codeSelector:input.codeSelector!},async()=>{
+            const code=verification.kind==='totp'?await targetCode(await readTargetSecret(this.env,verification.binding).then(value=>{this.credentialRedactions.push(value);return value;})):message?.code;
+            if(!code)throw Error('409: Email has no unique code; inspect the login method');this.credentialRedactions.push(code);return code;
+          },()=>this.active());
+          if(message)await this.coordinator().consumeLoginEmail(state.input.id,message.id);return result;
+        }
+      }))]:[]),
       ...api,
       ...Object.entries(computer).map(([name, tool]) => openCodeTool(`computer_${name}`, tool)),
       openCodeTool("cloudflare_browser", browserTool({ browser: { name: this.cloudBrowser.name, connect: (options) => this.browserConnection(options) }, loader: this.env.LOADER })),

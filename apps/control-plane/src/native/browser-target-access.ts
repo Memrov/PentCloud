@@ -3,6 +3,21 @@ import type {BrowserConnection} from "agents/browser";
 import {assertTargetRequest,type ScopedTarget} from "../../../../shared/target-access";
 export type BrowserAuthState=Awaited<ReturnType<BrowserContext["storageState"]>>;
 export interface LoginFields {pageURL:string;usernameSelector:string;passwordSelector:string}
+export interface VerificationField {pageURL:string;codeSelector:string}
+/** Resolve after the page is pinned; the code never becomes a tool result. */
+export async function fillVerification(target:ScopedTarget,page:Page,input:VerificationField,resolve:()=>Promise<string>,active:()=>Promise<unknown>=async()=>{}){
+ assertTargetRequest(target,input.pageURL);if(page.url()!==input.pageURL)throw Error('409: Verification page changed; inspect again');
+ if(!input.codeSelector||input.codeSelector.length>512)throw Error('400: Choose a bounded code field selector');
+ await active();const code=await resolve();await active();
+ if(page.url()!==input.pageURL)throw Error('409: Verification page changed; inspect again');
+ await page.evaluate(({url,selector,code})=>{
+  if(location.href!==url)throw Error('Verification page changed');
+  const field=document.querySelector(selector);if(!(field instanceof HTMLInputElement)||field.disabled||field.readOnly||field.type==='hidden'||field.type==='password')throw Error('Choose an editable verification code input');
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,code);
+  field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));
+ },{url:input.pageURL,selector:input.codeSelector,code});
+ await active();return {filled:true,message:'Verification filled. Submit with the browser tool and inspect the authenticated result.'};
+}
 export function validateBrowserState(target:ScopedTarget,raw:unknown):BrowserAuthState {
  if(JSON.stringify(raw).length>256*1024)throw new Error("413: Browser authentication state is too large");
  const state=raw as BrowserAuthState,host=new URL(target.url).hostname,origin=new URL(target.url).origin;
@@ -43,13 +58,13 @@ export function guardBrowserCDP(client:BrowserConnection["cdp"],target:ScopedTar
   const value=Reflect.get(client,key,client);return typeof value==="function"?value.bind(client):value;
  }});
 }
-export async function fillLogin(target:ScopedTarget,page:Page,input:LoginFields,resolve:(name:string)=>Promise<string>){
+export async function fillLogin(target:ScopedTarget,page:Page,input:LoginFields,resolve:(name:string)=>Promise<string>,active:()=>Promise<unknown>=async()=>{}){
  const config=target.access?.login;if(!config)throw new Error("409: Configure login references on the saved target first");
  const audience={...target,url:config.url};assertTargetRequest(audience,input.pageURL);assertTargetRequest(audience,page.url());
  if(new URL(page.url()).href!==new URL(input.pageURL).href)throw new Error("409: Login page changed; inspect it again");
  const verifiedURL=page.url();
  for(const selector of [input.usernameSelector,input.passwordSelector])if(typeof selector!=="string"||!selector||selector.length>512)throw new Error("400: Choose bounded login field selectors");
- const username=await resolve(config.usernameBinding),password=await resolve(config.passwordBinding);
+ await active();const username=await resolve(config.usernameBinding),password=await resolve(config.passwordBinding);await active();
  assertTargetRequest(audience,page.url());
  if(page.url()!==verifiedURL)throw new Error("409: Login page changed; inspect it again");
  await page.evaluate(({url,userSelector,passwordSelector,username,password})=>{
@@ -60,5 +75,5 @@ export async function fillLogin(target:ScopedTarget,page:Page,input:LoginFields,
   set.call(user,username);user.dispatchEvent(new Event("input",{bubbles:true}));user.dispatchEvent(new Event("change",{bubbles:true}));
   set.call(pass,password);pass.dispatchEvent(new Event("input",{bubbles:true}));pass.dispatchEvent(new Event("change",{bubbles:true}));
  },{url:verifiedURL,userSelector:input.usernameSelector,passwordSelector:input.passwordSelector,username,password});
- return {filled:true as const,message:"Credentials filled. Submit using the browser tool and verify the authenticated result."};
+ await active();return {filled:true as const,message:"Credentials filled. Submit using the browser tool and verify the authenticated result."};
 }

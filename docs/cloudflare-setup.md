@@ -95,6 +95,65 @@ login is fresh for every run; its agents reuse only that run's short-lived login
 Existing application-managed API keys remain compatible. Cloudflare's limit on
 Worker variables/secrets still applies; provision only the bindings you need.
 
+## Program accounts and verification
+
+For HackerOne, bind your researcher token as `PENTCLOUD_HACKERONE_API_TOKEN` and
+set the nonsecret Worker variable `PENTCLOUD_HACKERONE_USERNAME`. For Intigriti,
+bind `PENTCLOUD_INTIGRITI_API_TOKEN`. Use **Check researcher access** on the saved
+target. PentCloud reads only that selected program’s current policy; platform
+tokens never go to the target. These tokens do not log into target applications.
+Claim program-issued credentials once in the platform’s UI, or register your own
+permitted test account, then save its username/password under the target’s
+Cloudflare secret names. Review the program’s rules before starting.
+
+Under **Login verification**, choose one optional method:
+
+- **Authenticator code:** copy the generated authenticator secret name. Save the
+  test account’s Base32 seed or `otpauth://totp/` URI there, using Cloudflare’s
+  private secret prompt. **Check** validates the format. PentCloud generates the
+  short-lived code locally and fills it in the trusted browser helper.
+- **Email code or link:** set the expected sender mailbox or domain, then save.
+  Copy the target-specific forwarding address and follow the steps below. No
+  mailbox API key is needed. Agents can use a fresh matching email only while
+  their run has an outstanding login request. Email contents are untrusted data;
+  they cannot instruct agents or change scope.
+
+### Optional email forwarding
+
+This requires a domain whose DNS you manage on Cloudflare; a `workers.dev`
+address alone cannot receive mail. Keep the domain’s current mailbox service:
+**do not replace existing MX records**. Use a dedicated mail subdomain if your
+main domain already receives email elsewhere.
+
+1. In Cloudflare Email Routing, configure an unused receiving address such as
+   `verification@auth.example.com` on your routing domain. Route that **literal
+   address** to the app Worker’s native email handler, and enable subaddressing
+   (plus addressing). No catch-all or external inbox service is needed.
+2. Set the app Worker variable `PENTCLOUD_VERIFICATION_EMAIL` to that same base
+   address and deploy your private installation. Keep this nonsecret variable
+   in your installation’s private Wrangler config so later deploys preserve it.
+3. In Targets, select email verification, enter the expected sender and save.
+   Click **Check forwarding** to open a ten-minute setup window. Add the displayed
+   target-specific address in Gmail **Settings → Forwarding and POP/IMAP → Add a
+   forwarding address**, or your provider’s equivalent. Click **Read confirmation**
+   to get the provider’s confirmation code or supported confirmation link.
+4. Create a mailbox filter that forwards only that test account’s verification
+   emails from the expected sender. Keep normal mail in your own mailbox. Start
+   a fresh run after setup; authentication is shared only within that run.
+
+PentCloud accepts authenticated mail up to 256 KiB, extracts one unambiguous code
+or same-target HTTPS verification link and retains pending challenges for at most
+ten minutes. It stores no full inbox, message bodies or attachments. A second run
+must wait if the same target already has a pending email login. Some forwarding
+providers invalidate sender authentication; those deliveries fail closed. Provider
+confirmation links are shown only to the authenticated operator during setup.
+SMS, push approval and CAPTCHA enrollment still require the test account’s normal
+setup process; PentCloud does not add a phone or identity provider.
+
+Cloudflare’s [Email Worker handler](https://developers.cloudflare.com/email-service/api/route-emails/email-handler/)
+and [subaddressing instructions](https://developers.cloudflare.com/email-service/configuration/email-routing-addresses/)
+describe the native routing configuration.
+
 ## Confirm setup
 
 Open the protected app and configure models for the desired roles. Catalog

@@ -89,6 +89,7 @@ export interface AttemptRecord extends AttemptInput {
   recovery?: RuntimeRecovery;
 }
 export interface RunRecord {
+  programAccess?:import('./bounty-platform').ProgramAccess;
   boundAPIAccess?:boolean;
   boundAPIFingerprint?:string;
   discoveryAcknowledged?:boolean;
@@ -128,6 +129,9 @@ export interface RunRecord {
   finalResponse?: string;
 }
 export interface CoordinatorAPI {
+  beginLoginEmail(id:string,operationId:string):Promise<void>;
+  loginEmail(id:string):Promise<import('./login-challenge').VerificationDelivery|undefined>;
+  consumeLoginEmail(id:string,messageId:string):Promise<void>;
   browserState(id:string,state?:import("./browser-target-access").BrowserAuthState):Promise<import("./browser-target-access").BrowserAuthState|undefined>;
   readRunWork(requesterId:string,sourceId?:string,offset?:number):Promise<import("./recorded-work").RecordedWorkPage>;
   readSourceContext(id:string,sourceId:string,kind:"tree"|"file",path:string,offset:number):Promise<unknown>;
@@ -147,4 +151,4 @@ export interface CoordinatorAPI {
   getContext(id: string): Promise<Record<string, unknown>>;
 }
 /** Bindings and required secret names are generated from Wrangler. */
-export type NativeEnv = Omit<Cloudflare.Env, "TOOLBOX"|"OPENCODE_BYOK_PROVIDERS"> & { TOOLBOX: ToolboxService; ARTIFACTS_NAMESPACE?: string; LEGACY_STATE_COMMIT?: string; OPENCODE_BYOK_PROVIDERS?:string };
+export type NativeEnv = Omit<Cloudflare.Env, "TOOLBOX"|"OPENCODE_BYOK_PROVIDERS"> & { TOOLBOX: ToolboxService; ARTIFACTS_NAMESPACE?: string; LEGACY_STATE_COMMIT?: string; OPENCODE_BYOK_PROVIDERS?:string; PENTCLOUD_VERIFICATION_EMAIL?:string; PENTCLOUD_HACKERONE_USERNAME?:string; PENTCLOUD_HACKERONE_API_TOKEN?:string|{get():Promise<string>}; PENTCLOUD_INTIGRITI_API_TOKEN?:string|{get():Promise<string>} };
