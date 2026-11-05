@@ -1,0 +1,87 @@
+{
+  "minify": true,
+  "dependencies_instrumentation": { "enabled": false },
+  "upload_source_maps": false,
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "enable_ctx_exports"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "head_sampling_rate": 0.1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    },
+    "issues": {
+      "enabled": true
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COORDINATOR",
+        "class_name": "Coordinator"
+      },
+      {
+        "name": "ATTEMPTS",
+        "class_name": "NativeAttempt"
+      },
+      {
+        "name": "MODEL_TESTS",
+        "class_name": "OpenCodeConnectionTest"
+      }
+    ],
+    "code_update_strategy": {
+      "mode": "deferred",
+      "max_delay": 300
+    }
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "Coordinator",
+        "NativeAttempt"
+      ]
+    },
+    {
+      "tag": "v2-native-model-tests",
+      "new_sqlite_classes": ["OpenCodeConnectionTest"]
+    }
+  ],
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ],
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.tmpl",
+        "**/*.tmpl?raw",
+        "**/*.md?raw",
+        "**/*.md"
+      ],
+      "fallthrough": true
+    }
+  ],
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  }
+}

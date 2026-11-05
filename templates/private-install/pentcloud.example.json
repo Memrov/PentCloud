@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "accountId": "YOUR_32_CHARACTER_CLOUDFLARE_ACCOUNT_ID",
+  "instance": "my-pentcloud",
+  "accessTeamDomain": "https://YOUR_TEAM.cloudflareaccess.com",
+  "allowedEmails": [
+    "owner@example.com"
+  ]
+}

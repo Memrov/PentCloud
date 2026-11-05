@@ -1,0 +1,16 @@
+{
+  "name": "pentcloud-native-live-view-canary",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": false
+  },
+  "browser": {
+    "binding": "BROWSER"
+  }
+}

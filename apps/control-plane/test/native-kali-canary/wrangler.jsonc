@@ -1,0 +1,36 @@
+{
+  "name": "pentcloud-native-kali-canary",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": false
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PROBE",
+        "class_name": "KaliCanary"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "KaliCanary"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "binding": "TOOLBOX",
+      "service": "pentcloud-toolbox",
+      "entrypoint": "ToolboxGateway"
+    }
+  ]
+}

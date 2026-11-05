@@ -1,0 +1,11 @@
+...@_style
+direction: down
+work: "Recorded run work\nChats, tool results, receipts and captured files" {class: card}
+reporter: "Reporter agent\nInspect same-run work and reconcile claims" {class: card}
+report: "Assessment + findings index\nStructured fields and evidence references" {class: card}
+target: "Findings by saved target\nObservations from all retained runs" {class: card}
+detail: "Open a finding\nSeverity, status, reproduction and evidence" {class: card}
+export: "Read the assessment\nMarkdown download · Native print / Save as PDF" {class: card}
+work -> reporter -> report -> target -> detail -> export
+note: "Suspected, confirmed and inconclusive remain distinct.\nMissing evidence and incomplete coverage must be disclosed." {class: note}
+export -> note: {style.opacity: 0}

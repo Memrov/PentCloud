@@ -1,0 +1,11 @@
+...@_style
+direction: down
+source: "Source repository\nExisting Artifacts repo or public GitHub import" {class: card}
+pin: "Per-run source pin\nExact repository and commit" {class: card}
+agent: "Agent session\nRead source through bounded tools" {class: card}
+work: "Separate run repository\nWork, evidence and accepted results" {class: card}
+source -> pin: "select and freeze"
+pin -> agent: "read-only reference"
+agent -> work: "submit work"
+note: "Source stays separate from assessment work.\nA Workers/Pages GitHub connection alone does not grant source access." {class: note}
+work -> note: {style.opacity: 0}

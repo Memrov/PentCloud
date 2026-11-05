@@ -1,0 +1,15 @@
+...@_style
+direction: down
+interrupt: "Execution is interrupted" {class: card}
+inspect: "Inspect durable state and receipts\nDetermine what actually completed" {class: card}
+outcome: "Remote mutation outcome?" {shape: diamond; style.font-size: 20}
+known: "Known outcome\nContinue the supported recovery path" {class: card}
+unknown: "Unknown outcome\nRetain ownership and reconcile" {class: card}
+publish: "Validate before publication\nCancellation still fences acceptance" {class: card}
+interrupt -> inspect -> outcome
+outcome -> known: "known"
+outcome -> unknown: "uncertain"
+known -> publish
+unknown -> publish: "only after reconciliation"
+note: "Uncertainty is not permission to repeat a scan." {class: note}
+publish -> note: {style.opacity: 0}

@@ -1,0 +1,68 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+
+import {DashboardButton,reportReady} from "../src/ui/components/dashboard-button";
+import { RunMap } from "../src/ui/dashboard/run-map";
+import { WorkflowTimelineView } from "../src/ui/dashboard/workflow-timeline";
+import { layoutRunGraph, reduceWorkflowEvents } from "../src/ui/dashboard/model";
+import type { UIJob } from "../src/ui/api";
+
+const jobs: UIJob[] = [
+  { id: "root", runId: "run-1", role: "primary", depth: 0, status: "running", revision: 2, task: "Inspect the target" },
+  { id: "child", runId: "run-1", parentJobId: "root", role: "coder", depth: 1, status: "completed", revision: 4, archiveStatus: "complete", cleanupStatus: "stopped" },
+];
+
+describe("workflow dashboard components", () => {
+  it("links report-ready only to accepted reporters for the selected run and target",()=>{
+    const reporter:UIJob={id:"report",runId:"run-1",role:"reporter",status:"completed",revision:1,outputCommit:"a".repeat(40)};
+    expect(reportReady([reporter],"other-run")).toBe(false);
+    expect(reportReady([{...reporter,status:"running"}],"run-1")).toBe(false);
+    expect(reportReady([{...reporter,outputCommit:"unaccepted"}],"run-1")).toBe(false);
+    const html=renderToStaticMarkup(createElement(DashboardButton,{run:{id:"run-1",status:"completed",baselineRepo:"fixture",inputCommit:"a".repeat(40),maxDepth:4,maxJobs:32,target:{id:"target-1",kind:"website",name:"Fixture",url:"https://scope.invalid/",revision:1}},jobs:[reporter]}));
+    expect(html).toContain("Report ready");expect(html).toContain("view=findings");expect(html).toContain("target=target%3Atarget-1");
+  });
+  it("renders a navigable specialist map with durable activity labels", () => {
+    const html = renderToStaticMarkup(createElement(RunMap, {
+      layout: layoutRunGraph(jobs),
+      selectedJobId: "child",
+    }));
+
+    expect(html).toContain('aria-label="Specialist run map"');
+    expect(html).toContain("primary");
+    expect(html).toContain("Model working");
+    expect(html).toContain("coder");
+    expect(html).toContain("Complete");
+    expect(html).toContain('/dashboard/runs/run-1/jobs/child');
+    expect(html).toContain('aria-current="true"');
+  });
+
+  it("renders workflow duration bars, retries, errors, and chat navigation", () => {
+    const timeline = reduceWorkflowEvents([
+      { instanceId: "child", eventId: 1, timestamp: 1_000, type: "run.started" },
+      { instanceId: "child", eventId: 2, timestamp: 1_100, type: "phase.started", stepName: "run specialist" },
+      { instanceId: "child", eventId: 3, timestamp: 1_400, type: "phase.failed", stepName: "run specialist", error: { name: "Error", message: "temporary" } },
+    ], 2_000);
+    const html = renderToStaticMarkup(createElement(WorkflowTimelineView, {
+      job: jobs[1]!,
+      timeline,
+      connection: "live",
+    }));
+
+    expect(html).toContain("Run activity");
+    expect(html).toContain("Live events");
+    expect(html).toContain("run specialist");
+    expect(html).toContain("temporary");
+    expect(html).toContain('/?run=run-1&amp;job=child');
+  });
+  it("shows a finished archive without retained phases instead of promising future events", () => {
+    const html = renderToStaticMarkup(createElement(WorkflowTimelineView, {
+      job: jobs[1]!, timeline: reduceWorkflowEvents([], 1_000), connection: "closed",
+    }));
+    expect(html).toContain("No retained activity history");
+    expect(html).toContain("Its conversations are available in chat.");
+    expect(html).not.toContain("Waiting for activity history");
+    expect(html).not.toContain("workflow-empty-pulse");
+  });
+
+});

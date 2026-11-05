@@ -1,0 +1,11 @@
+...@_style
+direction: down
+inputs: "Pinned inputs\nObjective, configuration and source commits" {class: card}
+capture: "Captured work\nTool receipts, files and evidence hashes" {class: card}
+checkpoint: "Evidence checkpoint\nRetain captured bytes in Artifacts Git" {class: card}
+candidate: "Result candidate\nImmutable output commit" {class: card}
+validation: "Result validation + Coordinator\nCheck files, provenance and ancestry" {class: card}
+accepted: "Accepted result\nAdvance accepted history and expose findings" {class: card}
+inputs -> capture -> checkpoint -> candidate -> validation -> accepted
+note: "A checkpoint preserves evidence; it does not accept a result.\nStructural validation does not prove a security finding is true." {class: note}
+accepted -> note: {style.opacity: 0}

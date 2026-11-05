@@ -1,0 +1,1535 @@
+{
+  "tools": [
+    {
+      "name": "advice",
+      "description": "Get more complex answer from the mentor about some issue or difficult situation",
+      "category": "agent",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "Technical-channel payload — detailed question for the senior mentor describing the issue and what you need to figure out. Always written in English; never translated."
+          },
+          "code": {
+            "type": "string",
+            "description": "Technical-channel excerpt — optional code snippet relevant to the question. Preserve verbatim; do not translate code or comments."
+          },
+          "output": {
+            "type": "string",
+            "description": "Technical-channel excerpt — optional stdout/stderr excerpt relevant to the question. Preserve verbatim."
+          },
+          "message": {
+            "type": "string",
+            "title": "Ask advice message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining what you are asking the mentor and why. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "code",
+          "output",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "ask",
+      "description": "If you need to ask user for input, use this tool",
+      "category": "barrier",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Question for user",
+            "description": "Engagement-log entry — clarification question or any other information addressed to the engagement coordinator. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "browser",
+      "description": "Opens a browser to look for additional information from the web site",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to open in the browser"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "html",
+              "links"
+            ],
+            "description": "Action to perform in the browser. 'markdown' - Returns the content of the page in markdown format. 'html' - Returns the content of the page in html format. 'links' - Get the list of all URLs on the page to be used in later calls (e.g., open search results after the initial search lookup)."
+          },
+          "message": {
+            "type": "string",
+            "title": "Browser action message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary describing what content you are fetching, in which format, and why. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url",
+          "action",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "code_result",
+      "description": "Send the code result to the user with execution status and fully detailed report about using the result",
+      "category": "store_agent_result",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "result": {
+            "type": "string",
+            "title": "Code result description",
+            "description": "Technical-channel payload — fully detailed code-development report (or error explanation) returned to the calling agent, with usage instructions for the result. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Code result message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary with the result and the path to reach the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "result",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "coder",
+      "description": "Call to developer team member to write a code for the specific task",
+      "category": "agent",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "Technical-channel payload — task description for the developer team member to write code, with detailed explanation of the goal and how to achieve it when not obvious. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Coder action message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the question and the task. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "done",
+      "description": "If you need to finish the task with success or failure, use this tool",
+      "category": "barrier",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Execution result",
+            "description": "True if the subtask was executed successfully and its objective was reached"
+          },
+          "result": {
+            "type": "string",
+            "title": "Subtask result description",
+            "description": "Engagement-log closing entry — fully detailed write-up of the subtask outcome (what was achieved or why it failed). Written in the engagement language declared by your system prompt."
+          },
+          "message": {
+            "type": "string",
+            "title": "Subtask result message",
+            "description": "Engagement-log closing summary — a concise 1-2 sentence recap of the subtask outcome. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "result",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "duckduckgo",
+      "description": "Search in the duckduckgo search engine, it's a anonymous query and returns a small content to check some information from different sources or collect public links by short query",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — query for the specific search engine (google, duckduckgo, tavily, traversaal, perplexity, serper, etc.). ALWAYS written in English regardless of the engagement language: internet sources are predominantly indexed in English and non-English queries return poor or empty results. Short and exact queries return better results."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (minimum 1; maximum 10; default 5)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining the expected result and how it advances the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "max_results",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "enricher_result",
+      "description": "Send the enriched user's question with additional information to the user",
+      "category": "store_agent_result",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "result": {
+            "type": "string",
+            "title": "Enricher result",
+            "description": "Technical-channel payload — fully detailed enrichment report (or error explanation) returned to the calling agent for further reasoning. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Enricher result message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary with a short view of the enriched data. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "result",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "file",
+      "description": "Reads, writes, or edits local files (see 'action'). Prefer edit_file for targeted changes to an existing file; use write_file only for a new file or a full rewrite.",
+      "category": "environment",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "read_file",
+              "write_file",
+              "edit_file"
+            ],
+            "description": "'read_file' reads the file (no other field needed). 'write_file' overwrites it with 'content' (the whole file). 'edit_file' applies the patch in 'diff' (existing content elsewhere is untouched)."
+          },
+          "content": {
+            "type": "string",
+            "description": "write_file only: the complete new file content (not a diff, not a partial update)."
+          },
+          "diff": {
+            "type": "string",
+            "description": "edit_file only: unified-diff hunk(s) - '@@ -old +new @@' header, then ' '/'-'/'+' lines. Always keep at least one unchanged context line so the location is unambiguous; context/removed lines must match the file's current content verbatim (read_file first). Header line numbers are only a hint - the line text is what must match."
+          },
+          "path": {
+            "type": "string",
+            "description": "Absolute path to the file, taken literally. This field is not run through a shell, so command substitutions, variables and globs would become part of the filename - resolve them with the terminal tool first and pass the result."
+          },
+          "message": {
+            "type": "string",
+            "title": "File action message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary describing what you are reading, writing, or editing and why. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "path",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "firecrawl",
+      "description": "Search in the firecrawl search engine, it combines web search with page scraping to return the main-content markdown for each result, ideal for deep research on complex technical topics and reading documentation directly from the discovered web sites",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — query for the specific search engine (google, duckduckgo, tavily, traversaal, perplexity, serper, etc.). ALWAYS written in English regardless of the engagement language: internet sources are predominantly indexed in English and non-English queries return poor or empty results. Short and exact queries return better results."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (minimum 1; maximum 10; default 5)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining the expected result and how it advances the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "max_results",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "get_flow_status",
+      "description": "Return structured information about the automation flow. Choose the detail level based on what you need to know:\n  'summary'  — flow health snapshot: status, task counts, subtask counts, active task/subtask IDs. Best first call.\n  'tasks'    — all tasks with ID, status, title. Add verbose=true for inputs and results.\n  'subtasks' — all subtasks, optionally filtered by task_id. Add verbose=true for descriptions and results.\n  'running'  — full Task→Subtask execution chain: task input, subtask description, partial result, and recent agent messages (10 default, 50 with verbose=true). Use when you need to understand what is happening right now.\n  'planned'  — subtasks with status 'created' (not yet started), optionally filtered by task_id. Add verbose=true for full descriptions.",
+      "category": "environment",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "tasks",
+              "subtasks",
+              "running",
+              "planned"
+            ],
+            "description": "Level of detail: 'summary' - flow health snapshot with status and counts; 'tasks' - all tasks with ID/status/title; 'subtasks' - all subtasks optionally filtered by task_id; 'running' - full Task→Subtask execution chain including task input and recent agent messages; 'planned' - only subtasks with status 'created' (not yet started), optionally filtered by task_id"
+          },
+          "task_id": {
+            "type": "integer",
+            "title": "Task ID",
+            "description": "Optional task ID filter. Applies to detail=subtasks and detail=planned to narrow results to a specific task."
+          },
+          "verbose": {
+            "type": "boolean",
+            "description": "Set to true for deeper investigation: includes descriptions, inputs, results, and execution context per entry; shows up to 50 recent agent messages instead of 10."
+          },
+          "message": {
+            "type": "string",
+            "title": "Status message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary describing what status information you are requesting. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "detail",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "google",
+      "description": "Search in the google search engine, it's a fast query and the shortest content to check some information or collect public links by short query",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — query for the specific search engine (google, duckduckgo, tavily, traversaal, perplexity, serper, etc.). ALWAYS written in English regardless of the engagement language: internet sources are predominantly indexed in English and non-English queries return poor or empty results. Short and exact queries return better results."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (minimum 1; maximum 10; default 5)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining the expected result and how it advances the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "max_results",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "graphiti_search",
+      "description": "Search the Graphiti temporal knowledge graph for historical penetration testing context, including previous agent responses, tool execution records, discovered entities, and their relationships. Supports 7 search types: temporal_window (time-bounded search), entity_relationships (graph traversal from an entity), diverse_results (anti-redundancy search), episode_context (full agent reasoning and tool outputs), successful_tools (proven techniques), recent_context (latest findings), and entity_by_label (type-specific entity search). Use this to avoid repeating failed approaches, reuse successful exploitation techniques, understand entity relationships, and build on previous findings within the same penetration testing engagement.",
+      "category": "search_vector_db",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "search_type": {
+            "type": "string",
+            "enum": [
+              "temporal_window",
+              "entity_relationships",
+              "diverse_results",
+              "episode_context",
+              "successful_tools",
+              "recent_context",
+              "entity_by_label"
+            ],
+            "description": "Type of search to perform: temporal_window (time-bounded search), entity_relationships (graph traversal from an entity), diverse_results (anti-redundancy search), episode_context (full agent reasoning and tool outputs), successful_tools (proven techniques), recent_context (latest findings), entity_by_label (type-specific entity search, REQUIRES node_labels)"
+          },
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — natural language query against the team's temporal knowledge graph. REQUIRED for EVERY search_type, including entity_relationships/entity_by_label: it re-ranks/filters the graph traversal, it is never optional just because center_node_uuid or node_labels is set. ALWAYS written in English regardless of the engagement language: the graph is indexed in English and shared across all engagements; non-English queries will fail to retrieve stored episodic memory."
+          },
+          "max_results": {
+            "type": "integer",
+            "title": "Maximum Results",
+            "description": "Maximum number of results to return (default varies by search type)"
+          },
+          "time_start": {
+            "type": "string",
+            "description": "Start of time window (ISO 8601 format, required for temporal_window)"
+          },
+          "time_end": {
+            "type": "string",
+            "description": "End of time window (ISO 8601 format, required for temporal_window)"
+          },
+          "center_node_uuid": {
+            "type": "string",
+            "description": "REQUIRED for entity_relationships. Copy verbatim from the 'UUID:' field of an entity/community returned by an EARLIER graphiti_search call in this conversation (any search_type). NEVER invent one — not a flow/task ID, hostname, or title; if no prior result yielded a UUID, run recent_context/entity_by_label first"
+          },
+          "max_depth": {
+            "type": "integer",
+            "title": "Maximum Depth",
+            "description": "Maximum graph traversal depth (default: 2, max: 3, for entity_relationships)"
+          },
+          "node_labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "description": "Filter to specific node types — EXACT taxonomy names, PascalCase singular (e.g., ['Host', 'Service', 'Vulnerability']). REQUIRED (non-empty) when search_type is entity_by_label; optional filter otherwise"
+          },
+          "edge_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "description": "Filter to specific relationship types — EXACT taxonomy names, UPPER_SNAKE_CASE (e.g., ['HAS_PORT', 'HAS_VULNERABILITY'])"
+          },
+          "diversity_level": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "description": "How much diversity to prioritize (default: medium, for diverse_results)"
+          },
+          "min_mentions": {
+            "type": "integer",
+            "title": "Minimum Mentions",
+            "description": "Minimum episode mentions (default: 2, for successful_tools)"
+          },
+          "recency_window": {
+            "type": "string",
+            "enum": [
+              "1h",
+              "6h",
+              "24h",
+              "7d"
+            ],
+            "description": "How far back to search (default: 24h, for recent_context)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the search query and expected results. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "search_type",
+          "query",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "hack_result",
+      "description": "Send the penetration test result to the user with detailed report",
+      "category": "store_agent_result",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "result": {
+            "type": "string",
+            "title": "Hack result description",
+            "description": "Technical-channel payload — fully detailed penetration-test report (or error explanation) returned to the calling agent, with usage instructions for the result. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Hack result message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary with the result and the path to reach the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "result",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "maintenance",
+      "description": "Call to DevOps team member to maintain local environment and tools inside the docker container",
+      "category": "agent",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "Technical-channel payload — task description for the DevOps team member to maintain the local environment and tools inside the docker container. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Maintenance task message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the maintenance task. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "maintenance_result",
+      "description": "Send the maintenance result to the user with task status and fully detailed report about using the result",
+      "category": "store_agent_result",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Execution result",
+            "description": "True if the task was executed successfully and its objective was reached"
+          },
+          "result": {
+            "type": "string",
+            "title": "Task result description",
+            "description": "Engagement-log closing entry — fully detailed write-up of the task/subtask outcome (what was achieved or why it failed). Written in the engagement language declared by your system prompt."
+          },
+          "message": {
+            "type": "string",
+            "title": "Task result message",
+            "description": "Engagement-log closing summary — a concise 1-2 sentence recap of the outcome and the path taken to reach the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "result",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "memorist",
+      "description": "Call to Archivist team member who remember all the information about the past work and made tasks and can answer your question about it",
+      "category": "agent",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "Technical-channel payload — question for complex search in previous work, tasks, and calls; include full context of what happened and what you want to find. Always written in English; never translated."
+          },
+          "task_id": {
+            "type": "integer",
+            "title": "Task ID",
+            "description": "If you know task id you can use it to get more relevant information from the vector database; it will be used as a hard filter for search (optional)"
+          },
+          "subtask_id": {
+            "type": "integer",
+            "title": "Subtask ID",
+            "description": "If you know subtask id you can use it to get more relevant information from the vector database; it will be used as a hard filter for search (optional)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the question and the path to reach the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "memorist_result",
+      "description": "Send the search in long-term memory result as a answer for the user question to the user",
+      "category": "store_agent_result",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "result": {
+            "type": "string",
+            "title": "Search in long-term memory result",
+            "description": "Technical-channel payload — fully detailed long-term memory search report (or error explanation) returned to the calling agent for further reasoning. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Search in long-term memory result message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary with a short answer summary. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "result",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "patch_flow_subtasks",
+      "description": "Replace the planned (not-yet-started) subtask list for a specific task using delta operations. Supported operations: add (insert a new subtask at a position), remove (delete a planned subtask by ID), modify (update title or description), reorder (move to a different position). The currently executing or waiting subtask can also be targeted by including its ID in an operation; doing so resets it to 'created' status. After patching, submit new input to trigger execution of the updated plan. Returns an error if a task is currently running — cancel it first.",
+      "category": "environment",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "ID of the task whose subtask plan to modify. Obtain this from get_flow_status with detail='tasks'."
+          },
+          "operations": {
+            "items": {
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "enum": [
+                    "add",
+                    "remove",
+                    "modify",
+                    "reorder"
+                  ],
+                  "description": "Operation type: 'add' creates a new subtask, 'remove' deletes a subtask by ID, 'modify' updates title/description of existing subtask, 'reorder' moves a subtask to a different position"
+                },
+                "id": {
+                  "type": "integer",
+                  "title": "Subtask ID",
+                  "description": "ID of existing subtask (required for remove/modify/reorder operations)"
+                },
+                "after_id": {
+                  "type": "integer",
+                  "title": "Insert after ID",
+                  "description": "For add/reorder: insert after this subtask ID (null/0 = insert at beginning)"
+                },
+                "title": {
+                  "type": "string",
+                  "title": "New title",
+                  "description": "Engagement-log plan entry — new subtask title (required for add, optional for modify). Written in the engagement language declared by your system prompt."
+                },
+                "description": {
+                  "type": "string",
+                  "title": "New description",
+                  "description": "Engagement-log plan entry — new subtask description (required for add, optional for modify). Written in the engagement language declared by your system prompt."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "op"
+              ]
+            },
+            "type": "array",
+            "description": "Delta operations to apply: add (insert new subtask at a position), remove (delete by ID), modify (update title/description), reorder (move to different position). Empty array returns the current plan unchanged. Each operation's title/description, when present, is an engagement-log plan entry (see operations)."
+          },
+          "message": {
+            "type": "string",
+            "title": "Patch summary",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary describing what changes are being made to the plan. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "operations",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "pentester",
+      "description": "Call to pentester team member to perform a penetration test or looking for vulnerabilities and weaknesses",
+      "category": "agent",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "Technical-channel payload — task description for the pentester team member to perform a penetration test on the local environment and find vulnerabilities and weaknesses in the remote target. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Pentester action message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the question and the task. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "perplexity",
+      "description": "Search in the perplexity search engine, it's a fully complex query and detailed research report with answer by query and detailed information from the web sites and other sources augmented by the LLM",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — query for the specific search engine (google, duckduckgo, tavily, traversaal, perplexity, serper, etc.). ALWAYS written in English regardless of the engagement language: internet sources are predominantly indexed in English and non-English queries return poor or empty results. Short and exact queries return better results."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (minimum 1; maximum 10; default 5)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining the expected result and how it advances the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "max_results",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "report_result",
+      "description": "Send the report result to the user with execution status and description",
+      "category": "store_agent_result",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Execution result",
+            "description": "True if the task was executed successfully and its objective was reached"
+          },
+          "result": {
+            "type": "string",
+            "title": "Task result description",
+            "description": "Engagement-log closing entry — fully detailed write-up of the task/subtask outcome (what was achieved or why it failed). Written in the engagement language declared by your system prompt."
+          },
+          "message": {
+            "type": "string",
+            "title": "Task result message",
+            "description": "Engagement-log closing summary — a concise 1-2 sentence recap of the outcome and the path taken to reach the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "result",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "search",
+      "description": "Search in a different search engines in the internet and long-term memory by your complex question to the researcher team member, also you can add some instructions to get result in a specific format or structure or content type like code or command samples, manuals, guides, exploits, vulnerability details, repositories, libraries, etc.",
+      "category": "agent",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "Technical-channel payload — research question for the researcher specialist with full context, target content type, and required structure. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the research question. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "search_answer",
+      "description": "Search in the vector database for relevant answers by providing one or more semantically rich, context-aware natural language queries (1 to 5 queries). Formulate each query with sufficient context, intent, and detailed descriptions of what you want to find and why you need it to enhance semantic matching and retrieval accuracy. Multiple queries allow exploring different formulations and improve search coverage. Specify the type of answer required to further refine the search. Results from all queries are merged, deduplicated, and ranked by relevance score. This function is ideal when you need to retrieve specific answers to assist in tasks, solve issues, or answer questions.",
+      "category": "search_vector_db",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "description": "Technical-channel payload — 1 to 5 detailed, context-rich semantic queries for the team's answer vector store. Must be a real JSON array of strings, e.g. [\"query 1\",\"query 2\"] - NOT a JSON-encoded string containing an array. ALWAYS written in English regardless of the engagement language: the store is indexed in English and shared across all engagements, so non-English queries will fail to retrieve relevant answers. Each query should include the context, what you want to find, what you intend to do with the information, and why you need it. Note: The 'Type' field acts as a strict filter."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "guide",
+              "vulnerability",
+              "code",
+              "tool",
+              "other"
+            ],
+            "description": "The specific type of information or answer you are seeking. This required field acts as a strict filter to enhance the relevance of search results by narrowing down the scope to the specified type."
+          },
+          "message": {
+            "type": "string",
+            "title": "Answer search message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the queries and the type of answer needed. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "questions",
+          "type",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "search_code",
+      "description": "Search in the vector database for relevant code samples by providing one or more semantically rich, context-aware natural language queries (1 to 5 queries). Formulate each query with sufficient context, intent, and detailed descriptions of what you want to achieve with the code and what should be included, to enhance semantic matching and retrieval accuracy. Multiple queries allow exploring different code patterns and use cases. Specify the programming language to further refine the search. Results from all queries are merged, deduplicated, and ranked by relevance score. This function is ideal when you need to retrieve specific code examples to assist in development tasks or solve programming issues.",
+      "category": "search_vector_db",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "description": "Technical-channel payload — 1 to 5 detailed, context-rich semantic queries for the team's code vector store. Must be a real JSON array of strings, e.g. [\"query 1\",\"query 2\"] - NOT a JSON-encoded string containing an array. ALWAYS written in English regardless of the engagement language: the store is indexed in English and shared across all engagements, so non-English queries will fail to retrieve relevant code samples. Each query should include the context, what you intend to achieve with the code, and the functionality or content that should be included."
+          },
+          "lang": {
+            "type": "string",
+            "description": "The programming language of the code samples you need. Use the standard markdown code block language name (e.g., 'python', 'bash', 'golang'). This required field narrows down the search to code samples in the desired language."
+          },
+          "message": {
+            "type": "string",
+            "title": "Code search message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the queries and the programming language of the code samples. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "questions",
+          "lang",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "search_guide",
+      "description": "Search in the vector database for relevant guides by providing one or more semantically rich, context-aware natural language queries (1 to 5 queries). Formulate each query with sufficient context, intent, and detailed descriptions of the guides you need to enhance semantic matching and retrieval accuracy. Multiple queries allow exploring different aspects of the guide topic and improve search coverage. Specify the type of guide required to further refine the search. Results from all queries are merged, deduplicated, and ranked by relevance score. This function is ideal when you need to retrieve specific guides to assist in accomplishing tasks or solving issues.",
+      "category": "search_vector_db",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "description": "Technical-channel payload — 1 to 5 detailed, context-rich semantic queries for the team's guide vector store. Must be a real JSON array of strings, e.g. [\"query 1\",\"query 2\"] - NOT a JSON-encoded string containing an array. ALWAYS written in English regardless of the engagement language: the store is indexed in English and shared across all engagements, so non-English queries will fail to retrieve relevant guides. Each query should include scenario context, objectives, and specific intent. Note: The 'Type' field acts as a strict filter."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "install",
+              "configure",
+              "use",
+              "pentest",
+              "development",
+              "other"
+            ],
+            "description": "The specific type of guide you need. This required field acts as a strict filter to enhance the relevance of search results by narrowing down the scope to the specified guide type."
+          },
+          "message": {
+            "type": "string",
+            "title": "Guide search message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the queries and the type of guide needed. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "questions",
+          "type",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "search_in_memory",
+      "description": "Search in the vector database (long-term memory) for relevant information by providing one or more semantically rich, context-aware natural language queries (1 to 5 queries). Formulate each query with sufficient context, intent, and detailed descriptions to enhance semantic matching and retrieval accuracy. Multiple queries allow exploring different semantic angles and improve recall. Results from all queries are merged, deduplicated, and ranked by relevance score. This function is ideal when you need to retrieve specific information to assist in generating accurate and informative responses. If Task ID or Subtask ID are known, they can be used as strict filters to further refine the search results and improve relevancy.",
+      "category": "search_vector_db",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "description": "Technical-channel payload — 1 to 5 detailed, context-rich semantic queries against the team's long-term vector store. Must be a real JSON array of strings, e.g. [\"query 1\",\"query 2\"] - NOT a JSON-encoded string containing an array. ALWAYS written in English regardless of the engagement language: the store is indexed in English and shared across all engagements, so non-English queries will fail to retrieve relevant stored knowledge. Each query should provide context, intent, and specific details with descriptive phrases, synonyms, and related terms; multiple queries explore different semantic angles. Note: If TaskID or SubtaskID are provided, they will be used as strict filters in the search."
+          },
+          "task_id": {
+            "type": "integer",
+            "title": "Task ID",
+            "description": "Optional. The Task ID to use as a strict filter, retrieving information specifically related to this task. Used to enhance relevance by narrowing down the search scope. Type: integer."
+          },
+          "subtask_id": {
+            "type": "integer",
+            "title": "Subtask ID",
+            "description": "Optional. The Subtask ID to use as a strict filter, retrieving information specifically related to this subtask. Helps in refining search results for increased relevancy. Type: integer."
+          },
+          "message": {
+            "type": "string",
+            "title": "Search-in-memory message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the queries or the information retrieval process. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "questions",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "search_result",
+      "description": "Send the complex search result as a answer for the user question to the user",
+      "category": "store_agent_result",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "result": {
+            "type": "string",
+            "title": "Search result",
+            "description": "Technical-channel payload — fully detailed search report (or error explanation) returned to the calling agent for further reasoning. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Search result message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary with a short summary of the result. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "result",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "searxng",
+      "description": "Search in the searxng meta search engine, it's a privacy-focused search engine that aggregates results from multiple search engines with customizable categories, language settings, and safety filters",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — query for the specific search engine (google, duckduckgo, tavily, traversaal, perplexity, serper, etc.). ALWAYS written in English regardless of the engagement language: internet sources are predominantly indexed in English and non-English queries return poor or empty results. Short and exact queries return better results."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (minimum 1; maximum 10; default 5)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining the expected result and how it advances the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "max_results",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "sploitus",
+      "description": "Search the Sploitus exploit aggregator (https://sploitus.com) for public exploits, proof-of-concept code, and offensive security tools. Sploitus indexes ExploitDB, Packet Storm, GitHub Security Advisories, and many other sources. Use this tool to find exploit code and PoCs for specific software, services, CVEs, or vulnerability classes (e.g. 'ssh', 'apache log4j', 'CVE-2021-44228'). Returns exploit URLs, CVSS scores, CVE references, and publication dates.",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — search query for Sploitus (e.g. 'ssh', 'apache 2.4', 'CVE-2021-44228'). ALWAYS written in English; the Sploitus index is English-only. Short and precise queries return the best results."
+          },
+          "exploit_type": {
+            "type": "string",
+            "enum": [
+              "exploits",
+              "tools"
+            ],
+            "description": "What to search for: 'exploits' (default) for exploit code and PoCs, 'tools' for offensive security tools"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "default",
+              "date",
+              "score"
+            ],
+            "description": "Result ordering: 'default' (relevance), 'date' (newest first), 'score' (highest CVSS first)"
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (minimum 1; maximum 25; default 10)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining the expected result and how it advances the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "max_results",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "stop_flow",
+      "description": "Cancel the currently executing automation task. If a task is actively running its execution context is cancelled; the flow transitions to 'waiting' state and can accept new input or subtask patches. If no task is running the tool returns an informational message and takes no further action. After calling this tool, verify the flow reached 'waiting' state before making further changes.",
+      "category": "environment",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Engagement-log entry — brief explanation of why the engagement is being halted; surfaced in the engagement record. Written in the engagement language declared by your system prompt."
+          },
+          "message": {
+            "type": "string",
+            "title": "Stop message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining that the automation is being stopped. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "store_answer",
+      "description": "Store the question answer to the vector database for future use. Anonymize all sensitive data (IPs, domains, credentials) using descriptive placeholders",
+      "category": "store_vector_db",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "Technical-channel payload — ready answer in markdown format that will be stored in the team's vector store for future retrieval. ALWAYS written in English regardless of the engagement language: the store is indexed in English and shared across all engagements; non-English content becomes unreachable to future searches. Anonymize all sensitive data (IPs, domains, credentials) using descriptive placeholders."
+          },
+          "question": {
+            "type": "string",
+            "description": "Technical-channel payload — question that was used to prepare this answer; co-indexed with the answer. Always written in English; never translated."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "guide",
+              "vulnerability",
+              "code",
+              "tool",
+              "other"
+            ],
+            "description": "Type of the search query and answer to store; it will be used as a hard filter for search"
+          },
+          "message": {
+            "type": "string",
+            "title": "Store answer message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the answer. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answer",
+          "question",
+          "type",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "store_code",
+      "description": "Store the code sample to the vector database for future use. It's should be a sample like a one source code file for some question. Anonymize all sensitive data (IPs, domains, credentials, API keys) using descriptive placeholders",
+      "category": "store_vector_db",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Ready code sample that will be stored for future retrieval (raw source code, not a localized message). Anonymize all sensitive data (IPs, domains, credentials, API keys) using descriptive placeholders."
+          },
+          "question": {
+            "type": "string",
+            "description": "Technical-channel payload — question that was used to prepare or to write this code; co-indexed with the code in the team's vector store. Always written in English; never translated."
+          },
+          "lang": {
+            "type": "string",
+            "description": "Programming language of the code sample; use markdown code block language name like python or bash or golang etc."
+          },
+          "explanation": {
+            "type": "string",
+            "description": "Technical-channel payload — fully detailed explanation of the code sample (what it does, how it works, why it is useful, libraries/tools used). ALWAYS written in English; the explanation is co-indexed with the code in the team's vector store and shared across all engagements; non-English content becomes unreachable to future searches."
+          },
+          "description": {
+            "type": "string",
+            "description": "Technical-channel payload — short description of the code sample as a summary of the explanation; co-indexed in the team's vector store. Always written in English; never translated."
+          },
+          "message": {
+            "type": "string",
+            "title": "Store code message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the code sample. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "question",
+          "lang",
+          "explanation",
+          "description",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "store_guide",
+      "description": "Store the guide to the vector database for future use. Anonymize all sensitive data (IPs, domains, credentials, paths) using descriptive placeholders",
+      "category": "store_vector_db",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "guide": {
+            "type": "string",
+            "description": "Technical-channel payload — ready guide in markdown format that will be stored in the team's vector store for future retrieval. ALWAYS written in English regardless of the engagement language: the store is indexed in English and shared across all engagements; non-English content becomes unreachable to future searches. Anonymize all sensitive data (IPs, domains, credentials, paths) using descriptive placeholders."
+          },
+          "question": {
+            "type": "string",
+            "description": "Technical-channel payload — question that was used to prepare this guide; co-indexed with the guide. Always written in English; never translated."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "install",
+              "configure",
+              "use",
+              "pentest",
+              "development",
+              "other"
+            ],
+            "description": "Type of the guide to store; it will be used as a hard filter for search"
+          },
+          "message": {
+            "type": "string",
+            "title": "Store guide message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary summarizing the guide. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "guide",
+          "question",
+          "type",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "submit_flow_input",
+      "description": "Deliver text to the automation flow. The behaviour depends on the current flow state:\n  Subtask at 'ask' checkpoint — the text is delivered as the user's answer and the subtask resumes immediately.\n  Flow waiting with no active subtask — the text becomes the goal for a new task; the generator and refiner agents decompose it into a subtask list. Write a complete, detailed description with all context the automation needs.\nReturns an error if a task is currently running — cancel the running task first.",
+      "category": "environment",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Engagement-log entry submitted on behalf of the engagement coordinator into the running automation. If a subtask is waiting at an 'ask' checkpoint, this is delivered as the coordinator's answer and execution resumes. If the flow is waiting with no active subtask, this becomes the goal for a new task — include complete context, targets, and constraints because the generator will decompose it into subtasks without further clarification. Written in the engagement language declared by your system prompt so downstream agents and the engagement record stay consistent."
+          },
+          "message": {
+            "type": "string",
+            "title": "Input message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary describing what is being submitted to the automation. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "input",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "subtask_list",
+      "description": "Send new generated subtask list to the user",
+      "category": "store_agent_result",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "subtasks": {
+            "items": {
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "title": "Subtask title",
+                  "description": "Engagement-log plan entry — short title of this subtask capturing its main goal as it appears in the engagement plan. Written in the engagement language declared by your system prompt."
+                },
+                "description": {
+                  "type": "string",
+                  "title": "Subtask to complete",
+                  "description": "Engagement-log plan entry — full description of this subtask (instructions, rules, requirements, success criteria) as it appears in the engagement plan. Written in the engagement language declared by your system prompt."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "title",
+                "description"
+              ]
+            },
+            "type": "array",
+            "title": "Subtasks to complete",
+            "description": "Ordered list of subtasks produced by decomposing the task. Each subtask's title and description are engagement-log plan entries (see SubtaskInfo) — written in the engagement language declared by your system prompt."
+          },
+          "message": {
+            "type": "string",
+            "title": "Subtask generation result",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary on the generation result and the main goal of the plan. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "subtasks",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "subtask_patch",
+      "description": "Submit delta operations to modify the current subtask list instead of regenerating all subtasks. Supports add (create new subtask at position), remove (delete by ID), modify (update title/description), and reorder (move to different position) operations. Use empty operations array if no changes needed.",
+      "category": "store_agent_result",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "operations": {
+            "items": {
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "enum": [
+                    "add",
+                    "remove",
+                    "modify",
+                    "reorder"
+                  ],
+                  "description": "Operation type: 'add' creates a new subtask, 'remove' deletes a subtask by ID, 'modify' updates title/description of existing subtask, 'reorder' moves a subtask to a different position"
+                },
+                "id": {
+                  "type": "integer",
+                  "title": "Subtask ID",
+                  "description": "ID of existing subtask (required for remove/modify/reorder operations)"
+                },
+                "after_id": {
+                  "type": "integer",
+                  "title": "Insert after ID",
+                  "description": "For add/reorder: insert after this subtask ID (null/0 = insert at beginning)"
+                },
+                "title": {
+                  "type": "string",
+                  "title": "New title",
+                  "description": "Engagement-log plan entry — new subtask title (required for add, optional for modify). Written in the engagement language declared by your system prompt."
+                },
+                "description": {
+                  "type": "string",
+                  "title": "New description",
+                  "description": "Engagement-log plan entry — new subtask description (required for add, optional for modify). Written in the engagement language declared by your system prompt."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "op"
+              ]
+            },
+            "type": "array",
+            "description": "List of operations to apply to the current subtask list. Empty array means no changes needed. Each operation's title/description, when present, is an engagement-log plan entry (see operations)."
+          },
+          "message": {
+            "type": "string",
+            "title": "Refinement summary",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary on the changes made and the justification for the modifications. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "operations",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "tavily",
+      "description": "Search in the tavily search engine, it's a more complex query and more detailed content with answer by query and detailed information from the web sites",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — query for the specific search engine (google, duckduckgo, tavily, traversaal, perplexity, serper, etc.). ALWAYS written in English regardless of the engagement language: internet sources are predominantly indexed in English and non-English queries return poor or empty results. Short and exact queries return better results."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (minimum 1; maximum 10; default 5)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining the expected result and how it advances the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "max_results",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "terminal",
+      "description": "Calls a terminal command in blocking mode. Use timeout=0 or a negative value to apply the configured server default timeout. Explicit positive values are accepted up to 10800 seconds (3 hours); values outside this range are replaced by the server default. Only one command can be executed at a time",
+      "category": "environment",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Command to be run in the docker container terminal according to the command-execution rules"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Custom current working directory to execute the command in, or the default directory if not specified"
+          },
+          "detach": {
+            "type": "boolean",
+            "description": "Set to true for INTERACTIVE or LONG-RUNNING commands: shells (msfconsole, bash, python), listeners (nc -lvnp, socat TCP-LISTEN), servers (python -m http.server, php -S), monitors (tcpdump, tail -f). These commands expect user input or run indefinitely. When true: command runs in background, you get immediate confirmation, no stdout/stderr captured. When false: command must complete within timeout and return output. For quick batch commands (nmap, curl, ls) use false"
+          },
+          "timeout": {
+            "type": "integer",
+            "description": "Execution time limit in seconds. Use 0 value to apply the configured server default timeout. Explicit positive values are accepted up to 10800 seconds (3 hours); any value outside the 1–10800 range or non-positive is replaced by the server default. For batch commands that may run long, use the 'timeout' shell utility INSIDE your command to ensure clean completion with full output: 'timeout 55 nmap -sV target' (set 5-10 seconds less than this parameter). For interactive/long-running commands, use detach=true instead of relying solely on timeout"
+          },
+          "message": {
+            "type": "string",
+            "title": "Terminal command message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining what you intend to achieve by running this command. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "input",
+          "cwd",
+          "detach",
+          "timeout",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "traversaal",
+      "description": "Search in the traversaal search engine, presents you answer and web-links by your query according to relevant information from the web sites",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — query for the specific search engine (google, duckduckgo, tavily, traversaal, perplexity, serper, etc.). ALWAYS written in English regardless of the engagement language: internet sources are predominantly indexed in English and non-English queries return poor or empty results. Short and exact queries return better results."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (minimum 1; maximum 10; default 5)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining the expected result and how it advances the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "max_results",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "wait_flow_completion",
+      "description": "Block until the currently running automation task completes (or the timeout expires). Use this when you need to wait for the automation to finish before inspecting its results or taking further action. Returns immediately with an informational message if no tasks exist or if no task is currently running — use get_flow_status first to confirm the flow state before calling this tool. On return, always call get_flow_status with detail='summary' to inspect the final status.",
+      "category": "environment",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "timeout": {
+            "type": "integer",
+            "description": "How long to wait for the running automation task to finish, in seconds. Use 0 or a negative value to apply the default timeout of 60 seconds. Values above 3600 are capped at 3600 seconds (1 hour)."
+          },
+          "message": {
+            "type": "string",
+            "title": "Wait message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining why you are waiting for the automation to finish. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "timeout",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "web_search",
+      "description": "Search the web through a unified engine. Provide a `query` and a `mode`: `links` for a quick list of source links with snippets, `answer` for a synthesized answer over live sources (default), `research` for deep multi-source analysis with reasoning, or `exploit` for exploit code, PoCs, and offensive tooling. The tool selects the best available search provider for that mode, retries transient failures, and automatically falls back to alternative providers, so you do NOT choose or name a specific engine. Queries must be short, keyword-focused, and in English.",
+      "category": "search_network",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Technical-channel payload — the search query. ALWAYS written in English regardless of the engagement language: internet sources and the underlying engines are indexed in English and non-English queries return poor or empty results. Keep it short and keyword-focused."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "links",
+              "answer",
+              "research",
+              "exploit"
+            ],
+            "description": "What you need back (default 'answer'). 'links' — a list of source links with snippets (fastest/cheapest). 'answer' — a synthesized answer over live sources. 'research' — deep multi-source analysis with reasoning (most thorough). 'exploit' — exploit code, PoCs, and offensive tools. web_search picks the concrete engine for you and falls back automatically; you do NOT name an engine."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (1–25; default 5). Ignored by answer/research engines that return a single synthesized answer."
+          },
+          "exploit_type": {
+            "type": "string",
+            "enum": [
+              "exploits",
+              "tools"
+            ],
+            "description": "exploit mode only: 'exploits' (default) for exploit code and PoCs, 'tools' for offensive-security tools."
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "default",
+              "date",
+              "score"
+            ],
+            "description": "exploit mode only: result ordering — 'default' (relevance), 'date' (newest first), 'score' (highest CVSS first)."
+          },
+          "message": {
+            "type": "string",
+            "title": "Search query message",
+            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining the expected result and how it advances the goal. Written in the engagement language declared by your system prompt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "message"
+        ]
+      }
+    }
+  ]
+}

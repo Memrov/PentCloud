@@ -1,0 +1,46 @@
+{
+  "name": "pentcloud-native-reconcile-canary",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": false
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ATTEMPTS",
+        "class_name": "RemoteCanaryAttempt"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "RemoteCanaryAttempt"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "binding": "TOOLBOX",
+      "service": "pentcloud-toolbox",
+      "entrypoint": "ToolboxGateway"
+    }
+  ],
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.tmpl",
+        "**/*.tmpl?raw"
+      ],
+      "fallthrough": true
+    }
+  ]
+}

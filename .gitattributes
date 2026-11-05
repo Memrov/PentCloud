@@ -1,0 +1,11 @@
+# Wrangler owns these generated runtime declarations, including their formatting.
+**/worker-configuration.d.ts linguist-generated=true -whitespace
+apps/control-plane/src/native/assets/wasm_exec.js linguist-generated=true
+# Review editable D2 sources; generated SVGs remain visible in the README/docs.
+media/*.svg linguist-generated=true
+media/*.png linguist-generated=true
+
+# Preserve byte-exact upstream and managed prompts, including intentional whitespace.
+upstream/pentagi/prompts/*.tmpl -whitespace
+internal/prompts/assets/*.tmpl -whitespace
+apps/control-plane/src/native/specialists/*.md -whitespace

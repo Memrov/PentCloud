@@ -1,0 +1,202 @@
+{
+  "aggregate_sha256": "fe64d11a7a9ad76f9c9664ad7066b059dbfa51e4950999688470680d3801720a",
+  "commit": "cffed9485aa1cca70762cd08a57ac62a80406258",
+  "files": [
+    {
+      "sha256": "d36cfb5193e0667e9a3dfc71d77534047fdc190e58f7bfd7218c55e67de35c3f",
+      "source_path": "backend/pkg/templates/prompts/adviser.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/adviser.tmpl"
+    },
+    {
+      "sha256": "648148e28286b4f86798f0ad122cbdcbebe1b5ef9e2fb640f03c336fd485864e",
+      "source_path": "backend/pkg/templates/prompts/assistant.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/assistant.tmpl"
+    },
+    {
+      "sha256": "20d2920d8b860b723d58da160bf9b63bf317d59dfa5b6a7d3453dc22c6a48807",
+      "source_path": "backend/pkg/templates/prompts/coder.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/coder.tmpl"
+    },
+    {
+      "sha256": "f0af06aa4175cef2b4cedcbdb5f26ea9343be98bbf48dbdab8a89b9766a363b1",
+      "source_path": "backend/pkg/templates/prompts/enricher.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/enricher.tmpl"
+    },
+    {
+      "sha256": "da04788804ae6193c295dd76481634720e57d68270d297c2c33378ccb452f7af",
+      "source_path": "backend/pkg/templates/prompts/execution_logs.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/execution_logs.tmpl"
+    },
+    {
+      "sha256": "18aa517683024d6179e4ab10d0a48c1d2837ee54a336d902e8659e51977ae91b",
+      "source_path": "backend/pkg/templates/prompts/flow_descriptor.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/flow_descriptor.tmpl"
+    },
+    {
+      "sha256": "6febe3ddc3a9be0ac212b3a3890d6ef96eccc7cfe9e7efa8f38d36c671322d3f",
+      "source_path": "backend/pkg/templates/prompts/full_execution_context.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/full_execution_context.tmpl"
+    },
+    {
+      "sha256": "749f034b31ca5774a381ee62152eed9ca18ef5697a2388d0aa86563dd77af034",
+      "source_path": "backend/pkg/templates/prompts/generator.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/generator.tmpl"
+    },
+    {
+      "sha256": "f9b53e0c38987f47268a2f33f82b0f8a3b57b46f6f400cf4139cbe5c86cf1cf4",
+      "source_path": "backend/pkg/templates/prompts/image_chooser.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/image_chooser.tmpl"
+    },
+    {
+      "sha256": "a742764e4587c84206b7438fd7248ba62ea592cd94c6ffbcb72eef1402130e8e",
+      "source_path": "backend/pkg/templates/prompts/input_toolcall_fixer.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/input_toolcall_fixer.tmpl"
+    },
+    {
+      "sha256": "73f2e540b3f12eb0b13983203bf5fdd154ca6be3d37250e57200bff05f59c161",
+      "source_path": "backend/pkg/templates/prompts/installer.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/installer.tmpl"
+    },
+    {
+      "sha256": "a53d6b9e2a81d1880a6dfb7a70b1b137f3795d6c5c382b1cffec7a667dd9377c",
+      "source_path": "backend/pkg/templates/prompts/language_chooser.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/language_chooser.tmpl"
+    },
+    {
+      "sha256": "ed21374f2bee7858803a718f7e3540765eda085340d79e34aff54c1b625e0517",
+      "source_path": "backend/pkg/templates/prompts/memorist.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/memorist.tmpl"
+    },
+    {
+      "sha256": "5f053b282ac24fc57f27b184c66838ce754426df2af93e0bae3826c29d2ae087",
+      "source_path": "backend/pkg/templates/prompts/pentester.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/pentester.tmpl"
+    },
+    {
+      "sha256": "f000f4706042efb07663c07cc5ff8943eed498c62b012911277d9a5a5521e2dc",
+      "source_path": "backend/pkg/templates/prompts/primary_agent.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/primary_agent.tmpl"
+    },
+    {
+      "sha256": "4fc8ac53d3d45280db5832d285e968d20777a82b8ada7ea5fe3038e76bcc6009",
+      "source_path": "backend/pkg/templates/prompts/question_adviser.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_adviser.tmpl"
+    },
+    {
+      "sha256": "888e92f9b2ea4bcc4088889d9971b03026781b467193457ba62c30a4babac543",
+      "source_path": "backend/pkg/templates/prompts/question_coder.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_coder.tmpl"
+    },
+    {
+      "sha256": "bf6a18d5d1da01a94ad13cb35f66bbc79571ff8e43e1abcad7afc694be1f451b",
+      "source_path": "backend/pkg/templates/prompts/question_enricher.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_enricher.tmpl"
+    },
+    {
+      "sha256": "1ee1a4dce2cf84cfa83d053641bccd731746c367a1344a3b7e1bd14e09e38653",
+      "source_path": "backend/pkg/templates/prompts/question_execution_monitor.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_execution_monitor.tmpl"
+    },
+    {
+      "sha256": "69667eda9a9530465b1741ee32ea9ba3ed1a7c111464808bed87fb5d8f919a95",
+      "source_path": "backend/pkg/templates/prompts/question_installer.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_installer.tmpl"
+    },
+    {
+      "sha256": "9dc4e1e9365e798676ff4a67b9397e2ad0a4320b4ff55789f272ec20310ec75b",
+      "source_path": "backend/pkg/templates/prompts/question_memorist.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_memorist.tmpl"
+    },
+    {
+      "sha256": "995ce76231a93487e92ef12751da964c9e43bd23839a9bc9746f60d1471357b7",
+      "source_path": "backend/pkg/templates/prompts/question_pentester.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_pentester.tmpl"
+    },
+    {
+      "sha256": "bfec671a41b3479066285fee3b1c193fcb108116b9b9f05abf168d0489471d28",
+      "source_path": "backend/pkg/templates/prompts/question_reflector.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_reflector.tmpl"
+    },
+    {
+      "sha256": "3aa0ee1d18e335bc5e5b65de42b975027f2c46faf0359eb57a22168460212111",
+      "source_path": "backend/pkg/templates/prompts/question_searcher.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_searcher.tmpl"
+    },
+    {
+      "sha256": "030ee8f8444f68ef715f7943b08ada500d0ef09482f899c52c6451a76639c7cc",
+      "source_path": "backend/pkg/templates/prompts/question_task_planner.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/question_task_planner.tmpl"
+    },
+    {
+      "sha256": "535b6e3f39ba08345469c1323265bf29ceb30c07f9329e70fb1eef0ce681a47d",
+      "source_path": "backend/pkg/templates/prompts/refiner.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/refiner.tmpl"
+    },
+    {
+      "sha256": "974b8946ff3dd8a23973d582f0245c352cd4c5086712dae9f7eb672d3e69ad1f",
+      "source_path": "backend/pkg/templates/prompts/reflector.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/reflector.tmpl"
+    },
+    {
+      "sha256": "e0946fca2b89cc027147565aaa6f055417f05628cd68fcdcabcf996aa55543e5",
+      "source_path": "backend/pkg/templates/prompts/reporter.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/reporter.tmpl"
+    },
+    {
+      "sha256": "97186f2cc8e0f1e18c5e4e95076e21441308243337e2bbb0852018027fcfb762",
+      "source_path": "backend/pkg/templates/prompts/searcher.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/searcher.tmpl"
+    },
+    {
+      "sha256": "aa713c0a29899db29a09c97b0b112776b247b6954043878becdaed34ca133aee",
+      "source_path": "backend/pkg/templates/prompts/short_execution_context.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/short_execution_context.tmpl"
+    },
+    {
+      "sha256": "f14cb3faab8577a2ed3a29e98963d16de77bedfdfb04d42136f36ebf436a8fc5",
+      "source_path": "backend/pkg/templates/prompts/subtasks_generator.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/subtasks_generator.tmpl"
+    },
+    {
+      "sha256": "7913c64de9e221a37bf99815d8c4973579fe7f2426c7f0c3a357c5d2eba2b97f",
+      "source_path": "backend/pkg/templates/prompts/subtasks_refiner.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/subtasks_refiner.tmpl"
+    },
+    {
+      "sha256": "8e286beb2af3b68cc33c59aff95deea45e642b1173704b2c32f622fcb48e3e90",
+      "source_path": "backend/pkg/templates/prompts/summarizer.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/summarizer.tmpl"
+    },
+    {
+      "sha256": "dfde023b59f347b6dfababb5678856709487d22ac7d99d43ce1795d047db1f5e",
+      "source_path": "backend/pkg/templates/prompts/task_assignment_wrapper.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/task_assignment_wrapper.tmpl"
+    },
+    {
+      "sha256": "2b2baacc6fd4608dc6bade83c9a25aaec6cccdead68ecd6bcc9f6c32cd610c76",
+      "source_path": "backend/pkg/templates/prompts/task_descriptor.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/task_descriptor.tmpl"
+    },
+    {
+      "sha256": "8abbfceb9610fd3c2543ea3bd912ec1a480cc3ef1a86ad64c920f6330d39b7d5",
+      "source_path": "backend/pkg/templates/prompts/task_reporter.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/task_reporter.tmpl"
+    },
+    {
+      "sha256": "92b2c8fef8b575e51f85b7f288d8b04c40b2f20e686073b75b83ae34e9ad0099",
+      "source_path": "backend/pkg/templates/prompts/tool_call_id_collector.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/tool_call_id_collector.tmpl"
+    },
+    {
+      "sha256": "b4fab253c12b89bba639a1d9af7d1407947f3bd2f6e9f63e9226b8cbe7e7b8d2",
+      "source_path": "backend/pkg/templates/prompts/tool_call_id_detector.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/tool_call_id_detector.tmpl"
+    },
+    {
+      "sha256": "451cfeaf54f58d734f635abc9e2d150541503592e0240d52e1abd45cd6a72826",
+      "source_path": "backend/pkg/templates/prompts/toolcall_fixer.tmpl",
+      "vendored_path": "upstream/pentagi/prompts/toolcall_fixer.tmpl"
+    }
+  ],
+  "repository": "https://github.com/vxcontrol/pentagi.git"
+}

@@ -1,0 +1,47 @@
+{
+  "name": "native-attempt-local-probe",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ATTEMPTS",
+        "class_name": "ProbeAttempt"
+      },
+      {
+        "name": "MODEL_TESTS",
+        "class_name": "ProbeModelTest"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "ProbeAttempt",
+        "ProbeModelTest"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.tmpl",
+        "**/*.tmpl?raw",
+        "**/*.md?raw"
+      ],
+      "fallthrough": true
+    }
+  ],
+  "workers_dev": false,
+  "preview_urls": false
+}

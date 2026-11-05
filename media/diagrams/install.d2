@@ -1,0 +1,11 @@
+...@_style
+direction: down
+assistant: "Open the repository in your coding assistant\nUse the README setup prompt" {class: card}
+login: "Sign in through official Cloudflare tools\nComplete browser approvals and account checks" {class: card}
+plan: "Review the installation plan\nAccount resources, prerequisites and costs" {class: card}
+install: "Approve and run the guided CLI install\nPrepare the image, resources and access" {class: card}
+models: "Configure Cloudflare secret bindings\nSelect supported OpenCode models" {class: card}
+open: "Open the protected application\nSave your first target" {class: card}
+assistant -> login -> plan -> install -> models -> open
+note: "Setup uses your Cloudflare account and CLI.\nReview service costs and network/data risks before testing." {class: note}
+open -> note: {style.opacity: 0}

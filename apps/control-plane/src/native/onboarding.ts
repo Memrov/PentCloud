@@ -1,0 +1,293 @@
+import { digest, identifier, canonical } from "./domain";
+import { boundedText, checkAddress, normalizeTargetURL, type AddressCheck } from "./target-check";
+import { operatorIdentityHeader, targetHeaders } from "./target-headers";
+import { normalizeCatalog, type OpenCodeRoute, type OpenCodeModel, type PinnedModel } from "./opencode-models";
+import type {SourceContext} from "./source-context";
+
+import {MODEL_ROLES,type ModelRole} from "./onboarding-roles";
+export {MODEL_ROLES,type ModelRole} from "./onboarding-roles";
+export type ModelChoice={model:string;credentialId:string;credentialVersion:number};
+export interface ModelProfile {default:ModelChoice;overrides:Partial<Record<ModelRole,ModelChoice>>}
+export interface SavedTarget {
+  sources?:SourceContext[];
+  id:string;kind:"website"|"api";name:string;url:string;revision:number;archived:boolean;deleted?:boolean;
+  createdAt:number;updatedAt:number;updatedBy:string;objective:string;exclusions:string;
+}
+export interface CredentialMetadata {
+  binding?:string;id:string;purpose:"model"|"api";label:string;version:number;revoked:boolean;missing?:boolean;
+  targetId?:string;audienceURL?:string;targetRevision?:number;header?:string;scheme?:"bearer"|"header";updatedAt:number;updatedBy:string;
+}
+interface TargetProof extends AddressCheck {targetId:string;targetRevision:number;checkedAt:number;expiresAt:number}
+interface ModelProof {credentialFingerprint?:string;model:string;credentialId:string;credentialVersion:number;catalogDigest:string;testedAt:number;expiresAt:number}
+export interface SetupDraft {
+  revision:number;profile?:ModelProfile;apiCredential?:{id:string;version:number};publicAPI:boolean;
+  endpoint?:string;expectedStatus?:number;expectedText?:string;updatedBy:string;
+}
+type Catalog={models:OpenCodeModel[];fetchedAt:string;stale:boolean;digest:string;modelDigests:Record<string,string>;providerConfig?:string};
+export interface OnboardingIO {
+  get<T>(key:string):T|undefined;put(key:string,value:unknown):void;list<T>(prefix:string):T[];remove(key:string):void;
+  now?:()=>number;fetcher?:typeof fetch;probe?:(model:OpenCodeModel,key:string)=>Promise<void>;boundGoKey?:()=>string|undefined;modelBindings?:()=>CredentialMetadata[];readModelSecret?:(id:string)=>Promise<string>;byokProviders?:()=>import("./opencode-models").OpenCodeByokProvider[];
+}
+const prefix="onboarding:";
+export class OnboardingStore {
+  private readonly running=new Map<string,Promise<unknown>>();
+  constructor(private readonly io:OnboardingIO){}
+  private now(){return (this.io.now??Date.now)();}
+  private key(type:string,id:string){return prefix+type+":"+id;}
+  private audit(action:string,id:string,actor:string){this.io.put(this.key("audit",crypto.randomUUID()),{action,id,actor,at:this.now()});}
+  target(id:string):SavedTarget {
+    const value=this.io.get<SavedTarget>(this.key("target",identifier(id)));
+    if(!value||value.deleted)throw new Error("404: Target not found");return structuredClone(value);
+  }
+  targets(){return this.io.list<SavedTarget>(prefix+"target:").filter(t=>!t.deleted);}
+  saveTarget(raw:{id:string;kind:string;name:string;url:string;objective?:string;exclusions?:string},expected:number|null,actor:string) {
+    const id=identifier(raw.id,"target id"),prior=this.io.get<SavedTarget>(this.key("target",id));
+    if(prior?.deleted)throw new Error("409: Target identity was deleted; use a new ID");
+    if(prior?expected!==prior.revision:expected!==null)throw new Error("409: Target changed; reload");
+    if(!["website","api"].includes(raw.kind)||typeof raw.name!=="string"||!raw.name.trim()||raw.name.length>160)throw new Error("400: Target type and name are required");
+    for(const v of [raw.objective,raw.exclusions])if(v!==undefined&&(typeof v!=="string"||v.length>16000))throw new Error("400: Target notes are too long");
+    const target:SavedTarget={id,kind:raw.kind as SavedTarget["kind"],name:raw.name.trim(),url:normalizeTargetURL(raw.url),revision:(prior?.revision??0)+1,
+      archived:prior?.archived??false,createdAt:prior?.createdAt??this.now(),updatedAt:this.now(),updatedBy:actor,objective:raw.objective??"",exclusions:raw.exclusions??"",...(prior?.sources?{sources:prior.sources}:{})};
+    this.io.put(this.key("target",id),target);this.audit(prior?"target.update":"target.create",id,actor);return target;
+  }
+  saveSources(id:string,revision:number,sources:SourceContext[],actor:string){
+    const target=this.target(id);
+    if(target.archived||target.revision!==revision)throw new Error("409: Target changed or archived; reload");
+    const next={...target,sources:structuredClone(sources),revision:revision+1,updatedAt:this.now(),updatedBy:actor};
+    this.io.put(this.key("target",id),next);this.audit("source.update",id,actor);return next;
+  }
+  lifecycleTarget(id:string,expected:number,action:"archive"|"restore"|"delete",actor:string) {
+    const target=this.target(id);if(target.revision!==expected)throw new Error("409: Target changed; reload");
+    const next={...target,revision:target.revision+1,updatedAt:this.now(),updatedBy:actor,archived:action!=="restore",...(action==="delete"?{deleted:true}:{})};
+    this.io.put(this.key("target",id),next);this.audit("target."+action,id,actor);
+    return next;
+  }
+  async checkTarget(id:string,revision:number,operation:string,actor:string,checker:(url:string)=>Promise<AddressCheck>=url=>checkAddress(url,this.io.fetcher)) {
+    const target=this.target(id);if(target.archived||target.revision!==revision)throw new Error("409: Target changed or archived; reload");
+    return this.operation("check",operation,{id,revision},async()=>{
+      const checked=await checker(target.url);const current=this.target(id);
+      if(current.revision!==revision||current.archived)throw new Error("409: Target changed during verification; verify again");
+      const proof:TargetProof={...checked,targetId:id,targetRevision:revision,checkedAt:this.now(),expiresAt:this.now()+300000};
+      this.io.put(this.key("target-proof",id),proof);this.audit("target.check",id,actor);return proof;
+    });
+  }
+  requireTargetProof(id:string,revision:number):TargetProof {
+    const target=this.target(id),proof=this.io.get<TargetProof>(this.key("target-proof",id));
+    if(target.archived||target.revision!==revision||!proof||proof.targetRevision!==revision||proof.expiresAt<this.now()||!["reachable","needs-auth","path-review"].includes(proof.classification))
+      throw new Error("409: Verify the current target address before starting a run");
+    return structuredClone(proof);
+  }
+  credentials():CredentialMetadata[] {
+    const records=this.io.list<CredentialMetadata>(prefix+"credential:");
+    records.unshift(...(this.io.modelBindings?.()??(this.io.boundGoKey?.()?[{id:"bound-go",purpose:"model" as const,label:"OpenCode Go · Cloudflare",version:0,revoked:false,updatedAt:0,updatedBy:"deployment"}]:[])));
+    return records;
+  }
+  saveCredential(raw:{id:string;purpose:string;label:string;value:string;targetId?:string;header?:string;scheme?:string},expected:number|null,actor:string) {
+    if(raw.purpose==="model")throw new Error("400: Manage OpenCode keys through Cloudflare secret bindings, not application storage");
+    const id=identifier(raw.id,"credential id");if(id==="bound-go"||id==="bound-console")throw new Error("400: The deployment key is managed in Cloudflare");
+    const prior=this.io.get<CredentialMetadata>(this.key("credential",id));
+    if(prior?expected!==prior.version:expected!==null)throw new Error("409: Credential changed; reload");
+    if(!["model","api"].includes(raw.purpose)||typeof raw.value!=="string"||!raw.value.trim()||raw.value.length>8192||/[\r\n\0]/.test(raw.value)||!raw.label?.trim()||raw.label.length>160)throw new Error("400: Enter a valid credential value and label");
+    if(prior&&(prior.purpose!==raw.purpose||prior.targetId!==raw.targetId||raw.purpose==="api"&&(prior.header!==raw.header||prior.scheme!==raw.scheme)))throw new Error("409: Credential purpose and target cannot change");
+    if(raw.purpose==="api"){
+      const target=this.target(String(raw.targetId));if(target.kind!=="api"||target.archived)throw new Error("400: Select an active API target");
+      if(prior&&prior.audienceURL!==target.url)throw new Error("409: Credential audience changed; save a new API key reference for the new address");
+      if(!["bearer","header"].includes(String(raw.scheme))||!raw.header||!validAuthHeader(raw.header,String(raw.scheme)))throw new Error("400: Choose a valid API authorization header");
+    }
+    const meta:CredentialMetadata={id,purpose:raw.purpose as CredentialMetadata["purpose"],label:raw.label.trim(),version:(prior?.version??0)+1,revoked:false,updatedAt:this.now(),updatedBy:actor,
+      ...(raw.purpose==="api"?{targetId:raw.targetId!,audienceURL:this.target(raw.targetId!).url,targetRevision:this.target(raw.targetId!).revision,header:raw.header!,scheme:raw.scheme as "header"|"bearer"}:{})};
+    this.io.put(this.key("value",id+":"+meta.version),raw.value);
+    this.io.put(this.key("credential",id),meta);this.audit("credential.save",id,actor);return meta;
+  }
+  private requireModelCredential(id:string,version:number) {
+    const meta=this.credentials().find(c=>c.id===id&&c.purpose==="model");
+    if(!["bound-go","bound-console"].includes(id)||version!==0||!meta||meta.revoked||meta.missing)throw new Error("409: Select a configured Cloudflare OpenCode secret binding");
+  }
+  async resolveModelCredential(id:string,version:number):Promise<string> {
+    this.requireModelCredential(id,version);
+    const key=this.io.readModelSecret?await this.io.readModelSecret(id):id==="bound-go"?this.io.boundGoKey?.():undefined;
+    if(!key)throw new Error("409: Configure the OpenCode secret in Cloudflare");
+    return key;
+  }
+  resolveCredential(id:string,version:number,purpose:"model"|"api",targetId?:string):string {
+    if(purpose==="model")throw new Error("409: Use the Cloudflare model secret binding");
+    const meta=this.io.get<CredentialMetadata>(this.key("credential",identifier(id)));
+    if(!meta||meta.missing)throw new Error("409: Credential missing; re-enter the key");
+    if(meta.revoked)throw new Error("409: Credential revoked; select a current key");
+    if(meta.purpose!==purpose||meta.targetId!==targetId||!Number.isSafeInteger(version)||version<1||version>meta.version)throw new Error("403: Credential purpose, target or version mismatch");
+    const value=this.io.get<string>(this.key("value",id+":"+version));
+    if(!value)throw new Error("409: Credential value missing; re-enter the key");return value;
+  }
+  revokeCredential(id:string,version:number,actor:string) {
+    if(id==="bound-go"||id==="bound-console")throw new Error("400: Manage the deployment key in Cloudflare");
+    const meta=this.io.get<CredentialMetadata>(this.key("credential",identifier(id)));
+    if(!meta||meta.version!==version)throw new Error("409: Credential changed; reload");
+    this.io.put(this.key("credential",id),{...meta,revoked:true,updatedAt:this.now(),updatedBy:actor});
+    for(let v=1;v<=meta.version;v++)this.io.remove(this.key("value",id+":"+v));
+    this.audit("credential.revoke",id,actor);return {revoked:true as const};
+  }
+  secretValues(){return this.io.list<string>(prefix+"value:");}
+  async catalog(route:OpenCodeRoute,refresh=false):Promise<Catalog> {
+    if(!["go","console"].includes(route))throw new Error("400: Choose OpenCode Go or Console");
+    const providers=route==="console"?this.io.byokProviders?.()??[]:[],providerConfig=canonical(providers);
+    const key=this.key("catalog",route),cached=this.io.get<Catalog>(key),compatible=cached&&(cached.providerConfig??"[]")===providerConfig;
+    if(compatible&&!refresh&&Date.parse(cached.fetchedAt)+900000>this.now())return {...cached,stale:false};
+    let failure="network or timeout failure";
+    try {
+      const response=await (this.io.fetcher??fetch)("https://opencode.ai/inference/"+(route==="go"?"go/":"")+"v1/models",{signal:AbortSignal.timeout(10000),redirect:"manual"});
+      if(!response.ok){failure="HTTP "+response.status;await response.body?.cancel();throw new Error();}
+      failure="invalid or unsupported catalog response";
+      const models=normalizeCatalog(JSON.parse(await boundedText(response,1024*1024)),route,providers);
+      if(!models.length)throw new Error();
+      if(canonical(route==="console"?this.io.byokProviders?.()??[]:[])!==providerConfig)throw new Error();
+      const value:Catalog={models,fetchedAt:new Date(this.now()).toISOString(),stale:false,providerConfig,digest:await digest(models),modelDigests:Object.fromEntries(await Promise.all(models.map(async m=>[m.id,await digest(m)])))};
+      this.io.put(key,value);return value;
+    } catch {if(compatible&&canonical(route==="console"?this.io.byokProviders?.()??[]:[])===providerConfig)return {...cached,stale:true};throw new Error("503: OpenCode "+(route==="go"?"Go":"Console")+" catalog unavailable ("+failure+"). Refresh the catalog to retry.");}
+  }
+  private model(choice:ModelChoice):{model:OpenCodeModel;catalog:Catalog} {
+    if(!choice||typeof choice.model!=="string")throw new Error("400: Choose an OpenCode model");
+    const route=choice.model.startsWith("opencode-go:")?"go":choice.model.startsWith("opencode:")?"console":null;
+    if(!route)throw new Error("400: Only OpenCode Console and Go models are supported");
+    const catalog=this.io.get<Catalog>(this.key("catalog",route)),model=catalog?.models.find(m=>m.id===choice.model);
+    if(!catalog||!model||(catalog.providerConfig??"[]")!==canonical(route==="console"?this.io.byokProviders?.()??[]:[])||Date.parse(catalog.fetchedAt)+900000<this.now())throw new Error("409: Refresh the OpenCode catalog before choosing a model");
+    return {model,catalog};
+  }
+  private proofKey(choice:ModelChoice){return this.key("model-proof",choice.credentialId+":"+choice.credentialVersion+":"+choice.model);}
+  async testModel(choice:ModelChoice,operation:string,actor:string) {
+    const {model,catalog}=this.model(choice),key=await this.resolveModelCredential(choice.credentialId,choice.credentialVersion);
+    const credentialFingerprint=await digest(key);
+    const prior=this.io.get<ModelProof>(this.proofKey(choice));
+    if(prior&&prior.expiresAt>this.now()&&prior.catalogDigest===catalog.modelDigests[choice.model]&&prior.credentialFingerprint===credentialFingerprint)return prior;
+    return this.operation("model-test",operation,choice,async()=>{
+      try {if(!this.io.probe)throw new Error("Native OpenCode test is unavailable");await this.io.probe(model,key);}
+      catch {throw new Error("409: OpenCode test failed. Check key Models Request permission, plan, quota, privacy/region settings and model tool support in OpenCode.");}
+      if(this.model(choice).catalog.modelDigests[choice.model]!==catalog.modelDigests[choice.model])throw new Error("409: OpenCode model configuration changed during the test; test again");
+      if(await digest(await this.resolveModelCredential(choice.credentialId,choice.credentialVersion))!==credentialFingerprint)throw new Error("409: Cloudflare secret changed during the model test; test again");
+      const proof:ModelProof={...choice,credentialFingerprint,catalogDigest:catalog.modelDigests[choice.model]!,testedAt:this.now(),expiresAt:this.now()+86400000};
+      this.io.put(this.proofKey(choice),proof);this.audit("model.test",choice.credentialId,actor);return proof;
+    });
+  }
+  pinnedModel(choice:ModelChoice):PinnedModel {
+    const proof=this.io.get<ModelProof>(this.proofKey(choice));
+    if(!proof||proof.expiresAt<this.now()||!/^[a-f0-9]{64}$/.test(proof.credentialFingerprint??""))throw new Error("409: Test the selected OpenCode model before starting analysis");
+    const {model,catalog}=this.model(choice);
+    if(catalog.modelDigests[choice.model]!==proof.catalogDigest)throw new Error("409: Model metadata changed; test the model again");
+    this.requireModelCredential(choice.credentialId,choice.credentialVersion);
+    return {...model,credentialId:choice.credentialId,credentialVersion:choice.credentialVersion,...(proof.credentialFingerprint?{credentialFingerprint:proof.credentialFingerprint}:{}),catalogDigest:catalog.modelDigests[choice.model]!,testedAt:proof.testedAt};
+  }
+  draft(runId:string):SetupDraft {return this.io.get<SetupDraft>(this.key("setup",identifier(runId)))??{revision:0,publicAPI:true,updatedBy:"system"};}
+  saveDraft(runId:string,input:Omit<SetupDraft,"revision"|"updatedBy">,expected:number,actor:string):SetupDraft {
+    const prior=this.draft(runId);if(prior.revision!==expected)throw new Error("409: Setup changed; reload");
+    if(typeof input.publicAPI!=="boolean")throw new Error("400: Choose public or authenticated API access");
+    if(input.profile){
+      const choices=[input.profile.default,...Object.values(input.profile.overrides??{})];
+      for(const choice of choices){if(!choice)continue;this.model(choice);this.requireModelCredential(choice.credentialId,choice.credentialVersion);}
+      if(Object.keys(input.profile.overrides??{}).some(k=>!MODEL_ROLES.includes(k as ModelRole)))throw new Error("400: Unknown model role");
+    }
+    if(input.expectedStatus!==undefined&&(!Number.isInteger(input.expectedStatus)||input.expectedStatus<200||input.expectedStatus>299))throw new Error("400: Choose an expected successful status");
+    if(input.expectedText!==undefined&&(typeof input.expectedText!=="string"||input.expectedText.length>500))throw new Error("400: Authentication match is too long");
+    const next:SetupDraft={revision:prior.revision+1,publicAPI:input.publicAPI,updatedBy:actor,
+      ...(input.profile?{profile:structuredClone(input.profile)}:{}),
+      ...(input.apiCredential?{apiCredential:{id:identifier(input.apiCredential.id),version:input.apiCredential.version}}:{}),
+      ...(input.endpoint?{endpoint:normalizeTargetURL(input.endpoint)}:{}),
+      ...(input.expectedStatus?{expectedStatus:input.expectedStatus}:{}),
+      ...(input.expectedText?{expectedText:input.expectedText}:{}),
+    };
+    const {revision:_oldRevision,updatedBy:_oldActor,...before}=prior,{revision:_newRevision,updatedBy:_newActor,...after}=next;
+    if(canonical(before)===canonical(after))return prior;
+    this.io.put(this.key("setup",runId),next);this.audit("setup.update",runId,actor);return next;
+  }
+  pinProfile(runId:string){const draft=this.draft(runId);if(!draft.profile)throw new Error("409: Configure OpenCode models first");return Object.fromEntries(MODEL_ROLES.map(role=>[role,this.pinnedModel(draft.profile!.overrides[role]??draft.profile!.default)])) as Record<ModelRole,PinnedModel>;}
+  async verifyModelProfile(runId:string){
+    const models=this.pinProfile(runId),fingerprints=new Map<string,Promise<string>>();
+    for(const model of Object.values(models)){
+      const ref=model.credentialId+":"+model.credentialVersion;
+      if(!fingerprints.has(ref))fingerprints.set(ref,this.resolveModelCredential(model.credentialId,model.credentialVersion).then(key=>digest(key)));
+      if(model.credentialFingerprint&&await fingerprints.get(ref)!==model.credentialFingerprint)throw new Error("409: Cloudflare model secret changed; test the selected models again");
+    }
+    return models;
+  }
+  apiConfig(target:SavedTarget,credential:{id:string;version:number}){
+    const value=this.resolveCredential(credential.id,credential.version,"api",target.id),meta=this.io.get<CredentialMetadata>(this.key("credential",credential.id))!;
+    if(meta.audienceURL!==target.url)throw new Error("403: API credential audience does not match this target snapshot; save a key for this address");
+    return {targetURL:meta.audienceURL,header:meta.header!,value:meta.scheme==="bearer"?"Bearer "+value:value};
+  }
+  async testAPI(runId:string,target:SavedTarget,operation:string,actor:string) {
+    const draft=this.draft(runId);if(!draft.apiCredential||!draft.endpoint||!draft.expectedStatus)throw new Error("400: Choose a key, protected read-only endpoint and expected status");
+    const config=this.apiConfig(target,draft.apiCredential);assertAudience(target.url,draft.endpoint);
+    const identity={runId,revision:draft.revision,targetRevision:target.revision};
+    return this.operation("api-test",operation,identity,async()=>{
+      const request=(authenticated:boolean)=>(this.io.fetcher??fetch)(draft.endpoint!,{method:"GET",headers:targetHeaders(undefined,authenticated?config:undefined),redirect:"manual",signal:AbortSignal.timeout(5000)});
+      const anonymous=await request(false),anonymousText=await boundedText(anonymous);
+      const response=await request(true),text=await boundedText(response);
+      const matches=(status:number,body:string)=>status===draft.expectedStatus&&(!draft.expectedText||body.includes(draft.expectedText));
+      if(!matches(response.status,text)||matches(anonymous.status,anonymousText))throw new Error("409: The response did not distinguish authenticated access. Use a protected read-only endpoint and an accurate success condition.");
+      if(this.draft(runId).revision!==draft.revision)throw new Error("409: Setup changed during API test");
+      this.apiConfig(target,draft.apiCredential!);
+      const proof={...identity,configuration:apiProofIdentity(draft,target),credential:draft.apiCredential,testedAt:this.now(),expiresAt:this.now()+86400000};
+      this.io.put(this.key("api-proof",runId),proof);this.audit("api.test",target.id,actor);return {verified:true,testedAt:proof.testedAt};
+    });
+  }
+  requireAPIProof(runId:string,target:SavedTarget) {
+    const draft=this.draft(runId);if(target.kind!=="api"||draft.publicAPI)return;
+    const proof=this.io.get<{revision:number;targetRevision:number;expiresAt:number;configuration:string}>(this.key("api-proof",runId));
+    if(!proof||proof.configuration!==apiProofIdentity(draft,target)||proof.targetRevision!==target.revision||proof.expiresAt<this.now())throw new Error("409: Test API access before authenticated analysis");
+    this.apiConfig(target,draft.apiCredential!);
+  }
+  async operation<T>(kind:string,id:string,input:unknown,run:()=>Promise<T>):Promise<T>{
+    identifier(id,"operation id");const key=this.key("operation",kind+":"+id),fingerprint=await digest(input);
+    const prior=this.io.get<{fingerprint:string;status:string;result?:T}>(key);
+    if(prior){if(prior.fingerprint!==fingerprint)throw new Error("409: Operation identity reused with changed input");if(prior.status==="complete")return structuredClone(prior.result!);const active=this.running.get(key);if(active)return active as Promise<T>;throw new Error("409: Prior check/test did not finish; explicitly retry with a new operation ID");}
+    this.io.put(key,{fingerprint,status:"pending"});
+    const promise=run().then(result=>{this.io.put(key,{fingerprint,status:"complete",result});return result;},error=>{this.io.put(key,{fingerprint,status:"failed"});throw error;}).finally(()=>{this.running.delete(key);});
+    this.running.set(key,promise);return promise;
+  }
+  exportData(){
+    return {version:1,targets:this.targets(),credentials:this.credentials().filter(c=>!c.id.startsWith("bound-")&&(c.purpose==="model"||this.targets().some(t=>t.id===c.targetId))).map(c=>({...c,missing:true})),
+      defaults:this.io.list<{targetId:string;draft:SetupDraft}>(prefix+"defaults:"),audit:this.io.list(prefix+"audit:")};
+  }
+  importData(raw:ReturnType<OnboardingStore["exportData"]>,actor:string){
+    if(!raw||raw.version!==1||!Array.isArray(raw.targets)||!Array.isArray(raw.credentials))throw new Error("400: Invalid onboarding export");
+    if(this.targets().length||this.credentials().some(c=>!c.id.startsWith("bound-")))throw new Error("409: Import needs an empty target/credential library");
+    for(const target of raw.targets){
+      const imported=this.saveTarget(target,null,actor);
+      if(target.archived)this.lifecycleTarget(imported.id,imported.revision,"archive",actor);
+    }
+    for(const c of raw.credentials){
+      identifier(c.id);
+      if(!["api","model"].includes(c.purpose)||!Number.isSafeInteger(c.version)||c.version<1||c.version>10000)throw new Error("400: Invalid imported credential metadata");
+      if(c.purpose==="api"&&(!c.targetId||!raw.targets.some(t=>t.id===c.targetId)||!c.header||!c.scheme||!c.audienceURL||normalizeTargetURL(c.audienceURL)!==c.audienceURL||!validAuthHeader(c.header,c.scheme)))throw new Error("400: Invalid imported API credential audience");
+      this.io.put(this.key("credential",c.id),{id:c.id,purpose:c.purpose,label:String(c.label).slice(0,160),version:c.version,revoked:false,missing:true,
+        ...(c.targetId?{targetId:c.targetId,audienceURL:c.audienceURL,targetRevision:c.targetRevision,header:c.header,scheme:c.scheme}:{}),updatedAt:this.now(),updatedBy:actor});
+    }
+    for(const defaults of raw.defaults??[]){
+      if(!raw.targets.some(t=>t.id===defaults.targetId))throw new Error("400: Imported profile target is missing");
+      const clean=(choice:ModelChoice):ModelChoice=>{
+        if(!choice||!/^(opencode-go|opencode):[A-Za-z0-9][A-Za-z0-9._~/-]{0,180}$/.test(choice.model)||!Number.isSafeInteger(choice.credentialVersion))throw new Error("400: Invalid imported model choice");
+        return {model:choice.model,credentialId:identifier(choice.credentialId),credentialVersion:choice.credentialVersion};
+      };
+      const d=defaults.draft;
+      const draft:SetupDraft={revision:0,publicAPI:d.publicAPI===true,updatedBy:actor,
+        ...(d.profile?{profile:{default:clean(d.profile.default),overrides:Object.fromEntries(MODEL_ROLES.filter(role=>!!d.profile?.overrides[role]).map(role=>[role,clean(d.profile!.overrides[role]!)]))}}:{}),
+        ...(d.apiCredential?{apiCredential:{id:identifier(d.apiCredential.id),version:Number(d.apiCredential.version)}}:{}),
+        ...(d.endpoint?{endpoint:normalizeTargetURL(d.endpoint)}:{}),
+        ...(d.expectedStatus?{expectedStatus:Number(d.expectedStatus)}:{}),
+        ...(d.expectedText?{expectedText:String(d.expectedText).slice(0,500)}:{}),
+      };
+      this.io.put(this.key("defaults",defaults.targetId),{targetId:defaults.targetId,draft});
+    }
+    this.audit("metadata.import","installation",actor);return {imported:true,credentialsNeedReentry:true,sourcesNeedReattachment:raw.targets.some(t=>t.sources?.length)};
+  }
+}
+export function assertAudience(base:string,raw:string) {
+  const target=new URL(base),url=new URL(raw);const path=target.pathname.endsWith("/")?target.pathname:target.pathname+"/";
+  // Encoded separators and nested encodings can be decoded differently by an API
+  // server. Do not attach a credential to an ambiguous path.
+  if(url.origin!==target.origin||/%(?:25|2f|5c)/i.test(target.pathname+url.pathname)||!(url.pathname===target.pathname||url.pathname.startsWith(path))||url.username||url.password)throw new Error("403: API credentials cannot be sent outside the configured audience");
+}
+function validAuthHeader(header:string,scheme:string){
+  return /^[!#$%&'*+.^_\x60|~0-9A-Za-z-]{1,80}$/.test(header) &&
+    (scheme==="bearer"?header.toLowerCase()==="authorization":!operatorIdentityHeader(header)&&!["host","connection","content-length","transfer-encoding"].includes(header.toLowerCase()));
+}
+
+function apiProofIdentity(draft:SetupDraft,target:SavedTarget){return canonical({credential:draft.apiCredential,endpoint:draft.endpoint,status:draft.expectedStatus,text:draft.expectedText,target:{id:target.id,revision:target.revision,url:target.url}});}

@@ -1,0 +1,220 @@
+{
+  "tools": [
+    {
+      "name": "clef_audit",
+      "description": "Classify and score evidence from immutable same-run specialist commits with Cloudflare Clef. You control every question instruction and criterion. Clef returns typed probabilities; read the highest-risk original evidence before drawing conclusions.",
+      "category": "audit",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "enum": [
+              "clef-flash",
+              "clef"
+            ],
+            "description": "Use clef-flash for inexpensive bulk triage or clef for higher-precision review."
+          },
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "items": {
+              "type": "object",
+              "properties": {
+                "job_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+                },
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{40}$"
+                },
+                "paths": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 128,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  }
+                }
+              },
+              "required": [
+                "job_id",
+                "commit"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "questions": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 64,
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "noul"
+                    },
+                    "instructions": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4000
+                    },
+                    "criteria": {
+                      "type": "object",
+                      "properties": {
+                        "true": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "false": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "instructions"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "choice"
+                    },
+                    "instructions": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4000
+                    },
+                    "criteria": {
+                      "type": "object",
+                      "minProperties": 2,
+                      "maxProperties": 255,
+                      "additionalProperties": {
+                        "type": "string",
+                        "maxLength": 2000
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "instructions",
+                    "criteria"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "score"
+                    },
+                    "instructions": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4000
+                    },
+                    "criteria": {
+                      "type": "array",
+                      "minItems": 2,
+                      "maxItems": 10,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "instructions",
+                    "criteria"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "message": {
+            "type": "string",
+            "description": "Engagement-log entry explaining what evidence is being audited and why."
+          }
+        },
+        "required": [
+          "model",
+          "sources",
+          "questions",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "yield",
+      "description": "Commit this orchestrator checkpoint and stop immediately after dispatching a wave. Cloudflare waits for all specialists and starts a fresh primary with the results.",
+      "category": "result",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "plan"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revise_attempt",
+      "description": "Dispatch a fresh revision of a stopped same-run specialist with its pinned role, model, prompt and previous output commit. Returns immediately.",
+      "category": "delegate",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "job_id",
+          "instructions"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "roles": {
+    "primary": [
+      "clef_audit",
+      "yield",
+      "revise_attempt",
+      "file",
+      "terminal"
+    ]
+  }
+}

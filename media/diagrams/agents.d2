@@ -1,0 +1,19 @@
+...@_style
+direction: down
+coordinator: "Coordinator + native queue\nLive runs, admission and acceptance" {class: card}
+sessions: {
+  label: "Separate OpenCode sessions and workspaces"
+  class: group
+  grid-columns: 2
+  primary: "Primary\nPlan and coordinate" {class: card}
+  searcher: "Searcher\nResearch and discovery" {class: card}
+  pentester: "Pentester\nTest and capture evidence" {class: card}
+  reporter: "Reporter\nReview recorded work" {class: card}
+}
+git: "Artifacts Git\nAccepted work and captured evidence" {class: card}
+tools: "Shared tool capabilities\nOne Kali Container · Browser Run · Worker tools" {class: card}
+coordinator -> sessions: "admit and track"
+sessions -> git: "read accepted work / submit candidates"
+sessions -> tools: "role-dependent access"
+limits: "Example roles, not simultaneous scans.\nOne mutating attempt active; at most two waiting." {class: note}
+tools -> limits: {style.opacity: 0}

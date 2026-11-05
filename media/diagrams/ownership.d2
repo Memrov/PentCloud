@@ -1,0 +1,22 @@
+...@_style
+direction: down
+owner: "Owner or trusted team" {class: card}
+account: {
+  label: "Your Cloudflare account"
+  class: group
+  direction: down
+  access: "Cloudflare Access\nProtect operator entry" {class: card}
+  runtime: "Workers and Durable Objects\nCoordinator + agent sessions" {class: card}
+  storage: "Native storage and secret bindings\nArtifacts Git + session state" {class: card}
+  tools: "Kali Container + Browser Run\nCloud-side testing" {class: card}
+  access -> runtime
+  runtime -> storage
+  runtime -> tools
+}
+provider: "OpenCode + configured model providers\nSelected prompts and context leave the account" {class: card}
+target: "Authorized target\nReceives cloud-side test traffic" {class: card}
+owner -> account.access
+account.runtime -> provider
+account.tools -> target
+note: "Operators share installation data.\nNo anonymity, dedicated-egress or universal host-confinement guarantee." {class: note}
+target -> note: {style.opacity: 0}

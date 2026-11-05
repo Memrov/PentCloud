@@ -1,0 +1,51 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pentcloud-toolbox",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "head_sampling_rate": 0.1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    },
+    "issues": {
+      "enabled": true
+    }
+  },
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "KALI_TOOLBOX",
+        "class_name": "KaliToolbox"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "kali-on-demand-v1",
+      "new_sqlite_classes": [
+        "KaliToolbox"
+      ]
+    }
+  ],
+  "secrets": {
+    "required": [
+      "KALI_MCP_TOKEN"
+    ]
+  }
+}

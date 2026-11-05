@@ -1,0 +1,154 @@
+{
+  "optional": {
+    "assistant_agent": [
+      "browser",
+      "patch_flow_subtasks",
+      "stop_flow",
+      "submit_flow_input",
+      "wait_flow_completion",
+      "web_search"
+    ],
+    "assistant_direct": [
+      "browser",
+      "graphiti_search",
+      "patch_flow_subtasks",
+      "search_answer",
+      "search_code",
+      "search_guide",
+      "search_in_memory",
+      "stop_flow",
+      "submit_flow_input",
+      "wait_flow_completion",
+      "web_search"
+    ],
+    "coder": [
+      "browser",
+      "graphiti_search",
+      "search_code",
+      "store_code"
+    ],
+    "enricher": [
+      "browser",
+      "graphiti_search",
+      "search_in_memory"
+    ],
+    "generator": [
+      "browser"
+    ],
+    "maintenance": [
+      "browser",
+      "search_guide",
+      "store_guide"
+    ],
+    "memorist": [
+      "graphiti_search",
+      "search_in_memory"
+    ],
+    "pentester": [
+      "browser",
+      "graphiti_search",
+      "search_guide",
+      "store_guide",
+      "web_search"
+    ],
+    "primary": [
+      "ask"
+    ],
+    "refiner": [
+      "browser"
+    ],
+    "searcher": [
+      "browser",
+      "search_answer",
+      "store_answer",
+      "web_search"
+    ]
+  },
+  "roles": {
+    "adviser": [],
+    "assistant_agent": [
+      "advice",
+      "coder",
+      "file",
+      "get_flow_status",
+      "maintenance",
+      "memorist",
+      "pentester",
+      "search",
+      "terminal"
+    ],
+    "assistant_direct": [
+      "file",
+      "get_flow_status",
+      "terminal"
+    ],
+    "coder": [
+      "advice",
+      "code_result",
+      "file",
+      "maintenance",
+      "memorist",
+      "search",
+      "terminal"
+    ],
+    "enricher": [
+      "enricher_result",
+      "file",
+      "terminal"
+    ],
+    "generator": [
+      "file",
+      "memorist",
+      "search",
+      "subtask_list",
+      "terminal"
+    ],
+    "maintenance": [
+      "advice",
+      "file",
+      "maintenance_result",
+      "memorist",
+      "search",
+      "terminal"
+    ],
+    "memorist": [
+      "file",
+      "memorist_result",
+      "terminal"
+    ],
+    "pentester": [
+      "advice",
+      "coder",
+      "file",
+      "hack_result",
+      "maintenance",
+      "memorist",
+      "search",
+      "terminal"
+    ],
+    "primary": [
+      "advice",
+      "coder",
+      "done",
+      "maintenance",
+      "memorist",
+      "pentester",
+      "search"
+    ],
+    "refiner": [
+      "file",
+      "memorist",
+      "search",
+      "subtask_patch",
+      "terminal"
+    ],
+    "reflector": [],
+    "reporter": [
+      "report_result"
+    ],
+    "searcher": [
+      "memorist",
+      "search_result"
+    ]
+  }
+}

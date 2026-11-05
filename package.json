@@ -1,0 +1,44 @@
+{
+  "name": "pentagi-artifacts",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "infra/aws-toolbox/control"
+  ],
+  "scripts": {
+    "build:prompts": "bash scripts/build-prompt-renderer.sh",
+    "test": "npm run test:unit && npm run test:workers",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "verify": "bash scripts/native-cloudflare-verify.sh",
+    "test:unit": "npm exec --workspace @pentagi-artifacts/control-plane -- vitest run",
+    "test:workers": "bash scripts/test-native-worker-runtime.sh",
+    "test:watch": "npm exec --workspace @pentagi-artifacts/control-plane -- vitest watch",
+    "test:workers:watch": "npm exec --workspace @pentagi-artifacts/control-plane -- vitest watch --config vitest.runtime.config.ts",
+    "test:browser": "PENTCLOUD_MATERIALS_BROWSER=1 npm exec --workspace @pentagi-artifacts/control-plane -- vitest run test/materials-browser.test.ts",
+    "qa:ui": "node scripts/browser-run-qa.mjs",
+    "qa:ui:interactive": "node scripts/browser-run-interactive-qa.mjs",
+    "test:gateway": "npm test --workspace @pentagi-artifacts/aws-toolbox-control",
+    "test:integration": "node apps/control-plane/test/native-coordinator-probe/run.mjs && node scripts/test-native-materials.mjs && node scripts/test-native-evidence.mjs && node scripts/test-native-attempt-runtime.mjs && node scripts/test-native-question-recovery.mjs",
+    "check": "bash scripts/native-cloudflare-verify.sh --check",
+    "verify:gateway": "bash scripts/native-cloudflare-verify.sh --worker gateway",
+    "verify:full": "bash scripts/native-cloudflare-verify.sh --full --worker all",
+    "pentcloud": "node scripts/pentcloud.mjs",
+    "test:installer": "node --test scripts/test-private-install.mjs scripts/test-native-auth.mjs"
+  },
+  "engines": {
+    "node": ">=26.12.1"
+  },
+  "overrides": {
+    "wrangler": "4.157.0",
+    "undici@>=7 <8": "7.30.1",
+    "sharp@<0.35.5": "0.35.5",
+    "katex@<0.18.2": "0.18.2",
+    "glob@>=9 <14.0.2": "14.0.2",
+    "minimatch@>=7 <11.0.1": "11.0.1",
+    "zod@<4.6.6": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/playwright": "1.3.6"
+  }
+}
