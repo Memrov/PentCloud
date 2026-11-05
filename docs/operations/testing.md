@@ -42,6 +42,12 @@ Remote QA uses Cloudflare resources and can incur normal platform usage.
 
 ## Native Builds
 
+GitHub Actions runs the full local gate and isolated browser fixtures on pull
+requests and `main`, without Cloudflare or model credentials. Dependency review
+checks new dependencies, and Dependabot proposes updates for review. Keep
+production deployment in Cloudflare's native Git integration; do not give public
+pull requests deployment authorization or enable production branch previews.
+
 Configure one source per Worker in your own account. Native Builds installs from
 the root lockfile before the build command; local verification scripts do not
 reinstall packages. Enable Cloudflare's
@@ -49,6 +55,22 @@ reinstall packages. Enable Cloudflare's
 for package downloads. A cache is not a stored test result. Use the generated
 installation configs and private deployment authorization; public pull requests
 must not receive production credentials.
+
+To deploy an existing installation from shared source, save its generated
+Wrangler JSON as `PENTCLOUD_DEPLOY_CONFIG`, a **secret build variable** on that
+Worker's Cloudflare Builds connection. Run
+`node scripts/configure-cloudflare-build.mjs app` (or `gateway`) before compiling.
+The helper applies installation metadata inside the ephemeral build checkout,
+checks the Worker identity and preserves the source's migrations and binding
+contracts. Installer entrypoint and asset paths are rebased to the build checkout;
+both shipped migration histories are accepted without rewriting migration tags.
+Required secret names are declared for generated types; their values stay bound.
+Keep actual API keys in bound Worker secrets; the JSON must contain
+configuration metadata only. Never upload the generated config or deployment
+logs as public CI artifacts. Use the existing app deploy helper to preserve the
+prebuilt module catalog and source maps. Protect `main` with passing GitHub
+checks; Cloudflare's push-triggered build does not wait for GitHub environment
+approvals.
 
 ## Prompt sources
 
