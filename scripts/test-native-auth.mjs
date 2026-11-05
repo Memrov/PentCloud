@@ -26,11 +26,11 @@ test('missing permission fails before creating a lease', async()=>{
 });
 test('optional email authorization limits zone permissions to the selected zone',async()=>{
  const calls=[],zoneId='b'.repeat(32),accountId='a'.repeat(32);
- const accountNames=['Account Settings Read','Workers Scripts Write','Workers Containers Write','Artifacts Write','Access: Apps and Policies Write','Access: Organizations, Identity Providers, and Groups Read','Secrets Store Read'];
+ const accountNames=['Account Settings Read','Workers Scripts Write','Workers Containers Write','Artifacts Write','Access: Apps and Policies Write','Access: Organizations, Identity Providers, and Groups Read','Secrets Store Read','Email Routing Account Rules Read'];
  const zoneNames=['Zone Read','DNS Read','Zone Settings Write','Email Routing Rules Write'];
  const run=async(_kind,args)=>{calls.push(args);if(args.includes('permission-groups'))return Buffer.from(JSON.stringify([...accountNames.map(name=>({id:name,name,scopes:['com.cloudflare.api.account']})),...zoneNames.map(name=>({id:name,name,scopes:['com.cloudflare.api.account.zone']}))]));if(args.includes('create'))return Buffer.from(JSON.stringify({id:'lease',value:'fixture-lease'}));return Buffer.from('{}');};
  const auth=await accountAuthorization({accountId,run,environment:{},additionalPermissions:['Secrets Store Read'],zoneId});
- const body=JSON.parse(calls.find(a=>a.includes('create')).at(-1));assert.equal(body.policies.length,2);assert.deepEqual(body.policies[1].resources,{['com.cloudflare.api.account.zone.'+zoneId]:'*'});assert.equal(body.policies[1].permission_groups.length,4);await auth.close();
+ const body=JSON.parse(calls.find(a=>a.includes('create')).at(-1));assert(body.policies[0].permission_groups.some(g=>g.id==='Email Routing Account Rules Read'),'Native Wrangler planning requires its account read permission');assert.equal(body.policies.length,2);assert.deepEqual(body.policies[1].resources,{['com.cloudflare.api.account.zone.'+zoneId]:'*'});assert.equal(body.policies[1].permission_groups.length,4);await auth.close();
 });
 test('Access session uses official client with private output and no credential file',async()=>{
   const calls=[]; const run=async(kind,args)=>{calls.push([kind,args]);return Buffer.from(args.includes('token')?'fixture-session':'');};

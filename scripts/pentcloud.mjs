@@ -64,7 +64,7 @@ try {
       const directory = resolve(options['--state']);
       assert(directory !== dirname(directory) && directory !== root && !directory.startsWith(root + '/') && !root.startsWith(directory + '/'), 'State must be outside the source checkout and its ancestors');
       const prior=await readJson(join(directory,'manifest.json'),null);
-      const authorization=await accountAuthorization({accountId:config.accountId,run,legacy:Boolean(prior?.resources?.store||prior?.resources?.serviceToken),additionalPermissions:config.email?.agentmail?['Secrets Store Read']:[],zoneId:config.email?.cloudflare?.zoneId});
+      const authorization=await accountAuthorization({accountId:config.accountId,run,legacy:Boolean(prior?.resources?.store||prior?.resources?.serviceToken),additionalPermissions:config.email?.agentmail?['Secrets Store Write']:[],zoneId:config.email?.cloudflare?.zoneId});
       const deploymentRun=(kind,args,settings={})=>run(kind,args,{...settings,env:settings.env??{...process.env,CLOUDFLARE_API_TOKEN:authorization.token}});
       try {
       const installer = new Installer({ config, stateDirectory: directory, root, api: new CloudflareApi(authorization.token,fetch,{zoneIds:config.email?.cloudflare?[config.email.cloudflare.zoneId]:[]}), run:deploymentRun, importImage: importStockImage,

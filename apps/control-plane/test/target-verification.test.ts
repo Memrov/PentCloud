@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {targetCode,verificationAddress} from '../src/native/target-verification';
+import {targetCode,verificationAddress,verificationChallenge} from '../src/native/target-verification';
 import {validateTargetAccess} from '../../../shared/target-access';
 const seed='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
 it('generates the RFC6238 code locally without sending the seed to a provider',async()=>{
@@ -20,4 +20,8 @@ it('uses a stable target-specific plus address and rejects unrelated mailbox syn
  expect(await verificationAddress('codes@auth.example','abc')).toBe('codes+ba7816bf8f01cfea414140de@auth.example');
  await expect(verificationAddress('codes+old@auth.example','abc')).rejects.toThrow(/address/i);
  await expect(verificationAddress('codes@localhost','abc')).rejects.toThrow(/address/i);
+});
+it('lets the agent read the code and only same-target verification links, without returning a mailbox body',()=>{
+ const reply=verificationChallenge({url:'https://owned.example/'},{code:'384217',links:['https://owned.example/verify?token=test','https://other.example/verify','http://owned.example/verify']});
+ expect(reply).toEqual({code:'384217',links:['https://owned.example/verify?token=test']});expect(reply).not.toHaveProperty('body');
 });

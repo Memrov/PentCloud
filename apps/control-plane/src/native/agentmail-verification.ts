@@ -24,11 +24,11 @@ export async function readAgentMail(env:Env,window:Window,options:{fetcher?:type
  const now=options.now??Date.now;if(window.expiresAt<=now())return [];
  const inbox=agentMailAddress(env);if(!inbox)throw Error('409: Configure the AgentMail inbox and AGENTMAIL_API_KEY binding in Cloudflare');
  if(window.account&&!email.test(window.account))throw Error('409: AgentMail needs an email address in the target username secret; use Cloudflare receiving for other usernames');
- try{
+ let stage='Cloudflare secret binding';try{
   const binding=env.AGENTMAIL_API_KEY!,key=typeof binding==='string'?binding:await binding.get();if(!key||key.length>8192||/[\r\n\0]/.test(key))throw Error('key');
   const prefix='https://api.agentmail.to/v0/inboxes/'+encodeURIComponent(inbox)+'/messages';
   const deadline=AbortSignal.timeout(Math.max(1,Math.min(8000,window.expiresAt-now())));
-  const get=async(url:string)=>boundedJSON(await (options.fetcher??fetch)(url,{method:'GET',headers:{Authorization:'Bearer '+key},redirect:'error',signal:deadline}));
+  const get=async(url:string)=>{stage='network';const response=await (options.fetcher??fetch)(url,{method:'GET',headers:{Authorization:'Bearer '+key},redirect:'manual',signal:deadline});stage=response.ok?'response format':'API HTTP '+response.status;return boundedJSON(response);};
   const query=new URLSearchParams({limit:'20',labels:'received',after:new Date(window.createdAt-1000).toISOString()});
   const list=await get(prefix+'?'+query);if(!Array.isArray(list.messages)||list.messages.length>20)throw Error('shape');
   const delivered:VerificationDelivery[]=[];
@@ -46,5 +46,5 @@ export async function readAgentMail(env:Env,window:Window,options:{fetcher?:type
    delivered.push({id:m.message_id,provider:'agentmail',to:inbox,from,sentAt,...(window.account?{account:window.account}:{}),...content});
   }
   return delivered;
- }catch{throw Error('503: AgentMail message access unavailable; check the inbox binding and message-read permission, then retry');}
+ }catch{throw Error('503: AgentMail '+stage+' unavailable; check the inbox binding and message-read permission, then retry');}
 }

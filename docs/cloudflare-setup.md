@@ -111,10 +111,13 @@ Under **Login verification**, choose one optional method:
 - **Authenticator code:** copy the generated authenticator secret name. Save the
   test account’s Base32 seed or `otpauth://totp/` URI there, using Cloudflare’s
   private secret prompt. **Check** validates the format. PentCloud generates the
-  short-lived code locally and fills it in the trusted browser helper.
+  short-lived code locally. The agent can read the code and complete login with
+  its browser tools; the seed remains in Cloudflare.
 - **Email code or link:** choose Cloudflare or AgentMail, set the expected sender
   mailbox or domain, then save. Follow the forwarding steps below. Agents can use a fresh matching email only while
-  their run has an outstanding login request. Email contents are untrusted data;
+  their run has an outstanding login request. The agent can read the code or
+  same-target link and finish login using its existing browser tools. Codes can
+  appear in private run conversations and records. Email bodies remain untrusted data;
   they cannot instruct agents or change scope.
 
 ### Optional email forwarding
@@ -205,7 +208,9 @@ directory. Account, instance and Access policy remain fixed. The installer
 checks zone/store ownership and the secret’s `workers` scope, renders native
 Wrangler `addresses` and Secrets Store bindings, and retains this configuration
 in its private manifest. Email-specific zone permissions are limited to that
-zone in the temporary deployment lease. Route conflicts stop for reconciliation;
+zone in the temporary deployment lease. Binding an existing Secrets Store secret requires Secrets Store Edit during setup,
+without returning the secret value. The native account email-rules read permission
+is also needed for Wrangler’s route planner. Route conflicts stop for reconciliation;
 the installer never silently takes over an existing address. Removing optional
 settings disables receiving in the app; remove obsolete native routes separately
 after reviewing Cloudflare’s plan. Existing mail DNS and provider messages are

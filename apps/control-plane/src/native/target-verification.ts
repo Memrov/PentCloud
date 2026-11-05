@@ -29,3 +29,9 @@ export async function verificationAddress(base:string,targetId:string){
  const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(targetId));
  return local+'+'+[...new Uint8Array(hash)].slice(0,12).map(b=>b.toString(16).padStart(2,'0')).join('')+'@'+domain;
 }
+import {assertTargetRequest,type ScopedTarget} from '../../../../shared/target-access';
+/** Short-lived codes may be shown to the current agent. Mail bodies and seeds are excluded. */
+export function verificationChallenge(target:ScopedTarget,message:{code?:string;links:string[]}){
+ const links=message.links.filter(url=>{try{assertTargetRequest(target,url);return new URL(url).protocol==='https:'&&new URL(url).origin===new URL(target.url).origin;}catch{return false;}});
+ return {...(message.code?{code:message.code}:{}),links};
+}

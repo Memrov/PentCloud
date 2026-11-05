@@ -23,7 +23,7 @@ export async function accountAuthorization({accountId, run, environment=process.
     assert.equal(matches.length,1,`Cloudflare account permission unavailable or ambiguous: ${name}`);
     return {id:matches[0].id};
   };
-  const ids=[...new Set([...permissionNames,...additionalPermissions,...(legacy?['Secrets Store Write','Access: Service Tokens Write']:[])])].map(name=>select(name,'com.cloudflare.api.account'));
+  const ids=[...new Set([...permissionNames,...additionalPermissions,...(zoneId?['Email Routing Account Rules Read']:[]),...(legacy?['Secrets Store Write','Access: Service Tokens Write']:[])])].map(name=>select(name,'com.cloudflare.api.account'));
   const zonePolicies=[];
   if(zoneId){assert.match(zoneId,/^[a-f0-9]{32}$/,'Select an explicit email zone');zonePolicies.push({effect:'allow',permission_groups:['Zone Read','DNS Read','Zone Settings Write','Email Routing Rules Write'].map(name=>select(name,'com.cloudflare.api.account.zone')),resources:{['com.cloudflare.api.account.zone.'+zoneId]:'*'}});}
   assert.match(purpose,/^[a-z][a-z -]{0,40}$/,'Use a nonsecret credential purpose');

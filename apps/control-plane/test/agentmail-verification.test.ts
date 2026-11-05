@@ -10,7 +10,7 @@ it('uses only the fixed provider origin and authorization header, retaining narr
  const [result]=await readAgentMail(env,scope,{fetcher:fetcher as typeof fetch,now:()=>now});
  expect(result).toMatchObject({id:'one',provider:'agentmail',account,to:inbox,from:'login@owned.example',code:'384217'});
  expect(result).not.toHaveProperty('text');expect(result).not.toHaveProperty('headers');
- for(const [url,options] of fetcher.mock.calls as unknown as [string,RequestInit][]){expect(String(url)).toMatch(/^https:\/\/api\.agentmail\.to\/v0\/inboxes\//);expect(String(url)).not.toContain('fixture-provider-key');expect(options.redirect).toBe('error');expect(new Headers(options.headers).get('Authorization')).toBe('Bearer fixture-provider-key');expect(options.method).toBe('GET');}
+ for(const [url,options] of fetcher.mock.calls as unknown as [string,RequestInit][]){expect(String(url)).toMatch(/^https:\/\/api\.agentmail\.to\/v0\/inboxes\//);expect(String(url)).not.toContain('fixture-provider-key');expect(options.redirect).toBe('manual');expect(new Headers(options.headers).get('Authorization')).toBe('Bearer fixture-provider-key');expect(options.method).toBe('GET');}
 });
 it('rejects wrong accounts, sender authentication, stale mail and ambiguous codes',async()=>{
  for(const patch of [{headers:{To:'other@wearehackerone.com'}},{authentication_results:{dmarc:'fail',dmarc_domain:'owned.example'}},{authentication_results:{dmarc:'pass',dmarc_domain:'attacker.example'}},{from:'attacker@elsewhere.example'},{timestamp:new Date(now-5000).toISOString()},{created_at:new Date(now-5000).toISOString()},{text:'code 384217 or code 948235'},{labels:['received','spam']},{size:300000},{inbox_id:'other@agentmail.to'}]){
@@ -30,4 +30,8 @@ it('bounds API responses and redacts provider errors, including redirects and pe
 it('does not query an expired challenge or accept non-email account identifiers',async()=>{
  const fetcher=client();expect(await readAgentMail(env,{...scope,expiresAt:now},{fetcher:fetcher as typeof fetch,now:()=>now})).toEqual([]);expect(fetcher).not.toHaveBeenCalled();
  await expect(readAgentMail(env,{...scope,account:'username'},{fetcher:fetcher as typeof fetch,now:()=>now})).rejects.toThrow(/email address/);
+});
+it('distinguishes secret-binding failures from HTTP failures without forwarding provider bodies',async()=>{
+ await expect(readAgentMail(env,scope,{fetcher:async()=>new Response('fixture-provider-key',{status:403}),now:()=>now})).rejects.toThrow(/API HTTP 403/);
+ await expect(readAgentMail({...env,AGENTMAIL_API_KEY:{get:async()=>{throw Error('fixture-provider-key');}}},scope,{now:()=>now})).rejects.toThrow(/Cloudflare secret binding/);
 });
