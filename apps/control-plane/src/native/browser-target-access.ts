@@ -15,7 +15,7 @@ export function validateBrowserState(target:ScopedTarget,raw:unknown):BrowserAut
 export function assertBrowserCommand(target:ScopedTarget,method:string,params:Record<string,unknown>={}){
  const targetMethods=new Set(["Target.getTargets","Target.getTargetInfo","Target.createTarget","Target.closeTarget","Target.activateTarget","Target.attachToTarget","Target.detachFromTarget"]);
  if(!(method.startsWith("Input.")||method.startsWith("Emulation.")||method.startsWith("Page.")||method.startsWith("DOM.")||method.startsWith("DOMSnapshot.")||method.startsWith("Accessibility.")||method.startsWith("Runtime.")||method.startsWith("Network.")||targetMethods.has(method)||method==="Browser.getVersion")||
-  ["Network.loadNetworkResource","Network.setExtraHTTPHeaders","Page.setBypassCSP","Page.removeScriptToEvaluateOnNewDocument"].includes(method))throw new Error("403: This CDP operation is unavailable for managed targets");
+  ["Network.loadNetworkResource","Network.setExtraHTTPHeaders","Network.setRequestInterception","Network.continueInterceptedRequest","Page.setBypassCSP","Page.removeScriptToEvaluateOnNewDocument"].includes(method))throw new Error("403: This CDP operation is unavailable for managed targets");
  if((method==="Page.navigate"||method==="Target.createTarget")&&params.url!=="about:blank")assertTargetRequest(target,String(params.url));
  if(method==="Page.navigate"&&params.url==="about:blank")return;
 }

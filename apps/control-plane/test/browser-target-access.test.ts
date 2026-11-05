@@ -11,7 +11,7 @@ it("keeps only this target's authenticated state and rejects unrelated origins",
  expect(()=>validateBrowserState(target,{cookies:[],origins:[{origin:"https://attacker.test",localStorage:[]}]})).toThrow();
 });
 it("prevents browser scripts from replacing the trusted network layer or opening another context",()=>{
- for(const method of ["Fetch.disable","Target.createBrowserContext","Target.sendMessageToTarget","ServiceWorker.enable","Network.loadNetworkResource","Browser.close"])
+ for(const method of ["Fetch.disable","Target.createBrowserContext","Target.sendMessageToTarget","ServiceWorker.enable","Network.loadNetworkResource","Network.setRequestInterception","Network.continueInterceptedRequest","Browser.close"])
   expect(()=>assertBrowserCommand(target,method,{})).toThrow(/managed/i);
  expect(()=>assertBrowserCommand(target,"Page.navigate",{url:"https://outside.test/"})).toThrow();
  expect(()=>assertBrowserCommand(target,"Page.navigate",{url:"https://example.com/login"})).not.toThrow();

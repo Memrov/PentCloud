@@ -91,7 +91,7 @@ export async function reviewTargetAccess(env,input){
     const targets=(await guarded.send('Target.getTargets')).targetInfos;check(targets.length&&targets.every(t=>t.browserContextId===contextId),'SDK exposed another browser context');
     const pageSession=await guarded.attachToTarget(targets.find(t=>t.type==='page').targetId);
     await guarded.send('Input.insertText',{text:'fixture'},{sessionId:pageSession});
-    let denied=0;for(const [method,params,options] of [['Fetch.disable',{},{}],['Target.detachFromTarget',{sessionId:'not-owned'},{}],['Page.navigate',{url:'https://outside.example/'},{sessionId:pageSession}]])try{await guarded.send(method,params,options);}catch{denied++;}check(denied===3,'SDK policy operations were permitted');
+    let denied=0;for(const [method,params,options] of [['Fetch.disable',{},{}],['Network.setRequestInterception',{patterns:[]},{}],['Network.continueInterceptedRequest',{interceptionId:'unowned'},{}],['Target.detachFromTarget',{sessionId:'not-owned'},{}],['Page.navigate',{url:'https://outside.example/'},{sessionId:pageSession}]])try{await guarded.send(method,params,options);}catch{denied++;}check(denied===5,'SDK policy operations were permitted');
     await loginPage.goto(targetOrigin+'/login');
     await fillLogin(saved,loginPage,{pageURL:loginPage.url(),usernameSelector:'#username',passwordSelector:'#password'},async name=>name.endsWith('USERNAME')?user:secret);
     check(await loginPage.locator('#username').inputValue()===user&&await loginPage.locator('#password').inputValue()===secret,'Native credential fill failed');
