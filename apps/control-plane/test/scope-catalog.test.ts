@@ -20,7 +20,10 @@ async function fixture(corrupt=false){
 it("pins index and selected scope reads to the same catalog commit and imports only the chosen program",async()=>{
  const {catalog,requests}=await fixture();expect((await catalog.search("exam","hackerone")).programs).toHaveLength(1);
  const scope=await catalog.import("hackerone:example","https://example.com/");expect(scope.catalogCommit).toBe(sha);
- expect(requests.filter(url=>url.includes("raw.githubusercontent.com")).every(url=>url.includes("/"+sha+"/"))).toBe(true);
+ expect(requests).toEqual([
+  "https://api.github.com/repos/Memrov/PentCloud-scopes/git/ref/heads/catalog",
+  ...["manifest.json","index.json",path].map(file=>"https://raw.githubusercontent.com/Memrov/PentCloud-scopes/"+sha+"/"+file),
+ ]);
  expect(requests.filter(url=>url.includes("/programs/"))).toHaveLength(1);
 });
 it("rejects a selected program whose downloaded bytes do not match the manifest",async()=>{
@@ -28,7 +31,7 @@ it("rejects a selected program whose downloaded bytes do not match the manifest"
 });
 it("never accepts arbitrary program paths or URLs as an import destination",async()=>{
  const {catalog,requests}=await fixture();await expect(catalog.import("https://attacker.test/program.json","https://example.com/")).rejects.toThrow(/program/i);
- expect(requests.some(url=>url.includes("attacker.test"))).toBe(false);
+ expect(requests.some(url=>new URL(url).hostname==="attacker.test")).toBe(false);
 });
 it("offers only eligible web assets from the selected program for target setup",async()=>{
  const {catalog}=await fixture();const result=await catalog.preview("hackerone:example");expect(result.assets).toEqual([{value:"example.com",type:"URL"}]);expect(result.program.name).toBe("Example");
