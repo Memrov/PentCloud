@@ -132,10 +132,12 @@ do not provide access to these emails. The program’s current rules take priori
 **do not replace existing MX records**. Use a dedicated mail subdomain if your
 main domain already receives email elsewhere.
 
-1. In Cloudflare Email Routing, configure an unused receiving address such as
-   `verification@auth.example.com` on your routing domain. Route that **literal
-   address** to the app Worker’s native email handler, and enable subaddressing
-   (plus addressing). No catch-all or external inbox service is needed.
+1. Choose an unused receiving address such as `verification@auth.example.com`.
+   If using a subdomain, enable it once in Cloudflare Email Routing **Settings →
+   Subdomains**. The installer can onboard an unused apex through the native DNS
+   API; it refuses existing foreign MX/SPF records and does not guess subdomain
+   onboarding. It enables plus addressing and lets Wrangler create the literal
+   route. No catch-all is used.
 2. Configure the optional receiver in your private installer configuration as
    described below. The installer preserves the address across upgrades.
 3. In Targets, select email verification, enter the expected sender and save.
@@ -176,6 +178,38 @@ setup process; PentCloud does not add a phone or identity provider.
 Cloudflare’s [Email Worker handler](https://developers.cloudflare.com/email-service/api/route-emails/email-handler/)
 and [subaddressing instructions](https://developers.cloudflare.com/email-service/configuration/email-routing-addresses/)
 describe the native routing configuration.
+
+### Retain optional email setup across upgrades
+
+Add either or both receiver references to your private installer JSON. These
+values are resource names, not credentials; enter the AgentMail key through
+Cloudflare’s secret prompt before installation. Replace the example IDs with
+the store and zone owned by your selected account:
+
+```json
+"email": {
+  "cloudflare": {
+    "zoneId": "YOUR_ZONE_ID",
+    "address": "verification@auth.example.com"
+  },
+  "agentmail": {
+    "inbox": "YOUR_INBOX@agentmail.to",
+    "storeId": "YOUR_SECRETS_STORE_ID",
+    "secretName": "your-agentmail-api-key"
+  }
+}
+```
+
+Run the normal `plan`, then `upgrade --apply` using the same private state
+directory. Account, instance and Access policy remain fixed. The installer
+checks zone/store ownership and the secret’s `workers` scope, renders native
+Wrangler `addresses` and Secrets Store bindings, and retains this configuration
+in its private manifest. Email-specific zone permissions are limited to that
+zone in the temporary deployment lease. Route conflicts stop for reconciliation;
+the installer never silently takes over an existing address. Removing optional
+settings disables receiving in the app; remove obsolete native routes separately
+after reviewing Cloudflare’s plan. Existing mail DNS and provider messages are
+preserved.
 
 ## Confirm setup
 

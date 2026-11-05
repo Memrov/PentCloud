@@ -1,6 +1,7 @@
 // Installation control plane; every operation uses explicitly selected configuration.
 import assert from 'node:assert/strict';
 import { accessSession, appRequest } from './native-auth.mjs';
+import {emailConfiguration,emailBindings,configureEmail} from './private-email.mjs';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, lstat, writeFile, rename, chmod, open, rm, realpath } from 'node:fs/promises';
 import { join, resolve, relative, dirname, basename, isAbsolute, sep } from 'node:path';
@@ -10,15 +11,16 @@ export const STOCK_SOURCE = `docker.io/vxcontrol/kali-linux@${STOCK_DIGEST}`;
 export const hash = (value) => createHash('sha256').update(value).digest('hex');
 export function configuration(value) {
   assert(value && typeof value === 'object' && !Array.isArray(value), 'Configuration must be an object');
-  const allowed = ['schemaVersion', 'accountId', 'instance', 'accessTeamDomain', 'allowedEmails'];
+  const allowed = ['schemaVersion', 'accountId', 'instance', 'accessTeamDomain', 'allowedEmails','email'];
   assert(Object.keys(value).every((key) => allowed.includes(key)), 'Unknown configuration key; credentials and resource overrides are not supported');
   assert.equal(value.schemaVersion, 1, 'Unsupported configuration schema');
   assert.match(value.accountId ?? '', /^[a-f0-9]{32}$/, 'Select an explicit Cloudflare accountId');
   assert.match(value.instance ?? '', /^[a-z][a-z0-9-]{2,37}$/, 'instance must be 3–38 lowercase letters, digits or hyphens');
   assert.match(value.accessTeamDomain ?? '', /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/, 'Use the existing account Zero Trust team HTTPS domain');
   assert(Array.isArray(value.allowedEmails) && value.allowedEmails.length > 0 && value.allowedEmails.every((email) => typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)), 'Explicit allowedEmails are required');
+  const email=emailConfiguration(value.email);
   return { schemaVersion: 1, accountId: value.accountId, instance: value.instance,
-    accessTeamDomain: value.accessTeamDomain, allowedEmails: [...new Set(value.allowedEmails)].sort() };
+    accessTeamDomain: value.accessTeamDomain, allowedEmails: [...new Set(value.allowedEmails)].sort(),...(email?{email}:{}) };
 }
 export function names(config) {
   const prefix = config.instance;
@@ -35,6 +37,7 @@ export function plan(config) {
       'Create an Access application with only the configured email allow policy',
       'Build and deploy private ToolboxGateway before the app; preserve DO migration tags',
       'Set own model key; enable app only after authentication is configured',
+      ...(config.email?['Validate optional email references; onboard only unused apex mail DNS and let Wrangler manage the literal receiver route']:[]),
       'Read back bindings and verify unauthenticated rejection and authenticated API access'] };
 }
 export async function readJson(file, fallback) {
@@ -62,16 +65,16 @@ export async function withStateLock(directory, callback) {
   finally { await lock.close(); await rm(lockPath); }
 }
 export class CloudflareApi {
-  constructor(token, fetcher = fetch) {
+  constructor(token, fetcher = fetch,{zoneIds=[]}={}) {
     assert(token, 'Set CLOUDFLARE_API_TOKEN with permissions for the selected account');
-    this.token = token; this.fetcher = fetcher;
+    this.token = token; this.fetcher = fetcher;this.zoneIds=zoneIds;
   }
   async request(path, { method = 'GET', body, missing = false, envelope = false } = {}) {
-    assert(path.startsWith('/accounts/'), 'Only account-scoped Cloudflare endpoints are supported');
+    assert(path.startsWith('/accounts/')||this.zoneIds.some(id=>path==='/zones/'+id||path.startsWith('/zones/'+id+'/')), 'Only account-scoped and explicitly selected zone endpoints are supported');
     let response;
     try { response = await this.fetcher(`https://api.cloudflare.com/client/v4${path}`, {
       method, headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(90_000),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),redirect:'error', signal: AbortSignal.timeout(90_000),
     }); } catch { throw new Error(`Cloudflare ${method} request failed; reconcile state before retrying a mutation`); }
     if (response.status === 404 && missing) return null;
     let data;
@@ -104,13 +107,15 @@ export class Installer {
     this.session = session ?? (()=>accessSession(this.state.appUrl,this.run));
     this.names = names(this.config); this.base = `/accounts/${this.config.accountId}`;
   }
-  async load({ create = false } = {}) {
+  async load({ create = false,updateEmail=false } = {}) {
     const existing = await readJson(join(this.directory, 'manifest.json'), null);
     if (existing) {
       assert.equal(existing.schemaVersion, 1, 'Unsupported ownership manifest');
-      assert.deepEqual(existing.config, this.config, 'Configuration changed; ownership manifest cannot adopt a different account, instance or auth policy');
+      const {email:_old,...oldIdentity}=existing.config,{email:_next,...nextIdentity}=this.config;
+      assert.deepEqual(updateEmail?oldIdentity:existing.config,updateEmail?nextIdentity:this.config, 'Configuration changed; ownership manifest cannot adopt a different account, instance or auth policy');
       assert.deepEqual(existing.names, this.names, 'Ownership manifest names changed');
       this.state = existing;
+      if(updateEmail){this.state.config=this.config;await this.save();}
     } else {
       assert(create, 'No installation manifest exists in --state');
       this.state = { schemaVersion: 1, installationId: randomUUID(), config: this.config, names: this.names, resources: {}, steps: {}, createdAt: new Date().toISOString() };
@@ -146,6 +151,7 @@ export class Installer {
     assert.equal(`https://${organization.auth_domain}`, this.config.accessTeamDomain, 'Access team does not belong to selected account');
     const providers = await this.api.list(`${this.base}/access/identity_providers`);
     assert(providers.length > 0, 'Configure a Zero Trust identity provider or one-time PIN before installation');
+    await configureEmail(this.api,this.config,this.names.app);
     this.state.appUrl = `https://${this.names.app}.${domain.subdomain}.workers.dev`;
     const scripts = await this.api.list(`${this.base}/workers/scripts`);
     for (const key of ['app', 'gateway']) {
@@ -183,6 +189,7 @@ export class Installer {
       triggers: { events: [{ type: 'cf.artifacts.repo.pushed', filter: { namespace: this.names.namespace }, targets: [{ type: 'workflow', workflow_name: this.names.workflow }] }] },
       vars: { CONTROL_BASE_URL: this.state.appUrl, ACCESS_TEAM_DOMAIN: this.config.accessTeamDomain, ACCESS_AUD: this.state.resources.access.aud, ARTIFACTS_NAMESPACE: this.names.namespace },
     });
+    const mail=emailBindings(this.config.email);Object.assign(app,mail,{vars:{...app.vars,...mail.vars}});
     Object.assign(gateway, common, { name: this.names.gateway, main: join(this.root, 'infra/aws-toolbox/control/src/worker.ts'),
       containers: [{ name: this.names.container, class_name: 'KaliToolbox', scheduling_policy: 'durable_object', images: { stock: { image: this.state.image.image } } }] });
     // Worker secrets are provisioned before the public route is enabled. They
@@ -255,7 +262,7 @@ export class Installer {
     if (claims.serviceToken?.status !== 'deleted' && claims.serviceToken) await reconcile('serviceToken', (await this.api.list(`${this.base}/access/service_tokens`)).find((item) => item.name === this.names.serviceToken));
   }
   async install({ upgrade = false } = {}) {
-    await this.load({ create: !upgrade });
+    await this.load({ create: !upgrade,updateEmail:upgrade });
     assert(!this.state.removed, 'This installation has been removed; choose a fresh state directory and instance');
     await this.preflight();
     await this.owned('namespace', async () => {
@@ -387,12 +394,16 @@ export class Installer {
   }
   async doctor({allowLegacy=false}={}) {
     if (!this.state) await this.load();
+    await configureEmail(this.api,this.config,this.names.app,{apply:false});
     const checks = [];
     for (const key of ['gateway', 'app']) {
       const settings = await this.api.request(`${this.base}/workers/scripts/${this.names[key]}/settings`);
       const bindings = settings.bindings ?? [];
       assert(!bindings.some(item=>['CONTROL_AUTH','CONTROL_TOKEN'].includes(item.name)),`${key} retains a legacy operator credential binding`);
       if (key === 'app') {
+        const mail=emailBindings(this.config.email);
+        for(const [name,value]of Object.entries(mail.vars))assert(bindings.some(b=>b.name===name&&b.text===value),'Email variable binding mismatch: '+name);
+        for(const secret of mail.secrets_store_secrets??[])assert(bindings.some(b=>b.name===secret.binding&&b.store_id===secret.store_id&&b.secret_name===secret.secret_name),'AgentMail Secrets Store binding mismatch');
         assert(bindings.some((item) => item.name === 'TOOLBOX' && item.service === this.names.gateway && item.entrypoint === 'ToolboxGateway'), 'Private gateway service binding mismatch');
         assert(bindings.some((item) => item.name === 'ARTIFACTS' && item.namespace === this.names.namespace), 'Private Artifacts namespace binding mismatch');
         assert(!bindings.some((item) => item.name === 'LEGACY_STATE_COMMIT'), 'Fresh installs must not import legacy history');

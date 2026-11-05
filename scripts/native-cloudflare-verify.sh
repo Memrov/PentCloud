@@ -45,7 +45,7 @@ if [[ "$worker" != gateway ]]; then
     "$native_go" test ./... -count=1
     "$native_go" vet ./...
     node --test scripts/test-native-test-harness.mjs scripts/test-native-canary-defaults.mjs
-    node --test scripts/test-private-install.mjs scripts/test-native-auth.mjs scripts/test-browser-run-qa.mjs scripts/test-cloudflare-build-config.mjs
+    node --test scripts/test-private-install.mjs scripts/test-private-email.mjs scripts/test-native-auth.mjs scripts/test-browser-run-qa.mjs scripts/test-cloudflare-build-config.mjs
     node scripts/test-native-run-lifecycle.mjs
     node --test apps/control-plane/test/native-kali-canary/contract.node.mjs
     npm run test:integration
