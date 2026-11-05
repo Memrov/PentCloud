@@ -71,7 +71,10 @@ jobs:
     name: Owned recon benchmark
     if: github.event_name == 'workflow_dispatch' && inputs.benchmark_url != ''
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      statuses: read
     env:
       BENCH_TARGET: ${{ inputs.benchmark_url }}
       BENCH_NONCE: ${{ inputs.fixture_nonce }}
@@ -80,6 +83,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Start synthetic fixture and temporary Cloudflare Tunnel
+        id: fixture
+        run: python3 benchmarks/recon/fixture.py start
+      - name: Publish live synthetic fixture endpoint
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: recon-fixture-endpoint-${{ github.run_attempt }}
+          path: fixture-endpoint/
+          retention-days: 1
       - name: Verify owned fixture and install pinned binaries
         env:
           GH_TOKEN: ${{ github.token }}
@@ -179,6 +191,14 @@ jobs:
           flags: '-duc -silent -rl 1 -timeout 5 -max-time 1 -max-results 25'
       - name: Summarize benchmark
         run: python3 benchmarks/recon/runner.py finish
+      - name: Wait for external Cloudflare benchmark measurements
+        if: always() && steps.fixture.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 benchmarks/recon/fixture.py wait
+      - name: Stop synthetic fixture and temporary tunnel
+        if: always()
+        run: python3 benchmarks/recon/fixture.py stop
       - name: Preserve synthetic benchmark evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
