@@ -112,16 +112,23 @@ Under **Login verification**, choose one optional method:
   test account’s Base32 seed or `otpauth://totp/` URI there, using Cloudflare’s
   private secret prompt. **Check** validates the format. PentCloud generates the
   short-lived code locally and fills it in the trusted browser helper.
-- **Email code or link:** set the expected sender mailbox or domain, then save.
-  Copy the target-specific forwarding address and follow the steps below. No
-  mailbox API key is needed. Agents can use a fresh matching email only while
+- **Email code or link:** choose Cloudflare or AgentMail, set the expected sender
+  mailbox or domain, then save. Follow the forwarding steps below. Agents can use a fresh matching email only while
   their run has an outstanding login request. Email contents are untrusted data;
   they cannot instruct agents or change scope.
 
 ### Optional email forwarding
 
-This requires a domain whose DNS you manage on Cloudflare; a `workers.dev`
-address alone cannot receive mail. Keep the domain’s current mailbox service:
+Keep the test account address required by the program. HackerOne’s
+[`wearehackerone.com` alias](https://docs.hackerone.com/en/articles/8404308-hacker-email-alias),
+Intigriti’s [`intigriti.me` alias](https://kb.intigriti.com/en/articles/5412984-understanding-testing-requirements)
+and Bugcrowd’s [`bugcrowdninja.com` alias](https://docs.bugcrowd.com/researchers/participating-in-program/your-bugcrowdninja-email-address/)
+deliver to your registered mailbox. Forward from there; do not replace the
+program’s required registration address with the receiver. Researcher API tokens
+do not provide access to these emails. The program’s current rules take priority.
+
+**Cloudflare receiver:** needs a domain whose DNS you manage on Cloudflare;
+`workers.dev` alone cannot receive mail. Keep the domain’s current mailbox service:
 **do not replace existing MX records**. Use a dedicated mail subdomain if your
 main domain already receives email elsewhere.
 
@@ -129,9 +136,8 @@ main domain already receives email elsewhere.
    `verification@auth.example.com` on your routing domain. Route that **literal
    address** to the app Worker’s native email handler, and enable subaddressing
    (plus addressing). No catch-all or external inbox service is needed.
-2. Set the app Worker variable `PENTCLOUD_VERIFICATION_EMAIL` to that same base
-   address and deploy your private installation. Keep this nonsecret variable
-   in your installation’s private Wrangler config so later deploys preserve it.
+2. Configure the optional receiver in your private installer configuration as
+   described below. The installer preserves the address across upgrades.
 3. In Targets, select email verification, enter the expected sender and save.
    Click **Check forwarding** to open a ten-minute setup window. Add the displayed
    target-specific address in Gmail **Settings → Forwarding and POP/IMAP → Add a
@@ -141,10 +147,27 @@ main domain already receives email elsewhere.
    emails from the expected sender. Keep normal mail in your own mailbox. Start
    a fresh run after setup; authentication is shared only within that run.
 
+**AgentMail receiver:** no DNS domain is required. Use an existing dedicated inbox
+and a key restricted to reading its messages. Save the key in Cloudflare Secrets
+Store, bind it to the app Worker as `AGENTMAIL_API_KEY`, and set
+`PENTCLOUD_AGENTMAIL_INBOX` to the inbox address. The optional installer config can
+retain these nonsecret references. Choose AgentMail on the target and follow
+steps 3–4 above. **Check forwarding** also checks message-read access; an empty
+inbox is valid, but does not prove forwarding or target login succeeded.
+
+The username secret must contain the original test-account email so messages in
+the shared inbox can be matched privately. Other login usernames require the
+target-specific Cloudflare receiver. AgentMail uses its own authenticated sender
+verdicts and the original recipient; forwarded mail must preserve both. See its
+[message API](https://docs.agentmail.to/api-reference/inboxes/messages/get).
+PentCloud makes bounded, read-only checks while verification is pending, never
+sends mail or downloads attachments, and does not delete mail from AgentMail.
+Manage provider-side retention separately from PentCloud’s expiring challenges.
+
 PentCloud accepts authenticated mail up to 256 KiB, extracts one unambiguous code
 or same-target HTTPS verification link and retains pending challenges for at most
 ten minutes. It stores no full inbox, message bodies or attachments. A second run
-must wait if the same target already has a pending email login. Some forwarding
+must wait if the same target account already has a pending email login. Some forwarding
 providers invalidate sender authentication; those deliveries fail closed. Provider
 confirmation links are shown only to the authenticated operator during setup.
 SMS, push approval and CAPTCHA enrollment still require the test account’s normal
