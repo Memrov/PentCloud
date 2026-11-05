@@ -29,13 +29,15 @@ function PlatformConnection({platform,connection,onChecked}:{platform:typeof BOU
  const [busy,setBusy]=useState(false),[error,setError]=useState<string>();
  const check=async()=>{setBusy(true);setError(undefined);try{onChecked(await action<BountyConnection>('bounty.check',{platform:platform.id}));}catch(e){onChecked({...connection,status:'unchecked'});setError(e instanceof Error?e.message:'Connection check failed');}finally{setBusy(false);}};
  return <Surface role="region" aria-label={platform.name} className="grid content-start gap-4 rounded-lg px-5 py-4 ring ring-kumo-line">
-  <div className="flex flex-wrap items-center justify-between gap-2"><Text as="h3" variant="heading">{platform.name}</Text><Badge className="text-base" variant="secondary">{connection.status==='ready'?'Connected':connection.status==='missing'?'Not configured':'Check needed'}</Badge></div>
-  <div className="grid gap-1.5"><Text>{'tokenLabel' in platform?platform.tokenLabel:'API token secret'}</Text><InlineCopyText variant="body" truncate={false} className="break-all text-left font-mono text-base">{platform.token}</InlineCopyText></div>
+  <div className="flex flex-wrap items-center justify-between gap-2"><Text as="h3" variant="heading">{platform.name}</Text><Badge className="text-base" variant="secondary">{'development' in platform?'In development':connection.status==='ready'?'Connected':connection.status==='missing'?'Not configured':'Check needed'}</Badge></div>
+  {'development' in platform?<Text>Account connections are unavailable until this integration has been validated.</Text>:<>
+  <div className="grid gap-1.5"><Text>API token secret</Text><InlineCopyText variant="body" truncate={false} className="break-all text-left font-mono text-base">{platform.token}</InlineCopyText></div>
   {'username' in platform&&<div className="grid gap-1.5"><Text>Username variable</Text><InlineCopyText variant="body" truncate={false} className="break-all text-left font-mono text-base">{platform.username}</InlineCopyText></div>}
-  <Collapsible><Collapsible.DefaultTrigger>Setup instructions</Collapsible.DefaultTrigger><Collapsible.DefaultPanel><div className="grid gap-2"><Text>Ask your setup assistant to add these bindings to the app Worker. Enter secret values through Cloudflare’s private secret prompt.</Text>{'setup' in platform&&<Text>{platform.setup}</Text>}{'docs' in platform&&<ExternalLink href={platform.docs}>Platform setup guide</ExternalLink>}</div></Collapsible.DefaultPanel></Collapsible>
+  <Collapsible><Collapsible.DefaultTrigger>Setup instructions</Collapsible.DefaultTrigger><Collapsible.DefaultPanel><Text>Ask your setup assistant to add these bindings to the app Worker. Enter secret values through Cloudflare’s private secret prompt.</Text></Collapsible.DefaultPanel></Collapsible>
   {error&&<Banner variant="error" description={<Text>{error}</Text>}/>}
   {connection.checkedAt&&<Text variant="secondary">Last successful check: {new Date(connection.checkedAt).toLocaleString()}</Text>}
   <div><Button variant="secondary" loading={busy} onClick={()=>void check()}>Check {platform.name} connection</Button></div>
+  </>}
  </Surface>;
 }
 

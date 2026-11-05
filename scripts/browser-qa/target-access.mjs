@@ -22,7 +22,7 @@ export async function reviewTargetAccess(env,input){
   browser=await connect(env.BROWSER,env.QA_BROWSER_ID);
   for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
    const records=new Map(),secrets=new Map(),store=new OnboardingStore({readTargetSecret:async name=>secrets.get(name),get:k=>structuredClone(records.get(k)),put:(k,v)=>records.set(k,structuredClone(v)),list:p=>[...records].filter(([k])=>k.startsWith(p)).map(([,v])=>structuredClone(v)),remove:k=>records.delete(k)});
-   const connectionEnv={},connections=new BountyConnections(connectionEnv,{get:k=>records.get(k),put:(k,v)=>records.set(k,v),remove:k=>records.delete(k),fetcher:async url=>Response.json(String(url).endsWith('/user')?{username:'fixture-researcher'}:{data:[]})});
+   const connectionEnv={},connections=new BountyConnections(connectionEnv,{get:k=>records.get(k),put:(k,v)=>records.set(k,v),remove:k=>records.delete(k),fetcher:async()=>Response.json({data:[]})});
    let mailNow=Date.now(),mailResult='expired',holdCheck=false,releaseCheck,enterCheck;
    const checkEntered=new Promise(resolve=>{enterCheck=resolve;}),mailbox=new LoginChallenges({get:k=>records.get(k),put:(k,v)=>records.set(k,v),remove:k=>records.delete(k),list:p=>[...records].filter(([k])=>k.startsWith(p)).map(([key,value])=>({key,value})),now:()=>mailNow});
    const program={schema_version:1,id:'hackerone:pentcloud-fixture',name:'PentCloud QA program',platform:'hackerone',url:'https://hackerone.com/pentcloud-fixture',source_status:{value:'open'},targets:{in_scope:[{type:'URL',value:targetOrigin+'/'}],out_of_scope:[{type:'URL',value:targetOrigin+'/admin/'}]}};
@@ -84,13 +84,12 @@ export async function reviewTargetAccess(env,input){
     connectionEnv.PENTCLOUD_HACKERONE_API_TOKEN='fixture-platform-token';connectionEnv.PENTCLOUD_HACKERONE_USERNAME='qa-researcher';
     await page.getByRole('button',{name:'Check HackerOne connection',exact:true}).click();await page.getByText('Connected',{exact:true}).waitFor();
     check((await connections.status('intigriti')).status==='missing','An unrelated platform was unlocked');
-    for(const [id,name,secret] of [['bugcrowd','Bugcrowd','fixture-id:fixture-secret'],['yeswehack','YesWeHack','eyJhbGciOiJIUzI1NiJ9.'+btoa(JSON.stringify({exp:Math.floor(Date.now()/1000)+3600})).replace(/=/g,'')+'.fixture-signature']]){
-     const card=page.getByRole('region',{name,exact:true});await card.getByRole('button',{name:'Setup instructions',exact:true}).click();
-     await card.getByText(id==='bugcrowd'?/read:engagement_list/:/researcher JWT/).waitFor();
-     connectionEnv['PENTCLOUD_'+id.toUpperCase()+'_API_TOKEN']=secret;
-     await card.getByRole('button',{name:'Check '+name+' connection',exact:true}).click();await card.getByText('Connected',{exact:true}).waitFor();
-     check((await connections.status(id)).status==='ready',name+' was not unlocked');check((await connections.status('intigriti')).status==='missing','An unrelated platform was unlocked');
-     await card.getByRole('button',{name:'Setup instructions',exact:true}).click();result.cases.push({name:id+'-native-connection-card',viewport:viewport.width,result:'passed'});
+    for(const [id,name] of [['bugcrowd','Bugcrowd'],['yeswehack','YesWeHack']]){
+     const card=page.getByRole('region',{name,exact:true});await card.getByText('In development',{exact:true}).waitFor();
+     check(await card.getByRole('button').count()===0,name+' exposes connection controls');
+     check(await card.getByText(/PENTCLOUD_/).count()===0,name+' exposes secret binding names');
+     check((await connections.status(id)).status==='development',name+' was unlocked');
+     result.cases.push({name:id+'-development-connection-disabled',viewport:viewport.width,result:'passed'});
     }
     await page.getByRole('region',{name:'Bugcrowd',exact:true}).scrollIntoViewIfNeeded();
     await capture('bounty-connections');result.cases.push({name:'bounty-connection-and-program-gate',viewport:viewport.width,result:'passed'});

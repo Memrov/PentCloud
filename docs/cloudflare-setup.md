@@ -101,25 +101,13 @@ For HackerOne, bind your researcher token as `PENTCLOUD_HACKERONE_API_TOKEN` and
 set the nonsecret Worker variable `PENTCLOUD_HACKERONE_USERNAME`. For Intigriti,
 bind `PENTCLOUD_INTIGRITI_API_TOKEN`.
 
-For Bugcrowd, bind `PENTCLOUD_BUGCROWD_API_TOKEN` with your Hacker API
-`ID:secret` pair (the generated `Token ID:secret` value also works). Use only
-`read:engagement_list`; your account needs Hacker API access and verified identity.
-See [Bugcrowd authentication](https://docs.bugcrowd.com/hacker-api/authentication/).
-PentCloud resolves the catalog engagement code through the native Hacker API.
-That API supplies scope and vulnerability restrictions, but not the full
-published brief. Review that brief before testing.
-
-For YesWeHack, bind `PENTCLOUD_YESWEHACK_API_TOKEN` with your researcher JWT,
-as documented in [YesWeCaido setup](https://github.com/yeswehack/yeswecaido#setup).
-Manager personal access tokens use a different API surface and are not supported
-for this researcher connection. Expired JWTs must be renewed in Cloudflare;
-IP-restricted sessions may reject requests from Cloudflare. PentCloud does not
-automate platform login or refresh tokens.
+Bugcrowd and YesWeHack are marked **In development**. Account connections and
+program selection for those platforms are unavailable pending live validation.
+Do not configure account bindings for them.
 
 Open **Dashboard → Bug bounty** and check
 the platform connection. A successful read-only API request unlocks that
-platform’s programs in Targets for up to 24 hours, ending earlier when the
-YesWeHack token expires. Changed bindings require a new
+platform’s programs in Targets for 24 hours. Changed bindings require a new
 check. PentCloud rechecks the selected program’s current policy before a run; platform
 tokens never go to the target. These tokens do not log into target applications.
 Claim program-issued credentials once in the platform’s UI, or register your own

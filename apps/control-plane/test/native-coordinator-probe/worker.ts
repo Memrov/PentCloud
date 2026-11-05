@@ -142,7 +142,9 @@ export class ProbeCoordinator extends Coordinator {
     const target=await this.onboardingAction('target.save',{id:'bounty-gate-target',kind:'website',name:'Owned fixture',url:'https://owned.invalid/',revision:null},'fixture') as {id:string;revision:number};
     const denied:string[]=[];
     for(const [name,value] of [['scope.names',{}],['scope.search',{query:'fixture'}],['scope.preview',{programId:'hackerone:fixture'}],['scope.import',{id:target.id,revision:target.revision,programId:'hackerone:fixture'}]] as const){try{await this.onboardingAction(name,value,'fixture');}catch(e){if(String(e).includes('Bug bounty'))denied.push(name);}}
-    return {denied,status:await this.onboardingAction('bounty.status',{},'fixture')};
+    const unavailable:string[]=[];
+    for(const platform of ['bugcrowd','yeswehack'])for(const [name,value] of [['bounty.check',{platform}],['scope.preview',{programId:platform+':fixture'}],['scope.import',{id:target.id,revision:target.revision,programId:platform+':fixture'}]] as const){try{await this.onboardingAction(name,value,'fixture');}catch(e){if(String(e).includes('in development'))unavailable.push(platform+':'+name);}}
+    return {denied,unavailable,status:await this.onboardingAction('bounty.status',{},'fixture')};
   }
   override async createRun(input:import("../../src/native/types").NewRunInput){
     if(this.ctx.storage.sql.exec("SELECT key FROM native_records WHERE key IN (?,?)","lifecycle:quiesced","purged:run:"+input.run_id).toArray().length)return super.createRun(input);
