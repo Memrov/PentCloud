@@ -46,7 +46,7 @@ def prepare(trial):
     write('trial-'+str(trial)+'-start.json',{'trial':trial,'target':target,'startedEpoch':time.time()})
 def katana(trial):
     meta=read('trial-'+str(trial)+'-start.json');target=meta['target']
-    subprocess.run(['/home/runner/go/bin/katana','-u',target,'-cs','^'+re.escape(target),'-d','2','-c','1','-p','1','-rl','2','-ct','20s','-timeout','10','-j','-silent','-duc','-o',str(OUT/('katana-'+str(trial)+'.jsonl'))],check=True,timeout=35)
+    subprocess.run(['/home/runner/go/bin/katana','-u',target,'-cs','^'+re.escape(target),'-d','2','-c','1','-p','1','-rl','2','-ct','20s','-timeout','10','-jc','-no-default-ext-filter','-j','-silent','-duc','-o',str(OUT/('katana-'+str(trial)+'.jsonl'))],check=True,timeout=35)
 def jsonl(name):
     p=OUT/name
     if not p.exists():return []
