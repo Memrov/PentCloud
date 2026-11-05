@@ -7,7 +7,7 @@ const permissions = ['Account Settings Read', 'Workers Scripts Write', 'Workers 
   'Artifacts Write', 'Access: Apps and Policies Write',
   'Access: Organizations, Identity Providers, and Groups Read'];
 const result = buffer => { const value=JSON.parse(buffer.toString()); return value.result ?? value; };
-export async function accountAuthorization({accountId, run, environment=process.env, legacy=false, permissionNames=permissions, purpose='setup'}) {
+export async function accountAuthorization({accountId, run, environment=process.env, legacy=false, permissionNames=permissions,additionalPermissions=[],zoneId, purpose='setup'}) {
   assert.match(accountId,/^[a-f0-9]{32}$/,'Select an explicit account');
   if(environment.CLOUDFLARE_API_TOKEN)return {token:environment.CLOUDFLARE_API_TOKEN,close:async()=>{}};
   const env={...environment,CLOUDFLARE_ACCOUNT_ID:accountId};
@@ -18,14 +18,17 @@ export async function accountAuthorization({accountId, run, environment=process.
   try { groups=result(await cf(['accounts','tokens','permission-groups','list'])); }
   catch { throw Error('Cloudflare account authorization unavailable; run cf auth login and grant the selected account token-management and deployment permissions'); }
   assert(Array.isArray(groups),'Cloudflare permission listing returned an unexpected shape');
-  const ids=[...permissionNames,...(legacy?['Secrets Store Write','Access: Service Tokens Write']:[])].map(name=>{
-    const matches=groups.filter(g=>g.name===name && (g.scopes??g.meta?.scopes??[]).includes('com.cloudflare.api.account'));
+  const select=(name,scope)=>{
+    const matches=groups.filter(g=>g.name===name && (g.scopes??g.meta?.scopes??[]).includes(scope));
     assert.equal(matches.length,1,`Cloudflare account permission unavailable or ambiguous: ${name}`);
     return {id:matches[0].id};
-  });
+  };
+  const ids=[...new Set([...permissionNames,...additionalPermissions,...(zoneId?['Email Routing Account Rules Read']:[]),...(legacy?['Secrets Store Write','Access: Service Tokens Write']:[])])].map(name=>select(name,'com.cloudflare.api.account'));
+  const zonePolicies=[];
+  if(zoneId){assert.match(zoneId,/^[a-f0-9]{32}$/,'Select an explicit email zone');zonePolicies.push({effect:'allow',permission_groups:['Zone Read','DNS Read','Zone Settings Write','Email Routing Rules Write'].map(name=>select(name,'com.cloudflare.api.account.zone')),resources:{['com.cloudflare.api.account.zone.'+zoneId]:'*'}});}
   assert.match(purpose,/^[a-z][a-z -]{0,40}$/,'Use a nonsecret credential purpose');
   const body={name:`PentCloud ${purpose} ${randomUUID()}`,expires_on:new Date(Date.now()+2*60*60*1000).toISOString().replace(/\.\d{3}Z$/,'Z'),
-    policies:[{effect:'allow',permission_groups:ids,resources:{[`com.cloudflare.api.account.${accountId}`]:'*'}}]};
+    policies:[{effect:'allow',permission_groups:ids,resources:{[`com.cloudflare.api.account.${accountId}`]:'*'}},...zonePolicies]};
   let lease;
   try { lease=result(await cf(['accounts','tokens','create','--body',JSON.stringify(body)])); }
   catch { throw Error('Cloudflare deployment credential creation failed; inspect native account token metadata before retrying (any issued lease expires within two hours)'); }

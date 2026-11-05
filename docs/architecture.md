@@ -14,6 +14,12 @@ address check starts model-free discovery. Setup stays usable while the shared
 scanner starts. The primary can hold a read-only preparation conversation after
 model setup passes; execution/delegation waits for ordinary admission. Address
 verification does not prove ownership or enforce network scope.
+Optional program scope, identification headers and Cloudflare credential
+references belong to the saved target. Runs pin that target revision; the model
+receives its relevant instructions, not the entire scope catalog. Managed
+requests pass through the shared target matcher. Browser Run adds native hostname
+guardrails and narrow CDP interception while Chromium handles HTTP transport.
+Kali retains direct Internet access without network scope enforcement. [Capabilities and limits](operations/onboarding.md#bounty-scope-and-target-login).
 
 [Onboarding details and failure behavior](operations/onboarding.md).
 

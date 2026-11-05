@@ -24,6 +24,11 @@ import type {ToolboxReadiness, ToolboxActivity, ToolboxFailure} from "../../../.
 import stockCatalog from "../fixtures/stock-kali-catalog.json";
 export { WorkspaceServiceProxy } from "@cloudflare/computer";
 export { NativeDynamicWorkerTail } from "../../src/native/dynamic-worker-tail";
+export {TargetEgress} from "../../src/native/target-egress";
+
+// Synthetic network response; production transport, injection and projection stay real.
+const originalFetch=globalThis.fetch;
+globalThis.fetch=async(input,init)=>{const url=typeof input==="string"||input instanceof URL?String(input):input.url,headers=new Headers(init?.headers??(input instanceof Request?input.headers:undefined));return new URL(url).hostname==="example.com"&&headers.get("X-Researcher")==="private-header-marker"?new Response("private-header-marker"):originalFetch(input,init);};
 
 async function fixtureReady(ctx: DurableObjectState, expected?: string): Promise<ToolboxReadiness | ToolboxFailure> {
   const generation = (await ctx.storage.get<string>("fixture:generation")) ?? "fixture-generation";
@@ -257,10 +262,12 @@ export class ProbeAttempt extends NativeAttempt {
       ARTIFACTS: fakeArtifacts,
       CONTROL_TOKEN: "local-probe-control",
       OPENCODE_GO_API_KEY: "local-probe-go",
+      PENTCLOUD_TARGET_HEADERS:{get:async()=>JSON.stringify({"X-Researcher":"private-header-marker"})},
       CF_VERSION_METADATA: { id: "probe-terminal", tag: "fixture" },
       COORDINATOR: {
         getByName: () => ({
           assertActive: async () => {},
+          apiCredential:async()=>({targetURL:"https://example.com/"}),
           assertConversation: async () => {},
           assertEvidenceOwner: async () => {},
           recordEvidence: async (_id:string,receipt:unknown) => {
@@ -456,6 +463,8 @@ export class ProbeAttempt extends NativeAttempt {
       await this.ctx.storage.put("fixture:stopBeforeModel",true);
     }
     if(kind==="finding-contract")input.findingsVersion=1;
+    if(kind==="header-redaction")input.targetConfig={id:"echo-site",url:"https://example.com/",name:"Echo",kind:"website",revision:1,archived:false,createdAt:0,updatedAt:0,updatedBy:"fixture",objective:"",exclusions:"",access:{headers:[],headerBinding:"PENTCLOUD_TARGET_HEADERS"}};
+
     await this.ctx.storage.put("attempt", {
       input,
       fingerprint: kind === "toolbox-eviction" || kind.startsWith("native-discovery") || kind==="native-pinned-model" ? await digest(input) : "local-probe",
@@ -469,6 +478,8 @@ export class ProbeAttempt extends NativeAttempt {
     });
     type Internals = {
       initialize(input:AttemptInput):Promise<unknown>;
+      safe(value:unknown):unknown;
+      apiRequest(input:unknown,id:string):Promise<unknown>;
       cloudflareTools(): Promise<import("../../src/native/cloudflare-tools").CloudflareTool[]>;
       callCloudflareTool(tool: import("../../src/native/cloudflare-tools").CloudflareTool, args: unknown, id: string, signal: AbortSignal): Promise<unknown>;
       terminal(args: Record<string, unknown>): Promise<unknown>;
@@ -938,6 +949,11 @@ export class ProbeAttempt extends NativeAttempt {
       checks.terminalEvents = await checks.terminalEvents;
       await this.harness.dispose();
       await this.ctx.storage.deleteAlarm();
+    } else if (kind === "header-redaction") {
+      const tools=await internal.cloudflareTools();
+      checks.curl=await internal.callCloudflareTool(tools.find(t=>t.name==="computer_exec")!,{backend:"native-shell",command:"curl --silent https://example.com/"},"echo-curl",new AbortController().signal);
+      checks.api=await internal.apiRequest({path:"/",method:"GET"},"echo-api");
+      checks.retrieval=internal.safe(await(await this.targetFetch(new Request("https://example.com/"))).text());
     } else if (kind === "computer-coder") {
       const tools = await internal.cloudflareTools();
       const call = async (name: string, args: unknown) => internal.callCloudflareTool(tools.find(t => t.name === name)!,args,crypto.randomUUID(),new AbortController().signal);

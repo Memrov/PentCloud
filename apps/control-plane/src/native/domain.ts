@@ -111,6 +111,7 @@ export function publicRun(r: RunRecord) {
     ...(r.discoveryDrained ? {discoveryDrained:true} : {}),
     ...(r.discoveryAcknowledged ? {discoveryAcknowledged:true} : {}),
     ...(r.target ? {target: {id:r.target.id,name:r.target.name,url:r.target.url,kind:r.target.kind,revision:r.target.revision,
+      ...(r.target.access?{access:{managed:true,loginConfigured:!!r.target.access.login,apiConfigured:!!r.target.access.api,program:r.target.access.program?.name}}:{}),
       ...(r.target.sources?.length?{sources:r.target.sources.map(({id,repo,branch,commit,origin})=>({id,repo,branch,commit,...(origin?{origin}:{})}))}:{})}} : {}),
     status: r.status,
     baselineRepo: r.repo,

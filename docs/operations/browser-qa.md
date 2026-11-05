@@ -183,3 +183,27 @@ to read the protected app's `/health` identity. New Service Auth/edge startup
 failures and bounded retries remain in `accessReadiness` and network evidence.
 This route reads configuration only and never polls Kali or calls a model.
 A failure to become ready blocks UI assertions rather than passing an error page.
+
+## Target setup fixtures
+
+After building the UI, add `--target-access --fixture-origin https://YOUR-OWNED-TEST-TARGET`
+to the interactive command to test
+program search/import, saved scope, headers and Cloudflare credential references
+at desktop and phone sizes. This mode serves actual built UI assets and uses
+production stores against a synthetic catalog and your reachable, disposable login
+fixture. Use only a task-owned test host with fake credentials. Responses travel
+through Chromium, not a synthetic response relay. It makes no model
+requests and starts no assessment or production scanner.
+
+The native Browser Run checks include login POST/redirect/cookie reuse, binary
+request/response bytes, popup requests, excluded redirects and the Agents SDK CDP
+capability boundary. Fixture credentials are disposable; they are never production
+secrets. Review the captured UI as well as the JSON results. Synthetic routes do
+not establish compatibility with a particular site's login or live Kali tools.
+
+The target-access fixture journey also covers the Bug bounty dashboard tab: a
+locked picker, a rejected connection, a successful native-binding check, and
+unlocking only that platform. It checks forwarding expiry/retry, readable
+verification labels and secret checks that do not display run-start status.
+Provider and email replies are synthetic in this fixture; its screenshots do not
+prove a live platform login or email delivery.

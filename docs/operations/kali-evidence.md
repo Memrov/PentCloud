@@ -81,7 +81,11 @@ guarded Workspace files; it is not Linux libcurl. Check `curl --help`: `-D` /
 headers plus body; `-o` writes the body only. Set the supplied task cwd and an
 explicit request timeout. The separate JavaScript backend still has no network.
 
-Stock Kali tools run in the existing internet-enabled Container. For WhatWeb
+Stock Kali tools retain the original image, direct Internet access and native
+inactivity lifecycle. PentCloud does not install an interception CA or network
+scope firewall in Kali. Required browser headers and login cookies are not
+implicitly supplied to scanners. Configure engagement egress separately and
+review tool arguments and actual coverage. For WhatWeb
 baselines use `aggression: stealthy`. Check `http_status`, errors and actual
 coverage rather than treating a completed envelope as a successful request. For FFUF, import a small explicit
 wordlist, set threads/rate within the engagement budget, and compare a known

@@ -73,7 +73,7 @@ async function fixture(t) {
     if (kind === 'wrangler' && args[0] === 'deploy' || kind === 'node' && args[0].endsWith('deploy-native-app.mjs')) {
       const file = args[args.indexOf('--config') + 1], worker = await readJson(file);
       if (!remote.scripts.some((script) => script.id === worker.name)) remote.scripts.push({ id: worker.name });
-      remote.settings[worker.name] = { bindings: [...(worker.secrets_store_secrets??[]).map((item) => ({ ...item, name: item.binding })),
+      remote.settings[worker.name] = { bindings: [...(worker.secrets_store_secrets??[]).map((item) => ({ ...item, name: item.binding })),...Object.entries(worker.vars??{}).map(([name,text])=>({name,type:'plain_text',text})),
         ...(worker.services ?? []).map((item) => ({ ...item, name: item.binding })), ...(worker.artifacts ?? []).map((item) => ({ ...item, name: item.binding })),
         ...(worker.durable_objects?.bindings ?? []).map((item) => ({ ...item, namespace_id: 'namespace-' + item.name }))] };
       if (worker.containers && !remote.containers.length) remote.containers.push({ id: 'container-fixture', name: n.container, durable_objects: { namespace_id: 'namespace-KALI_TOOLBOX' } });
@@ -111,6 +111,15 @@ async function legacy(f){
   await privateJson(join(directory,'credentials.json'),{operator:'legacy-private-operator',mcp:'legacy-private-mcp',accessClientId:'legacy-client',accessClientSecret:'legacy-private-access'});
   await installer.save();
 }
+test('explicit upgrade retains optional email bindings while immutable account and Access identity stay fenced',async(t)=>{
+ const f=await fixture(t);await f.installer.install();
+ f.remote.store=[{id:'c'.repeat(32)}];f.remote.secrets=[{name:'own-agentmail-key',scopes:['workers']}];
+ const updated=configuration({...config,email:{agentmail:{inbox:'owned@agentmail.to',storeId:'c'.repeat(32),secretName:'own-agentmail-key'}}});
+ f.installer.config=updated;await f.installer.install({upgrade:true});
+ const app=await readJson(join(f.directory,'app.wrangler.json'));assert.equal(app.vars.PENTCLOUD_AGENTMAIL_INBOX,'owned@agentmail.to');assert.equal(app.secrets_store_secrets[0].binding,'AGENTMAIL_API_KEY');
+ assert.deepEqual((await readJson(join(f.directory,'manifest.json'))).config,updated);
+ f.installer.config={...updated,allowedEmails:['other@example.com']};await assert.rejects(f.installer.install({upgrade:true}),/Configuration changed/);
+});
 test('upgrade proves native access before retiring only owned legacy credentials, preserving MCP and the Store',async t=>{
   const f=await fixture(t);await f.installer.install();await legacy(f);
   const {installer,remote,directory}=f;

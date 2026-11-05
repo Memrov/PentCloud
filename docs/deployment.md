@@ -59,6 +59,14 @@ private source/credentials and preserved generated config. This public repo has
 no deployment credentials, creator-account bindings or automatic deployment
 workflow. Installation uses the guided CLI; no one-click deploy button is available.
 
+For development, create a separately named installation with its own Access
+application/audience, app and gateway Workers, Durable Objects, Artifacts
+namespace, result Workflow/event filter and Kali runtime secret. A separate
+hostname alone does not isolate data. Worker Preview service bindings can still
+reach a peer Worker's production deployment, so a Preview alone is insufficient
+for this full chain. Keep generated dev configuration and ownership state outside
+Git. Promote only reviewed, tested source through your release process.
+
 ## Lifecycle
 
 The CLI also supports upgrade, export, import-targets and uninstall; consult

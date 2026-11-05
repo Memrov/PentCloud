@@ -11,6 +11,7 @@ import {knownRuntimeSecrets} from "../../../../shared/runtime-secrets";
 import { normalizeUploadIds, MATERIAL_FILE_LIMIT } from "./materials";
 import { confinedRelative } from "./tool-policy";
 import { hostedUIResponse } from "./ui-response";
+import {readVerificationEmail} from './verification-email';
 
 import { TOOLBOX_GENERATION_HEADER, toolboxOperatorReply } from "../../../../shared/toolbox-rpc";
 
@@ -83,6 +84,11 @@ function errorResponse(error: unknown, env: NativeEnv) {
 
 
 export default {
+  async email(message:ForwardableEmailMessage,env:NativeEnv){
+    if(!env.PENTCLOUD_VERIFICATION_EMAIL||message.rawSize>256*1024){message.setReject('Verification email is unavailable');return;}
+    const delivery=await readVerificationEmail({to:message.to,headers:message.headers,raw:message.raw});
+    if(delivery)await env.COORDINATOR.getByName('global').receiveVerificationEmail(delivery);
+  },
   async fetch(request: Request, env: NativeEnv): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health")
@@ -136,7 +142,7 @@ export default {
       if(pendingCreation&&request.method==="GET")return Response.json(await coordinator.creationSnapshot(pendingCreation[1]!),{headers:{"Cache-Control":"no-store"}});
       if(path==="/onboarding" && request.method==="GET")return Response.json(await coordinator.onboardingSnapshot(url.searchParams.get("run")??undefined),{headers:{"Cache-Control":"no-store"}});
       if(path==="/onboarding/export" && request.method==="GET")return Response.json(await coordinator.onboardingExport(),{headers:{"Cache-Control":"no-store"}});
-      const onboardingAction=path.match(/^\/onboarding\/([a-z]+\.[a-z]+)$/);
+      const onboardingAction=path.match(/^\/onboarding\/([a-z]+(?:\.[a-z]+){1,2})$/);
       if(onboardingAction && request.method==="POST"){
         const input=await body(request,onboardingAction[1]==="metadata.import"?16*1024*1024:2300*1024);
         if(onboardingAction[1]==="credential.save"&&input.purpose==="model")throw new Error("400: Manage OpenCode keys through Cloudflare secret bindings");

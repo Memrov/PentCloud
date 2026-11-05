@@ -6,13 +6,16 @@ import { MaterialAttachments, useMaterialDraft,dropMaterials,pasteMaterials } fr
 import type { SavedTarget } from "../../native/onboarding";
 import { action, snapshot,setupRequest, type OnboardingSnapshot } from "./api";
 import {SourceContextEditor} from "./source-context";
+import {ProgramPicker,TargetAccessEditor} from "./target-access";
 
 const blank=()=>({id:"target-"+crypto.randomUUID(),kind:"website" as "website"|"api",name:"",url:"",objective:"",exclusions:""});
 export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJob)=>void;runs?:UIRun[]}) {
   const [data,setData]=useState<OnboardingSnapshot>(),[selected,setSelected]=useState<SavedTarget>(),[draft,setDraft]=useState(blank);
   const [runObjective,setRunObjective]=useState("");
+  const [programId,setProgramId]=useState<string>();
   const [editing,setEditing]=useState(true),[showArchived,setShowArchived]=useState(false),[authorized,setAuthorized]=useState(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState<string>(),[notice,setNotice]=useState<string>(),[deleting,setDeleting]=useState<SavedTarget>(),[deleteOpen,setDeleteOpen]=useState(false);
+  const [starting,setStarting]=useState(false);
   const [runId]=useState(()=>{const id=new URLSearchParams(window.location.search).get("draft");return id&&/^run-[A-Za-z0-9._-]{1,48}$/.test(id)?id:"run-"+crypto.randomUUID();});
   const materials=useMaterialDraft(runId);
   const submission=useRef<Parameters<typeof createRun>[0]|undefined>(undefined);
@@ -33,9 +36,10 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
     }
   })().catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[]);
   const perform=async(fn:()=>Promise<void>)=>{setBusy(true);setError(undefined);try{await fn();}catch(e){setError(e instanceof Error?e.message:"Could not update target");}finally{setBusy(false);}};
-  const choose=(target:SavedTarget)=>{setSelected(target);setDraft({...target});setRunObjective(target.objective||"Assess the security of "+target.url);setEditing(false);setAuthorized(false);setNotice(undefined);};
+  const choose=(target:SavedTarget)=>{setSelected(target);setDraft({...target});setProgramId(undefined);setRunObjective(target.objective||"Assess the security of "+target.url);setEditing(false);setAuthorized(false);setNotice(undefined);};
   const save=()=>perform(async()=>{
-    const target=await action<SavedTarget>("target.save",{...draft,revision:selected?.id===draft.id?selected.revision:null});
+    let target=await action<SavedTarget>("target.save",{...draft,revision:selected?.id===draft.id?selected.revision:null});setSelected(target);
+    if(programId)target=await action<SavedTarget>("scope.import",{id:target.id,revision:target.revision,programId});
     await refresh();choose(target);setNotice("Target saved. It is available for future runs.");
   });
   const lifecycle=(target:SavedTarget,verb:"archive"|"restore"|"delete")=>perform(async()=>{
@@ -43,6 +47,7 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
     await refresh();if(selected?.id===target.id)setSelected(undefined);setDeleteOpen(false);
   });
   const start=()=>perform(async()=>{
+    setStarting(true);try{
     if(!selected||!authorized)return;
     window.history.replaceState(null,"","/?draft="+encodeURIComponent(runId)+"&target="+encodeURIComponent(selected.id));
     if(submission.current){
@@ -61,10 +66,11 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
     }
     try{const result=await createRun(submission.current);materials.draft.clear();onCreated(result.run,result.rootJob);}
     catch(error){if(error instanceof APIError&&[400,413,415,422,429].includes(error.status))submission.current=undefined;throw error;}
+    }finally{setStarting(false);}
   });
   const visible=data?.targets.filter(t=>showArchived?t.archived:!t.archived)??[];
   return <section className="onboarding" aria-busy={!data||busy}>
-    <header className="onboarding-heading"><div className="onboarding-title"><span className="onboarding-symbol"><GlobeIcon size={24}/></span><div><Text as="h1" variant="heading1">Your targets</Text><p>Choose a website or API you own. PentCloud will check the address and prepare discovery.</p></div></div><Button variant="secondary" icon={<PlusIcon size={16}/>} disabled={busy||!!submission.current} onClick={()=>{setSelected(undefined);setDraft(blank());setEditing(true);setNotice(undefined);}}>Add target</Button></header>
+    <header className="onboarding-heading"><div className="onboarding-title"><span className="onboarding-symbol"><GlobeIcon size={24}/></span><div><Text as="h1" variant="heading1">Your targets</Text><p>Choose a website or API you own or are authorized to test. PentCloud will check the address and prepare discovery.</p></div></div><Button variant="secondary" icon={<PlusIcon size={16}/>} disabled={busy||!!submission.current} onClick={()=>{setSelected(undefined);setDraft(blank());setProgramId(undefined);setAuthorized(false);setEditing(true);setNotice(undefined);}}>Add target</Button></header>
     {error&&!deleteOpen&&<p role="alert" className="onboarding-error">{error}{submission.current?" Retry sends the same run request.":""}</p>}
     {notice&&<Banner variant="secondary" role="status" description={notice}/>}
     <div className="onboarding-grid">
@@ -75,6 +81,7 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
       <section className={"onboarding-card "+(editing?"order-first min-[761px]:order-none":"")} aria-label="Target setup">
         {editing?<form className="onboarding-form" onSubmit={e=>{e.preventDefault();void save();}}>
           <h2>{selected?"Edit target":"Add a target"}</h2>
+          <ProgramPicker targetURL={draft.url} disabled={busy} perform={perform} onPick={(id,url)=>{setProgramId(id);if(url)setDraft({...draft,url});setNotice("Program selected. Saving verifies the address and imports its exclusions.");}}/>
           <Select label="Target type" aria-label="Target type" required renderValue={value=>value==="api"?"API":"Website"} value={draft.kind} disabled={busy} onValueChange={value=>setDraft({...draft,kind:value as "website"|"api"})}><Select.Option value="website">Website</Select.Option><Select.Option value="api">API</Select.Option></Select>
           <Input label="Name" value={draft.name} onValueChange={name=>setDraft({...draft,name})} disabled={busy} placeholder="My project"/>
           <Input label={draft.kind==="api"?"API base address":"Website address"} value={draft.url} onValueChange={url=>setDraft({...draft,url})} disabled={busy} placeholder={draft.kind==="api"?"https://api.example.com/v1/":"https://example.com"}/>
@@ -84,19 +91,21 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
           <Button variant="primary" type="submit" disabled={busy||!draft.name.trim()||!draft.url.trim()}>{busy?"Saving…":"Save target"}</Button>
         </form>:selected?<div className="onboarding-form" onPaste={e=>pasteMaterials(e,materials.draft,busy||!!submission.current)} onDragOver={e=>{if(e.dataTransfer.types.includes("Files"))e.preventDefault();}} onDrop={e=>dropMaterials(e,materials.draft,busy||!!submission.current)}>
           <div className="onboarding-row"><h2>{selected.name}</h2><Button variant="ghost" disabled={busy||!!submission.current} onClick={()=>setEditing(true)}>Edit</Button></div><p className="onboarding-address">{selected.url}</p>
+          <ProgramPicker targetURL={selected.url} disabled={busy||!!submission.current||selected.archived} perform={perform} onPick={async(id,url)=>{if(url&&new URL(url).href!==selected.url)throw new Error("Edit the target address before importing a different program asset");await action("scope.import",{id:selected.id,revision:selected.revision,programId:id});const value=await refresh(),current=value.targets.find(t=>t.id===selected.id);if(current)choose(current);}}/>
+          <TargetAccessEditor key={selected.id+":"+selected.revision} target={selected} disabled={busy||!!submission.current||selected.archived} perform={perform} onChanged={async()=>{const value=await refresh(),current=value.targets.find(t=>t.id===selected.id);if(current){setSelected(current);setDraft({...current});setAuthorized(false);setNotice("Target settings saved for future runs.");}}}/>
           <SourceContextEditor key={selected.id} target={selected} pending={data?.sourceImports??[]} disabled={busy||!!submission.current||selected.archived} perform={perform} onChanged={async()=>{const value=await refresh(),current=value.targets.find(t=>t.id===selected.id);if(current){setSelected(current);setDraft({...current});}}}/>
-          <div className="onboarding-notice"><strong>Understand the network reach</strong><p>Your target and exclusions guide the agents. They do not prevent every tool from contacting other hosts. Further development is needed to tighten reach; professionals should configure their own egress.</p></div>
+          <div className="onboarding-notice"><strong>{selected.access?"Review the scope":"Understand the network reach"}</strong><p>{selected.access?"Browser and managed HTTP requests use this target’s settings and imported exclusions. Kali has direct Internet access; scope is not enforced there. Review the program’s current rules and confirm your permission before every assessment.":"Your target and exclusions guide the agents. They do not prevent every tool from contacting other hosts. Configure network and login settings to use managed target access."}</p></div>
           <Checkbox checked={authorized} disabled={busy||!!submission.current} onCheckedChange={setAuthorized} label="I own this project or have permission to test it, and understand the network reach risk."/>
           <InputArea label="Run objective" rows={3} value={runObjective} onValueChange={setRunObjective} disabled={busy||!!submission.current}/>
           <MaterialAttachments draft={materials.draft} files={materials.files} {...(materials.error?{error:materials.error}:{})} disabled={busy||!!submission.current}/>
           <p>The quick address check uses no model. Discovery may wait for the shared scanner to prepare. You can choose models and API test access while it runs.</p>
-          <Button variant="primary" icon={<ArrowRightIcon size={16}/>} disabled={busy||!authorized||selected.archived||!materials.ready} onClick={()=>void start()}>{busy?"Checking and starting…":submission.current?"Retry the same run":"Verify address & start discovery"}</Button>
+          <Button variant="primary" icon={<ArrowRightIcon size={16}/>} loading={starting} disabled={busy||!authorized||selected.archived||!materials.ready} onClick={()=>void start()}>{starting?"Checking and starting…":submission.current?"Retry the same run":"Verify address & start discovery"}</Button>
           <h3>Previous runs</h3>
           {runs.filter(r=>r.target?.id===selected.id).length?runs.filter(r=>r.target?.id===selected.id).map(r=><Link key={r.id} href={"/?run="+encodeURIComponent(r.id)}>{r.id} · {r.status}</Link>):<p>No runs for this target yet. Each new run gets fresh discovery and evidence.</p>}
         </div>:<Empty size="sm" icon={<GlobeIcon size={24}/>} title="Choose a saved target" description="Start a fresh run or add another website or API."/>}
       </section>
     </div>
-    <footer className="onboarding-footer"><p>Model access uses your OpenCode key. Credentials for an API under test are saved separately.</p><PoweredByCloudflare/></footer>
+    <footer className="onboarding-footer"><p>OpenCode and target login credentials can use Cloudflare secret bindings.</p><PoweredByCloudflare/></footer>
     <Dialog.Root open={deleteOpen} onOpenChange={setDeleteOpen} onOpenChangeComplete={open=>{if(!open)setDeleting(undefined);}}><Dialog size="sm" className="grid gap-4"><Dialog.Title>Delete saved target</Dialog.Title><Dialog.Description>Delete {deleting?.name??"this target"} from the library. Historical runs and their evidence remain available.</Dialog.Description>{error&&<Banner variant="error" role="alert" description={error}/>}<div className="onboarding-row"><Button variant="secondary" disabled={busy} onClick={()=>setDeleteOpen(false)}>Keep target</Button><Button variant="primary" disabled={busy} onClick={()=>{if(deleting)void lifecycle(deleting,"delete");}}>Delete target</Button></div></Dialog></Dialog.Root>
   </section>;
 }

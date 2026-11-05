@@ -34,6 +34,7 @@ const fixture = async (run) => withNativeTestHarness({
   worker = {dispatchFetch: server.fetch};
   await run(url);
 });
+await fixture(async()=>{const value=await get('/bounty-gate-scenario');assert.deepEqual(value.denied,['scope.names','scope.search','scope.preview','scope.import']);assert.deepEqual(Object.fromEntries(value.status.connections.map(c=>[c.platform,c.status])),{hackerone:'missing',intigriti:'missing',bugcrowd:'development',yeswehack:'development'});assert.deepEqual(value.unavailable,['bugcrowd:bounty.check','bugcrowd:scope.preview','bugcrowd:scope.import','yeswehack:bounty.check','yeswehack:scope.preview','yeswehack:scope.import']);});
 const params = (values) =>
   new URLSearchParams(
     Object.fromEntries(
@@ -61,6 +62,8 @@ await fixture(async () => {
   assert.equal(value.unknownHeld.starts,0,"an unknown scanner outcome cannot be acknowledged away");
   assert.equal(value.held.starts,0,"drained failure waits for explicit coverage acknowledgement");
   assert.equal(value.after.starts,1,"the prepared primary is admitted once after acknowledgement");
+  const admitted=value.snapshot.records.find(row=>row.key.startsWith("launch:")&&row.value.role==="primary").value;
+  assert.equal(admitted.targetConfig.access.headerBinding,"PENTCLOUD_TARGET_TEST_HEADERS","admission preserves the pinned native target bindings");
   const beforeRun=value.before.snapshot.records.find(row=>row.key==="run:run-0").value;
   const afterRun=value.snapshot.records.find(row=>row.key==="run:run-0").value;
   assert.equal(beforeRun.phase,"primary");assert.equal(afterRun.phase,"primary");
@@ -588,6 +591,9 @@ await fixture(async () => {
     /400:/,
     "infrastructure failure is preserved",
   );
+});
+await fixture(async()=>{
+  assert.deepEqual(await get("/browser-auth-lifecycle"),{cancelled:true,completed:true,archived:true});
 });
 console.log(
   "workerd coordinator: Queue/deadman/reset, cancellation drain/FIFO/capacity, continuation CAS, role/revision authority, real Git candidate validation and durable publication replay passed",

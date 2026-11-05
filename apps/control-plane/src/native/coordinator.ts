@@ -33,7 +33,16 @@ import { renderLaunch } from "./prompts";
 import { memoryRecovery, recoveryPending, runtimeVersion, type RuntimeRecovery } from "./runtime-diagnostics";
 import { knownRuntimeSecrets } from "../../../../shared/runtime-secrets";
 import { TargetDefinitions, type TargetDefinition } from "./target-definitions";
-import { OnboardingStore, type SetupDraft } from "./onboarding";
+import { OnboardingStore, assertAudience, type SetupDraft, type SavedTarget } from "./onboarding";
+import {ScopeCatalog} from "./scope-catalog";
+import {targetAccessBrief,readTargetSecret,type ScopedTarget} from "../../../../shared/target-access";
+import {LoginChallenges,type VerificationDelivery} from './login-challenge';
+import {agentMailAddress,readAgentMail} from './agentmail-verification';
+import {verificationAddress} from './target-verification';
+import {BountyConnections,platformBinding,platformToken,checkProgramAccess} from './bounty-platform';
+import type {BountyPlatform} from '../../../../shared/bounty-connections';
+import {type BrowserAuthState} from "./browser-target-access";
+import {RunBrowserAuth} from "./run-browser-auth";
 import {SourceLibrary,readSource,type ImportReceipt} from "./source-context";
 import {parseByokProviders,type OpenCodeRoute} from "./opencode-models";
 import type { NewRunInput } from "./types";
@@ -136,9 +145,13 @@ export class Coordinator extends DurableObject<NativeEnv> {
     get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value),list:<T>(prefix:string)=>this.list<T>(prefix),
     remove:key=>{this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key);},
     modelBindings:()=>modelSecretMetadata(this.env),readModelSecret:id=>readModelSecret(this.env,id),
+    readTargetSecret:async binding=>{const secret=await readTargetSecret(this.env,binding);this.targetSecretRedactions.push(secret);return secret;},
     byokProviders:()=>parseByokProviders(this.env.OPENCODE_BYOK_PROVIDERS),
     probe:(model,key)=>this.env.MODEL_TESTS.getByName(crypto.randomUUID()).probeModel(model,key),
   });
+  private readonly scopeCatalog=new ScopeCatalog({get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value)});
+  private readonly bountyConnections=new BountyConnections(this.env,{get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value),remove:key=>this.ctx.storage.sql.exec('DELETE FROM native_records WHERE key=?',key)});
+  private readonly targetSecretRedactions:string[]=[];
   private readonly sources=new SourceLibrary({
     artifacts:this.env.ARTIFACTS,get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value),
     target:id=>this.onboarding.target(id),save:(id,revision,sources,actor)=>this.onboarding.saveSources(id,revision,sources,actor),
@@ -171,6 +184,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   });
   readonly scheduler = new Scheduler({
     callbacks: {
+      expireVerification: async () => { this.loginChallenges.expire();await this.scheduleVerificationExpiry(); },
       recover: () => {
         this.wake();
       },
@@ -217,6 +231,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return row ? (JSON.parse(row.value) as T) : undefined;
   }
   private put(key: string, value: unknown) {
+    if(key.startsWith("run:")&&value&&typeof value==="object"){const run=value as RunRecord;if(["completed","cancelled"].includes(run.phase)||(run.lifecycle??"active")!=="active"){this.browserAuth.clear(run.id);this.loginChallenges.clear(run.id);this.emailWaiters.get(run.id)?.forEach(wake=>wake());}}
+    if(key.startsWith('onboarding:target:'))this.loginChallenges.clear('setup:'+key.slice('onboarding:target:'.length));
     this.ctx.storage.sql.exec(
       "INSERT INTO native_records(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
       key,
@@ -378,6 +394,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.track(work);
   }
   private async recover() {
+    this.loginChallenges.expire();
+    this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key LIKE 'target-auth:%' OR (key LIKE 'browser-auth:%' AND json_extract(value,'$.expiresAt')<=?)",Date.now());
     if (recoveryPending(this.get<RuntimeRecovery>("platform:recovery"))) return;
     for (const receipt of this.list<Publication | null>("publication:"))
       if (receipt) await this.projectAccepted(receipt.runId);
@@ -445,7 +463,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const draft=run?this.onboarding.draft(run.id):undefined;
     const defaults=this.list<{targetId:string;draft:SetupDraft}>("onboarding:defaults:");
     let modelsTested=false,apiTested=false;
-    if(run){try{await this.onboarding.verifyModelProfile(run.id);modelsTested=true;}catch{}try{this.onboarding.requireAPIProof(run.id,run.target!);apiTested=true;}catch{}}
+    if(run){try{await this.onboarding.verifyModelProfile(run.id);modelsTested=true;}catch{}try{await this.onboarding.verifyAPIProof(run.id,run.target!);apiTested=true;}catch{}}
     return {targets:this.onboarding.targets(),credentials:this.onboarding.credentials(),defaults,definitions:this.list<TargetDefinition>("onboarding:definition:"),checks:this.list("onboarding:target-proof:"),
       sourceImports:this.list<ImportReceipt>("onboarding:source-import:").filter(r=>r.status==="pending").map(({requestId,targetId,revision,repo,url,branch,replaceId})=>({requestId,targetId,revision,repo,url,...(branch?{branch}:{}),...(replaceId?{replaceId}:{})})),
       ...(run ? {run:publicRun(run),draft,definition:run.definition??(run.target?.kind==="api"?this.definitions.current(run.target.id):undefined),discovery:this.jobs(run.id).filter(j=>j.execution).map(this.presentJob),
@@ -458,6 +476,60 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.assertAdmissionOpen();
     try {
       switch(action){
+        case 'bounty.status':return {connections:await this.bountyConnections.list(),email:{cloudflare:{configured:!!this.env.PENTCLOUD_VERIFICATION_EMAIL,address:this.env.PENTCLOUD_VERIFICATION_EMAIL},agentmail:{configured:!!agentMailAddress(this.env),address:agentMailAddress(this.env)}}};
+        case 'bounty.check':return this.bountyConnections.check(String(value.platform) as BountyPlatform);
+        case 'bounty.email.check':{
+          if(value.provider!=='agentmail')throw Error('400: Verify Cloudflare delivery with a forwarding confirmation');
+          const now=Date.now();await readAgentMail(this.env,{createdAt:now,expiresAt:now+10000,sender:''});return {connected:true};
+        }
+        case "scope.names":{
+          const ready=(await this.bountyConnections.list()).filter(c=>c.status==='ready').map(c=>c.platform);if(!ready.length)throw Error('409: Connect a platform in Dashboard → Bug bounty first');
+          const result=await this.scopeCatalog.names();return {...result,programs:result.programs.filter(p=>ready.includes(p.platform as BountyPlatform))};
+        }
+        case "scope.search":{
+          const ready=(await this.bountyConnections.list()).filter(c=>c.status==='ready').map(c=>c.platform);if(!ready.length)throw Error('409: Connect a platform in Dashboard → Bug bounty first');
+          if(value.platform)await this.bountyConnections.require(String(value.platform));
+          return this.scopeCatalog.search(String(value.query??""),typeof value.platform==="string"&&value.platform?value.platform:undefined,ready);
+        }
+        case "scope.preview":await this.bountyConnections.require(String(value.programId).split(':')[0]!);return await this.scopeCatalog.preview(String(value.programId));
+        case "scope.import":{
+          const id=identifier(value.id),target=this.onboarding.target(id);if(target.revision!==revision||target.archived)throw new Error("409: Target changed or archived; reload");
+          await this.bountyConnections.require(String(value.programId).split(':')[0]!);
+          const program=await this.scopeCatalog.import(String(value.programId),target.url);this.assertAdmissionOpen();
+          await this.bountyConnections.require(program.platform);
+          return this.onboarding.saveTargetAccess(id,revision!,target.access??{headers:[]},actor,program);
+        }
+        case "scope.detach":return this.onboarding.saveTargetAccess(identifier(value.id),Number(value.revision),this.onboarding.target(identifier(value.id)).access??{headers:[]},actor,null);
+        case "access.save":return this.onboarding.saveTargetAccess(identifier(value.id),Number(value.revision),value.access,actor);
+        case "access.check":return this.onboarding.checkTargetSecret(identifier(value.id),Number(value.revision),String(value.kind),actor);
+        case 'scope.check':{
+          const target=this.onboarding.target(identifier(value.id));if(target.revision!==revision||target.archived)throw Error('409: Target changed; reload');
+          const checked=await this.programAccess(target);const current=this.onboarding.target(target.id);if(current.revision!==revision)throw Error('409: Target changed during program check');
+          return {connected:true,platform:checked?.platform,checkedAt:checked?.checkedAt,authenticated:!!checked};
+        }
+        case 'access.email.address':case 'access.email.setup':case 'access.email.status':{
+          const target=this.onboarding.target(identifier(value.id));if(target.revision!==revision||target.archived)throw Error('409: Target changed; reload');
+          const saved=target.access?.login?.verification,provider=action==='access.email.address'?(value.provider??(saved?.kind==='email'?saved.provider:undefined)??'cloudflare'):(saved?.kind==='email'?saved.provider??'cloudflare':'cloudflare');
+          if(provider!=='cloudflare'&&provider!=='agentmail')throw Error('400: Invalid email verification provider');
+          const available={cloudflare:!!this.env.PENTCLOUD_VERIFICATION_EMAIL,agentmail:!!agentMailAddress(this.env)};
+          if(!available[provider])return {configured:false,provider,available};
+          const address=provider==='agentmail'?agentMailAddress(this.env)!:await verificationAddress(this.env.PENTCLOUD_VERIFICATION_EMAIL!,target.id),key='setup:'+target.id,owner=canonical([target.id,target.revision,provider,address]);
+          if(action==='access.email.setup'){
+            if(target.access?.login?.verification?.kind!=='email')throw Error('409: Save email verification settings first');
+            this.loginChallenges.begin({key,owner,recipient:address,sender:'',targetURL:target.url,purpose:'setup',provider},crypto.randomUUID());
+            await this.scheduleVerificationExpiry();
+          }
+          if(provider==='agentmail'&&action!=='access.email.address')await this.pollAgentMail(key,owner);
+          const current=this.onboarding.target(target.id);if(current.revision!==target.revision||current.archived)throw Error('409: Target changed; reload');
+          const pending=this.loginChallenges.pending(key,owner),delivery=action==='access.email.status'?this.loginChallenges.peek(key,owner):undefined;
+          // Setup confirmation is visible only to the authenticated owner, never an agent tool.
+          return {configured:true,provider,available,address,status:delivery?'received':pending?'waiting':action==='access.email.status'?'expired':'idle',...(pending?{expiresAt:pending.expiresAt}:{}),...(action==='access.email.setup'?{ready:true}:{}),...(delivery?{received:true,from:delivery.from,code:delivery.code,excerpt:delivery.excerpt,links:delivery.links.filter(url=>{const h=new URL(url).hostname;return h==='mail.google.com'||h==='accounts.google.com'||h==='outlook.live.com'||h==='account.microsoft.com';})}:{received:false})};
+        }
+        case "access.clearlogin":{
+          const target=this.onboarding.target(identifier(value.id));if(target.revision!==revision)throw new Error("409: Target changed; reload");
+          for(const run of this.list<RunRecord>("run:"))if(run.target?.id===target.id)this.browserAuth.clear(run.id);
+          const prefix="target-auth:"+target.id+":";this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",prefix.length,prefix);return {cleared:true};
+        }
         case "source.list":return await this.sources.list(typeof value.cursor==="string"?value.cursor:undefined);
         case "source.attach":return await this.sources.attach(identifier(value.id),Number(value.revision),value.repo,value.branch,actor);
         case "source.refresh":return await this.sources.refresh(identifier(value.id),Number(value.revision),identifier(value.sourceId),actor);
@@ -472,11 +544,13 @@ export class Coordinator extends DurableObject<NativeEnv> {
             for(const key of ["onboarding:defaults:"+id,"onboarding:definition:"+id])this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key);
             await this.workspace.fs.rm("/target-definitions/"+id,{recursive:true,force:true});
             for(const prefix of ["onboarding:definition-version:"+id+":","material:target-definition:"+id+":"])this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",prefix.length,prefix);
+            for(const run of this.list<RunRecord>("run:"))if(run.target?.id===id)this.browserAuth.clear(run.id);
+            const authPrefix="target-auth:"+id+":";this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",authPrefix.length,authPrefix);
             this.collectCredentialVersions();
           }
           return result;
         }
-        case "target.check":return await this.onboarding.checkTarget(identifier(value.id),Number(value.revision),identifier(value.requestId),actor);
+        case "target.check":{await this.programAccess(this.onboarding.target(identifier(value.id)));return await this.onboarding.checkTarget(identifier(value.id),Number(value.revision),identifier(value.requestId),actor);}
         case "credential.save":{const result=this.onboarding.saveCredential(value as unknown as Parameters<OnboardingStore["saveCredential"]>[0],revision,actor);this.collectCredentialVersions();return result;}
         case "credential.revoke":return this.onboarding.revokeCredential(identifier(value.id),Number(value.revision),actor);
         case "discovery.acknowledge":{
@@ -612,10 +686,66 @@ export class Coordinator extends DurableObject<NativeEnv> {
     if(job.modelConfig.credentialFingerprint&&await digest(key)!==job.modelConfig.credentialFingerprint)throw new Error("409: Cloudflare model secret changed; test it and start a new run");
     return key;
   }
-  async apiCredential(id:string) {
+  async apiCredential(id:string):Promise<import("./api-access").APIAccess> {
     await this.assertActive(id);const run=this.run(this.job(id).runId);
     if(!run.target||run.target.kind!=="api")throw new Error("403: This run has no API target");
+    if(run.boundAPIAccess&&run.target.access?.api){const config=run.target.access.api,value=await readTargetSecret(this.env,config.binding);this.targetSecretRedactions.push(value);const credential=config.scheme==="bearer"?"Bearer "+value:value;if(!run.boundAPIFingerprint||await digest(credential)!==run.boundAPIFingerprint)throw new Error("409: Cloudflare API secret changed; test it and start a new run");await this.assertActive(id);return {targetURL:config.url,header:config.header,value:credential};}
     return run.apiAccess?this.onboarding.apiConfig(run.target,run.apiAccess):{targetURL:run.target.url};
+  }
+  private readonly browserAuth=new RunBrowserAuth({get:key=>this.get(key),put:(key,value)=>this.put(key,value),remove:key=>this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key)});
+  private readonly emailWaiters=new Map<string,Set<()=>void>>();
+  private readonly agentMailChecks=new Map<string,Promise<void>>();
+  private readonly loginChallenges=new LoginChallenges({get:key=>this.get(key),put:(key,value)=>this.put(key,value),remove:key=>this.ctx.storage.sql.exec('DELETE FROM native_records WHERE key=?',key),list:prefix=>this.ctx.storage.sql.exec<{key:string;value:string}>('SELECT key,value FROM native_records WHERE substr(key,1,?)=?',prefix.length,prefix).toArray().map(row=>({key:row.key,value:JSON.parse(row.value)}))});
+  async receiveVerificationEmail(delivery:VerificationDelivery){
+    return this.verificationReceived(this.loginChallenges.receive(delivery));
+  }
+  private async verificationReceived(accepted:boolean){if(accepted){await this.scheduleVerificationExpiry();for(const waiters of this.emailWaiters.values())for(const wake of waiters)wake();}return {accepted};}
+  private async scheduleVerificationExpiry(){const expiresAt=this.loginChallenges.nextExpiry();if(expiresAt===undefined)return;await this.start();await this.scheduler.set(new Date(expiresAt+1000),'expireVerification',{expiresAt},{idempotent:true});}
+  private async pollAgentMail(key:string,owner:string){
+    const pending=this.loginChallenges.pending(key,owner);if(!pending||pending.provider!=='agentmail'||pending.message)return;
+    const flightKey=canonical([key,owner,pending.operationId]),existing=this.agentMailChecks.get(flightKey);if(existing)return existing;
+    const check=(async()=>{const deliveries=await readAgentMail(this.env,pending);const current=this.loginChallenges.pending(key,owner);if(!current||current.operationId!==pending.operationId||current.createdAt!==pending.createdAt)return;
+      let accepted=false;for(const delivery of deliveries.reverse())accepted=this.loginChallenges.receive(delivery,{key,owner,operationId:pending.operationId})||accepted;
+      await this.verificationReceived(accepted);
+    })();this.agentMailChecks.set(flightKey,check);try{await check;}finally{if(this.agentMailChecks.get(flightKey)===check)this.agentMailChecks.delete(flightKey);}
+  }
+  private async emailScope(id:string){
+    await this.assertActive(id);const run=this.run(this.job(id).runId),target=run.target,verification=target?.access?.login?.verification;
+    if(!target||verification?.kind!=='email')throw Error('409: Configure email verification on this target');
+    const provider=verification.provider??'cloudflare';let recipient:string,account:string|undefined;
+    if(provider==='agentmail'){
+      recipient=agentMailAddress(this.env)??'';if(!recipient)throw Error('409: Configure the AgentMail inbox and key binding in Cloudflare');
+      account=(await readTargetSecret(this.env,target.access!.login!.usernameBinding)).trim().toLowerCase();this.targetSecretRedactions.push(account);
+      if(!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(account))throw Error('409: AgentMail needs an email address in the target username secret; use Cloudflare receiving for other usernames');
+    }else{if(!this.env.PENTCLOUD_VERIFICATION_EMAIL)throw Error('409: Configure Cloudflare email receiving');recipient=await verificationAddress(this.env.PENTCLOUD_VERIFICATION_EMAIL,target.id);}
+    await this.assertActive(id);
+    return {key:run.id,owner:await digest([run.id,target.id,target.url,target.access?.login,account]),recipient,sender:verification.sender,targetURL:target.url,purpose:'login' as const,provider,...(account?{account}:{})};
+  }
+  async beginLoginEmail(id:string,operationId:string){const scope=await this.emailScope(id);this.loginChallenges.begin(scope,operationId);await this.scheduleVerificationExpiry();}
+  async loginEmail(id:string){
+    const scope=await this.emailScope(id);let message=this.loginChallenges.peek(scope.key,scope.owner);
+    const deadline=Date.now()+25000;
+    while(!message&&Date.now()<deadline){
+      if(scope.provider==='agentmail'){await this.pollAgentMail(scope.key,scope.owner);await this.assertActive(id);message=this.loginChallenges.peek(scope.key,scope.owner);if(message)break;}
+      let wake!:()=>void;const ready=new Promise<void>(resolve=>{wake=resolve;}),waiters=this.emailWaiters.get(scope.key)??new Set<()=>void>();waiters.add(wake);this.emailWaiters.set(scope.key,waiters);
+      const timer=setTimeout(wake,Math.min(deadline-Date.now(),scope.provider==='agentmail'?5000:25000));try{await ready;}finally{clearTimeout(timer);waiters.delete(wake);if(!waiters.size)this.emailWaiters.delete(scope.key);}
+      await this.assertActive(id);message=this.loginChallenges.peek(scope.key,scope.owner);
+    }
+    return message;
+  }
+  async consumeLoginEmail(id:string,messageId:string){const scope=await this.emailScope(id);this.loginChallenges.consume(scope.key,scope.owner,messageId);}
+  private async programAccess(target:SavedTarget){
+    const verification=target.access?.login?.verification;
+    if(verification?.kind==='email'&&!(verification.provider==='agentmail'?agentMailAddress(this.env):this.env.PENTCLOUD_VERIFICATION_EMAIL))throw Error('409: Configure the selected email receiver in Dashboard → Bug bounty first');
+    const id=target.access?.program?.id;if(!id)return undefined;const config=platformBinding(id);if(!config)throw Error('409: Unsupported program identity; refresh its catalog scope');
+    await this.bountyConnections.require(config.platform);
+    const token=await platformToken(this.env,config.binding);this.targetSecretRedactions.push(token);
+    return checkProgramAccess(id,{token,...(config.platform==='hackerone'?{username:this.env.PENTCLOUD_HACKERONE_USERNAME}:{})});
+  }
+  async browserState(id:string,state?:BrowserAuthState):Promise<BrowserAuthState|undefined>{
+    await this.assertActive(id);const run=this.run(this.job(id).runId),target=run.target;if(!target?.access?.login)return;
+    if(state){this.browserAuth.write(run.id,target,state);return;}
+    return this.browserAuth.read(run.id,target);
   }
   async activateAnalysis(id:string,expectedRevision:number,requestId:string,acknowledgeFailure=false,definitionVersion=0) {
     identifier(requestId,"analysis request id");await this.start();this.assertMutable(id);
@@ -630,12 +760,14 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const discoveries=this.jobs(id).filter(j=>j.execution);
     if(!discoveries.length)throw new Error("409: Initial discovery is missing");
     const draft=this.onboarding.draft(id);if(draft.revision!==expectedRevision)throw new Error("409: Setup changed; reload");
-    const modelsByRole=await this.onboarding.verifyModelProfile(id);this.onboarding.requireAPIProof(id,run.target);
+    const modelsByRole=await this.onboarding.verifyModelProfile(id),apiProof=await this.onboarding.verifyAPIProof(id,run.target);
     const definition=run.target.kind==="api"?this.definitions.current(run.target.id):undefined;
     if((definition?.version??0)!==definitionVersion)throw new Error("409: API definition changed; reload and review it before analysis");
     const definitionUploads:string[]=[];
     if(definition){this.definitionBusy++;try{definitionUploads.push(await this.definitions.copyIntoRun(definition,id,run.authorization?.actor??"operator"));}finally{this.definitionBusy--;}}
     const next:RunRecord={...run,phase:"primary",status:"created",modelsByRole,
+      boundAPIAccess:!draft.publicAPI&&!!run.target.access?.api,
+      ...(apiProof?.credentialFingerprint?{boundAPIFingerprint:apiProof.credentialFingerprint}:{}),
       ...(definition?{definition}:{}),
       settingsRevision:await digest({settings:run.settings,modelsByRole,target:run.target,definition,apiAccess:draft.publicAPI?null:draft.apiCredential}),
       ...(!draft.publicAPI&&draft.apiCredential?{apiAccess:draft.apiCredential}:{}),
@@ -719,7 +851,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       evidence: this.jobs(run.id).filter(j=>j.evidence).map(j=>({job_id:j.id,checkpoint:j.evidence,files:j.evidenceFiles??[],unavailable:j.evidenceUnavailable??[]})),
       enabledTools: supportedOptionalTools(job.role),
       browserAllowedURLs: run.target ? [run.target.url] : this.browserScopes(run.task),
-      ...(run.target ? {target:run.target, networkReach:"Target is guidance, not universal host confinement", apiAuth:run.apiAccess ? "Use pentcloud_api_request for authenticated API calls. Most stock scanners do not accept API authorization headers." : "Unauthenticated coverage"} : {}),
+      ...(run.target ? {target:{id:run.target.id,name:run.target.name,kind:run.target.kind,url:run.target.url,revision:run.target.revision,objective:run.target.objective,exclusions:run.target.exclusions},networkReach:targetAccessBrief(run.target),...(run.programAccess?{programRules:run.programAccess.policy}:{}),apiAuth:run.apiAccess||run.target.access?.api ? "Use pentcloud_api_request for authenticated API calls. Browser/curl requests can assess anonymous coverage." : "Unauthenticated coverage"} : {}),
       run_id: run.id,
       ...(run.materials ? {materials: run.materials} : {}),
       ...(run.target?.sources?.length?{sourceContexts:run.target.sources}:{}),
@@ -761,6 +893,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
         createdAt,
       } = job;
       const input: AttemptInput = {
+        ...(job.targetConfig ? {targetConfig:job.targetConfig} : {}),
         ...(job.findingsVersion ? {findingsVersion:job.findingsVersion} : {}),
         ...(execution ? {execution} : {}),
         ...(modelConfig ? {modelConfig} : {}),
@@ -955,7 +1088,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   }
   private safe(value: string) {
     let text = value;
-    for (const secret of [...knownRuntimeSecrets(this.env), ...plainModelSecretValues(this.env), ...this.onboarding.secretValues()])
+    for (const secret of [...knownRuntimeSecrets(this.env), ...plainModelSecretValues(this.env), ...this.onboarding.secretValues(),...this.targetSecretRedactions])
       if (secret) text = text.split(secret).join("[redacted]");
     return text.slice(0, 2000);
   }
@@ -1226,6 +1359,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const cleared=await this.env.TOOLBOX.clear();
     if(!("state" in cleared) || cleared.state!=="stopped")throw new Error("503: scanner scratch cleanup is pending; retry deletion");
     for(const job of jobs){await this.queue.cancel(job.id);await this.attempt(job.id).purge(id);}
+    this.browserAuth.clear(id);
+    this.loginChallenges.clear(id);
     await this.workspace.artifacts.delete(run.repo);
     for(const root of ["/projects","/accepted","/uploads"])await this.workspace.fs.rm(`${root}/${id}`,{recursive:true,force:true});
     this.ctx.storage.transactionSync(()=>{
@@ -1604,6 +1739,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
     if (!input.target_id || !Number.isInteger(input.target_revision) || input.authorized !== true) throw new Error("400: Select a saved target, verify its address and confirm authorization");
     const addressProof=this.onboarding.requireTargetProof(input.target_id,input.target_revision!);
     const target=this.onboarding.target(input.target_id);
+    const programAccess=await this.programAccess(target);
+    if(this.onboarding.target(target.id).revision!==target.revision)throw Error('409: Target changed during program verification');
     if (outstanding(this.admissionJobs()) >= 3)
       throw new Error("429: queue full");
     const current = await this.settings();
@@ -1627,6 +1764,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       wave: 0,
       phase: "discovery",
       target,
+      ...(programAccess?{programAccess}:{}),
       authorization:{actor:input.actor??"operator",at:Date.now(),disclosureVersion:"2026-11-01"},
       maxDepth: 4,
       maxJobs: 48,
@@ -1670,7 +1808,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       assertAdmission(this.admissionJobs(), job.id, job.fingerprint);
       this.put("run:"+id, run);
       const defaults=this.get<{draft:SetupDraft}>("onboarding:defaults:"+target.id);
-      this.put("onboarding:setup:"+id,defaults?{...defaults.draft,revision:0,updatedBy:"target defaults"}:{revision:0,publicAPI:target.kind!=="api"||addressProof.classification!=="needs-auth",updatedBy:"system"});
+      this.put("onboarding:setup:"+id,defaults?{...defaults.draft,revision:0,updatedBy:"target defaults"}:{revision:0,publicAPI:target.kind!=="api"||!target.access?.api&&addressProof.classification!=="needs-auth",updatedBy:"system"});
       this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?","project:owned:"+id);
       this.enqueue(job, pushes);
       admitted = true;
@@ -1710,6 +1848,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       repo: run.repo,
       remote: run.remote,
       settingsRevision: run.settingsRevision,
+      ...(run.target?.access?{targetConfig:run.target}:{}),
       settings: run.modelsByRole ? {...settings,model:run.modelsByRole[role].id,reasoningEffort:"default"} : settings,
       ...(run.modelsByRole ? {modelConfig:run.modelsByRole[role]} : {}),
       ...(revisionOf?.parentJobId

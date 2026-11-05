@@ -49,7 +49,12 @@ and secret entry directly in the provider's browser or private terminal prompt.
 Keep keys and installation state out of chat and Git. Configure my own Access
 policy and Cloudflare model-secret bindings, then show the app URL and any
 setup steps I still need to complete. Do not start a scan or paid model test
-without asking me. Use docs/operations/debugging.md if setup fails.
+without asking me. If I need target login or API credentials, guide me through
+PENTCLOUD_TARGET_ secret bindings in docs/cloudflare-setup.md; save only their
+names on my target. Configure and check researcher connections in Dashboard →
+Bug bounty before selecting a program in Targets. Keep target login separate. Help me claim permitted test credentials once and configure
+optional authenticator or email verification using that setup guide. Preserve
+existing MX/mailbox services. Use docs/operations/debugging.md if setup fails.
 ```
 
 </details>
@@ -62,7 +67,8 @@ For errors: [Setup and runtime debugging](docs/operations/debugging.md).
 ![PentCloud: a website or API leads to specialist agent conversations, captured evidence and findings, using Cloudflare-native execution and separate OpenCode sessions.](media/overview.light.png)
 
 1. **Save your target.** Add a website or API, confirm authorization and verify the
-   address. The target stays available for later runs.
+   address. Optionally import a public bounty program and add target-bound
+   headers/login references. The target stays available for later runs.
 2. **Prepare while the toolbox starts.** Configure OpenCode models by agent role,
    attach documents/source/configs and add optional source context. Open the primary
    conversation once setup passes; preparation stays read-only while discovery runs.
