@@ -8,10 +8,14 @@ defaults while retained run snapshots and Git evidence remain.
 
 ## Bounty scope and target login
 
-**Dashboard → Bug bounty** contains the supported HackerOne and Intigriti
+**Dashboard → Bug bounty** contains HackerOne, Intigriti, Bugcrowd and YesWeHack
 researcher connections and optional email receivers. Configure native Cloudflare
 bindings and click the platform’s connection check. A successful read-only check
-unlocks that platform for 24 hours; changed bindings require a new check. A
+unlocks that platform for up to 24 hours; YesWeHack JWT expiry can shorten that
+window. Changed bindings require a new check. Bugcrowd requires Hacker API access,
+verified identity and a token with `read:engagement_list`. YesWeHack uses a
+researcher JWT; renew expired tokens in Cloudflare. See
+[platform secret setup](../cloudflare-setup.md#program-accounts-and-verification). A
 platform connection is separate from the test account used on a target.
 
 In Targets, **Find a bounty program** opens a searchable, scrollable list from the public
@@ -23,6 +27,8 @@ automatically reachable. Non-web assets and ambiguous network exclusions can
 require manual review. Catalog data is not authorization: check the program's
 official rules, permitted methods, rate limits and account requirements yourself.
 Refresh its saved scope before subsequent hunts; existing runs keep their snapshot.
+Bugcrowd’s Hacker API does not provide the full published brief; review it on
+Bugcrowd as well as the scope notes shown by PentCloud.
 
 Under **Network and login settings**, enable optional headers, browser login or
 API authentication. Copy the generated names into Cloudflare Worker secrets or

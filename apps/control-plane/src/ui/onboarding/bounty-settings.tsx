@@ -10,6 +10,7 @@ export function BountySettings(){
  const [data,setData]=useState<BountyStatus>(),[targets,setTargets]=useState<SavedTarget[]>([]),[error,setError]=useState<string>(),[loading,setLoading]=useState(false);
  const load=async()=>{setLoading(true);setError(undefined);try{const [status,saved]=await Promise.all([action<BountyStatus>('bounty.status',{}),snapshot()]);setData(status);setTargets(saved.targets);}catch(e){setError(e instanceof Error?e.message:'Could not load connections');}finally{setLoading(false);}};
  useEffect(()=>{void load();},[]);
+ useEffect(()=>{const next=data?.connections.filter(c=>c.status==='ready'&&c.expiresAt!==undefined).map(c=>c.expiresAt!);if(!next?.length)return;const timer=setTimeout(()=>setData(value=>value&&({...value,connections:value.connections.map(c=>c.expiresAt!==undefined&&c.expiresAt<=Date.now()?{...c,status:'unchecked'}:c)})),Math.max(0,Math.min(...next)-Date.now()));return()=>clearTimeout(timer);},[data?.connections]);
  const checked=(connection:BountyConnection)=>setData(prior=>prior&&({...prior,connections:prior.connections.map(c=>c.platform===connection.platform?connection:c)}));
  return <section className="grid max-w-4xl gap-6 py-4" aria-label="Bug bounty settings">
   <div className="grid gap-1.5"><Text as="h2" variant="heading">Bug bounty</Text><Text>Connect a platform to choose its programs in Targets. Credentials stay in Cloudflare.</Text></div>
@@ -27,11 +28,11 @@ export function BountySettings(){
 function PlatformConnection({platform,connection,onChecked}:{platform:typeof BOUNTY_PLATFORMS[number];connection:BountyConnection;onChecked:(value:BountyConnection)=>void}){
  const [busy,setBusy]=useState(false),[error,setError]=useState<string>();
  const check=async()=>{setBusy(true);setError(undefined);try{onChecked(await action<BountyConnection>('bounty.check',{platform:platform.id}));}catch(e){onChecked({...connection,status:'unchecked'});setError(e instanceof Error?e.message:'Connection check failed');}finally{setBusy(false);}};
- return <Surface className="grid content-start gap-4 rounded-lg px-5 py-4 ring ring-kumo-line">
+ return <Surface role="region" aria-label={platform.name} className="grid content-start gap-4 rounded-lg px-5 py-4 ring ring-kumo-line">
   <div className="flex flex-wrap items-center justify-between gap-2"><Text as="h3" variant="heading">{platform.name}</Text><Badge className="text-base" variant="secondary">{connection.status==='ready'?'Connected':connection.status==='missing'?'Not configured':'Check needed'}</Badge></div>
-  <div className="grid gap-1.5"><Text>API token secret</Text><InlineCopyText variant="body" truncate={false} className="break-all text-left font-mono text-base">{platform.token}</InlineCopyText></div>
+  <div className="grid gap-1.5"><Text>{'tokenLabel' in platform?platform.tokenLabel:'API token secret'}</Text><InlineCopyText variant="body" truncate={false} className="break-all text-left font-mono text-base">{platform.token}</InlineCopyText></div>
   {'username' in platform&&<div className="grid gap-1.5"><Text>Username variable</Text><InlineCopyText variant="body" truncate={false} className="break-all text-left font-mono text-base">{platform.username}</InlineCopyText></div>}
-  <Collapsible><Collapsible.DefaultTrigger>Setup instructions</Collapsible.DefaultTrigger><Collapsible.DefaultPanel><Text>Ask your setup assistant to add these bindings to the app Worker. Use a researcher API token. Enter its value through Cloudflare’s private secret prompt.</Text></Collapsible.DefaultPanel></Collapsible>
+  <Collapsible><Collapsible.DefaultTrigger>Setup instructions</Collapsible.DefaultTrigger><Collapsible.DefaultPanel><div className="grid gap-2"><Text>Ask your setup assistant to add these bindings to the app Worker. Enter secret values through Cloudflare’s private secret prompt.</Text>{'setup' in platform&&<Text>{platform.setup}</Text>}{'docs' in platform&&<ExternalLink href={platform.docs}>Platform setup guide</ExternalLink>}</div></Collapsible.DefaultPanel></Collapsible>
   {error&&<Banner variant="error" description={<Text>{error}</Text>}/>}
   {connection.checkedAt&&<Text variant="secondary">Last successful check: {new Date(connection.checkedAt).toLocaleString()}</Text>}
   <div><Button variant="secondary" loading={busy} onClick={()=>void check()}>Check {platform.name} connection</Button></div>

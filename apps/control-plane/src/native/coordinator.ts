@@ -737,7 +737,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   private async programAccess(target:SavedTarget){
     const verification=target.access?.login?.verification;
     if(verification?.kind==='email'&&!(verification.provider==='agentmail'?agentMailAddress(this.env):this.env.PENTCLOUD_VERIFICATION_EMAIL))throw Error('409: Configure the selected email receiver in Dashboard → Bug bounty first');
-    const id=target.access?.program?.id;if(!id)return undefined;const config=platformBinding(id);if(!config)return undefined;
+    const id=target.access?.program?.id;if(!id)return undefined;const config=platformBinding(id);if(!config)throw Error('409: Unsupported program identity; refresh its catalog scope');
     await this.bountyConnections.require(config.platform);
     const token=await platformToken(this.env,config.binding);this.targetSecretRedactions.push(token);
     return checkProgramAccess(id,{token,...(config.platform==='hackerone'?{username:this.env.PENTCLOUD_HACKERONE_USERNAME}:{})});
