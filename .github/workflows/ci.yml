@@ -99,24 +99,13 @@ jobs:
       - name: Prepare trial 1
         run: python3 benchmarks/recon/runner.py prepare 1
       - name: HTTP facts 1
-        uses: projectdiscovery/httpx-action@db5793ffd63dced3b55fbe8b305b9a532b22635b
         env:
           BENCH_TRIAL: '1'
-        with:
-          list: benchmark-data/targets.txt
-          output: benchmark-data/httpx-1.jsonl
-          json: true
-          random-ua: false
-          flags: '-duc -silent -sc -title -server -td -nfs -rl 2 -t 1 -timeout 10 -H User-Agent:PentCloudReconBenchmark'
+        run: /home/runner/go/bin/httpx -l benchmark-data/targets.txt -o benchmark-data/httpx-1.jsonl -j -duc -silent -sc -title -server -td -nfs -rl 2 -t 1 -timeout 10 -H User-Agent:PentCloudReconBenchmark
       - name: DNS facts 1
-        uses: projectdiscovery/dnsx-action@89dd6b81f60fd32b9a4ad84e3d8859dd75d73152
         env:
           BENCH_TRIAL: '1'
-        with:
-          list: benchmark-data/hosts.txt
-          output: benchmark-data/dnsx-1.jsonl
-          json: true
-          flags: '-duc -silent -rl 2 -t 1'
+        run: /home/runner/go/bin/dnsx -l benchmark-data/hosts.txt -o benchmark-data/dnsx-1.jsonl -j -duc -silent -rl 2 -t 1
       - name: Crawl and record trial 1
         env:
           BENCH_TRIAL: '1'
@@ -126,24 +115,13 @@ jobs:
       - name: Prepare trial 2
         run: python3 benchmarks/recon/runner.py prepare 2
       - name: HTTP facts 2
-        uses: projectdiscovery/httpx-action@db5793ffd63dced3b55fbe8b305b9a532b22635b
         env:
           BENCH_TRIAL: '2'
-        with:
-          list: benchmark-data/targets.txt
-          output: benchmark-data/httpx-2.jsonl
-          json: true
-          random-ua: false
-          flags: '-duc -silent -sc -title -server -td -nfs -rl 2 -t 1 -timeout 10 -H User-Agent:PentCloudReconBenchmark'
+        run: /home/runner/go/bin/httpx -l benchmark-data/targets.txt -o benchmark-data/httpx-2.jsonl -j -duc -silent -sc -title -server -td -nfs -rl 2 -t 1 -timeout 10 -H User-Agent:PentCloudReconBenchmark
       - name: DNS facts 2
-        uses: projectdiscovery/dnsx-action@89dd6b81f60fd32b9a4ad84e3d8859dd75d73152
         env:
           BENCH_TRIAL: '2'
-        with:
-          list: benchmark-data/hosts.txt
-          output: benchmark-data/dnsx-2.jsonl
-          json: true
-          flags: '-duc -silent -rl 2 -t 1'
+        run: /home/runner/go/bin/dnsx -l benchmark-data/hosts.txt -o benchmark-data/dnsx-2.jsonl -j -duc -silent -rl 2 -t 1
       - name: Crawl and record trial 2
         env:
           BENCH_TRIAL: '2'
@@ -153,24 +131,13 @@ jobs:
       - name: Prepare trial 3
         run: python3 benchmarks/recon/runner.py prepare 3
       - name: HTTP facts 3
-        uses: projectdiscovery/httpx-action@db5793ffd63dced3b55fbe8b305b9a532b22635b
         env:
           BENCH_TRIAL: '3'
-        with:
-          list: benchmark-data/targets.txt
-          output: benchmark-data/httpx-3.jsonl
-          json: true
-          random-ua: false
-          flags: '-duc -silent -sc -title -server -td -nfs -rl 2 -t 1 -timeout 10 -H User-Agent:PentCloudReconBenchmark'
+        run: /home/runner/go/bin/httpx -l benchmark-data/targets.txt -o benchmark-data/httpx-3.jsonl -j -duc -silent -sc -title -server -td -nfs -rl 2 -t 1 -timeout 10 -H User-Agent:PentCloudReconBenchmark
       - name: DNS facts 3
-        uses: projectdiscovery/dnsx-action@89dd6b81f60fd32b9a4ad84e3d8859dd75d73152
         env:
           BENCH_TRIAL: '3'
-        with:
-          list: benchmark-data/hosts.txt
-          output: benchmark-data/dnsx-3.jsonl
-          json: true
-          flags: '-duc -silent -rl 2 -t 1'
+        run: /home/runner/go/bin/dnsx -l benchmark-data/hosts.txt -o benchmark-data/dnsx-3.jsonl -j -duc -silent -rl 2 -t 1
       - name: Crawl and record trial 3
         env:
           BENCH_TRIAL: '3'
@@ -181,14 +148,9 @@ jobs:
         run: python3 benchmarks/recon/runner.py domain
       - name: Optional passive discovery
         if: inputs.passive_domain != ''
-        uses: projectdiscovery/subfinder-action@7afb430ed1f85027a0596934e82b4db14dce4655
         env:
           BENCH_TRIAL: passive
-        with:
-          domain: ${{ inputs.passive_domain }}
-          output: benchmark-data/passive-subfinder.jsonl
-          json: true
-          flags: '-duc -silent -rl 1 -timeout 5 -max-time 1 -max-results 25'
+        run: /home/runner/go/bin/subfinder -d "$BENCH_PASSIVE_DOMAIN" -o benchmark-data/passive-subfinder.jsonl -json -duc -silent -rl 1 -timeout 5 -max-time 1 -max-results 25
       - name: Summarize benchmark
         run: python3 benchmarks/recon/runner.py finish
       - name: Wait for external Cloudflare benchmark measurements
