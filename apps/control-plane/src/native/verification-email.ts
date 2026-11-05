@@ -3,23 +3,23 @@ import type {VerificationDelivery} from './login-challenge';
 type Input={to:string;headers:Headers;raw:string|ReadableStream<Uint8Array>};
 /** Headers joins duplicates with commas. Only the first, prepended result is trusted.
  * Quoted strings and RFC comments cannot supply authentication method results. */
-function authenticated(value:string){
- if(value.length>16384)return false;let comment=0,quoted=false,escaped=false,first='';
+function authenticationResult(value:string){
+ if(value.length>16384)return;let comment=0,quoted=false,escaped=false,first='';
  for(const char of value){
   if(escaped){escaped=false;continue;}
   if(char==='\\'&&(comment||quoted)){escaped=true;continue;}
   if(comment){if(char==='(')comment++;else if(char===')')comment--;continue;}
   if(quoted){if(char==='"')quoted=false;continue;}
   if(char==='('){comment++;first+=' ';continue;}
-  if(char===')')return false;
+  if(char===')')return;
   if(char==='"'){quoted=true;first+=' ';continue;}
   if(char===',')break;first+=char;
  }
- return !comment&&!quoted&&!escaped&&/^mx\.cloudflare\.net\s*;/i.test(first)&&/(?:^|;)\s*dmarc=pass(?:\s|;|$)/i.test(first);
+ return !comment&&!quoted&&!escaped&&/^mx\.cloudflare\.net\s*;/i.test(first)?first:undefined;
 }
 /** Only Cloudflare-authenticated, bounded verification data is retained. */
 export async function readVerificationEmail(input:Input):Promise<VerificationDelivery|undefined>{
- if(!authenticated(input.headers.get('Authentication-Results')??''))return;
+ const auth=authenticationResult(input.headers.get('Authentication-Results')??'');if(!auth)return;
  let bytes:Uint8Array;
  if(typeof input.raw==='string'){bytes=new TextEncoder().encode(input.raw);if(bytes.length>256*1024)return;}
  else{
@@ -30,6 +30,8 @@ export async function readVerificationEmail(input:Input):Promise<VerificationDel
  try{
   const email=await PostalMime.parse(bytes),from=email.from?.address?.toLowerCase(),sentAt=Date.parse(email.date??'');
   if(!from||!Number.isFinite(sentAt)||!input.to||/[\r\n]/.test(input.to))return;
+  if(/(?:^|;)\s*dmarc=fail(?:\s|;|$)/i.test(auth))return;
+  if(!/(?:^|;)\s*dmarc=pass(?:\s|;|$)/i.test(auth)&&![...auth.matchAll(/(?:^|;)\s*dkim=pass(?:\s+([^;]*))?(?=;|$)/gi)].some(m=>m[1]?.match(/\bheader\.d=([a-z0-9.-]+)(?=\s|$)/i)?.[1]?.toLowerCase()===from.split('@')[1]))return;
   const content=verificationContent(email.text,email.html);if(!content)return;
   const id=email.messageId?.trim();if(!id||id.length>256||/[\r\n]/.test(id))return;
   return {id,to:input.to.toLowerCase(),from,sentAt,...content};

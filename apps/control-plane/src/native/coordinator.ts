@@ -680,14 +680,16 @@ export class Coordinator extends DurableObject<NativeEnv> {
   private readonly agentMailChecks=new Map<string,Promise<void>>();
   private readonly loginChallenges=new LoginChallenges({get:key=>this.get(key),put:(key,value)=>this.put(key,value),remove:key=>this.ctx.storage.sql.exec('DELETE FROM native_records WHERE key=?',key),list:prefix=>this.ctx.storage.sql.exec<{key:string;value:string}>('SELECT key,value FROM native_records WHERE substr(key,1,?)=?',prefix.length,prefix).toArray().map(row=>({key:row.key,value:JSON.parse(row.value)}))});
   async receiveVerificationEmail(delivery:VerificationDelivery){
-    const accepted=this.loginChallenges.receive(delivery);if(accepted){await this.scheduleVerificationExpiry();for(const waiters of this.emailWaiters.values())for(const wake of waiters)wake();}return {accepted};
+    return this.verificationReceived(this.loginChallenges.receive(delivery));
   }
+  private async verificationReceived(accepted:boolean){if(accepted){await this.scheduleVerificationExpiry();for(const waiters of this.emailWaiters.values())for(const wake of waiters)wake();}return {accepted};}
   private async scheduleVerificationExpiry(){await this.start();await this.scheduler.set(601,'expireVerification',undefined,{idempotent:true});}
   private async pollAgentMail(key:string,owner:string){
     const pending=this.loginChallenges.pending(key,owner);if(!pending||pending.provider!=='agentmail'||pending.message)return;
     const flightKey=canonical([key,owner,pending.operationId]),existing=this.agentMailChecks.get(flightKey);if(existing)return existing;
     const check=(async()=>{const deliveries=await readAgentMail(this.env,pending);const current=this.loginChallenges.pending(key,owner);if(!current||current.operationId!==pending.operationId||current.createdAt!==pending.createdAt)return;
-      for(const delivery of deliveries.reverse())await this.receiveVerificationEmail(delivery);
+      let accepted=false;for(const delivery of deliveries.reverse())accepted=this.loginChallenges.receive(delivery,{key,owner,operationId:pending.operationId})||accepted;
+      await this.verificationReceived(accepted);
     })();this.agentMailChecks.set(flightKey,check);try{await check;}finally{if(this.agentMailChecks.get(flightKey)===check)this.agentMailChecks.delete(flightKey);}
   }
   private async emailScope(id:string){

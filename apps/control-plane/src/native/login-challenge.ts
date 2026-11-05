@@ -20,10 +20,11 @@ export class LoginChallenges {
   if(this.io.list('verification:challenge:').length>=64&&!prior)throw Error('429: Too many pending verification requests');
   const entry:Entry={...scope,operationId,createdAt:Math.floor(this.now()/1000)*1000,expiresAt:this.now()+10*60*1000};this.io.put(this.key(scope.key),entry);return {expiresAt:entry.expiresAt};
  }
- receive(message:VerificationDelivery){
+ receive(message:VerificationDelivery,scope?:{key:string;owner:string;operationId:string}){
   this.expire();let delivered=false;
   if(!Number.isFinite(message.sentAt)||message.sentAt>this.now()+60000||!message.id||message.id.length>256)return false;
   for(const row of this.io.list('verification:challenge:')){
+   if(scope&&(row.key!==this.key(scope.key)||(row.value as Entry).owner!==scope.owner||(row.value as Entry).operationId!==scope.operationId))continue;
    const entry=row.value as Entry;if((entry.provider??'cloudflare')!==(message.provider??'cloudflare')||entry.account!==message.account||entry.recipient.toLowerCase()!==message.to.toLowerCase()||message.sentAt<entry.createdAt)continue;
    const from=message.from.toLowerCase(),domain=from.split('@')[1],sender=entry.sender.toLowerCase();
    if(sender.includes('@')?sender!==from:sender?domain!==sender&&!domain?.endsWith('.'+sender):entry.purpose!=='setup')continue;

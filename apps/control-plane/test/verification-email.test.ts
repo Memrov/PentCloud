@@ -19,3 +19,8 @@ it('trusts only the first authentication header, ignoring comment and version sp
  expect(await readVerificationEmail({to:'codes+abc@auth.example',headers:new Headers({'Authentication-Results':'mx.cloudflare.net; dkim=fail (ignored; dmarc=pass); dmarc=fail'}),raw:raw('Your code is 384217')})).toBeUndefined();
  expect((await readVerificationEmail({to:'codes+abc@auth.example',headers:new Headers({'Authentication-Results':'mx.cloudflare.net; dkim=pass (valid, signed); dmarc=pass header.from=owned.example, attacker.test 1; dmarc=fail'}),raw:raw('Your code is 384217')}))?.code).toBe('384217');
 });
+it('accepts Cloudflare-verified aligned DKIM when the sender has no DMARC policy',async()=>{
+ const auth='mx.cloudflare.net; dkim=pass header.d=owned.example; dmarc=none header.from=owned.example';
+ expect((await readVerificationEmail({to:'codes+abc@auth.example',headers:new Headers({'Authentication-Results':auth}),raw:raw('Your code is 384217')}))?.code).toBe('384217');
+ for(const invalid of [auth.replace('header.d=owned.example','header.d=other.example'),auth.replace('dmarc=none','dmarc=fail'),auth.replace('dkim=pass','dkim=fail (dkim=pass header.d=owned.example)')])expect(await readVerificationEmail({to:'codes+abc@auth.example',headers:new Headers({'Authentication-Results':invalid}),raw:raw('Your code is 384217')})).toBeUndefined();
+});

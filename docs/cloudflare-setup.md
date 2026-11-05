@@ -169,7 +169,8 @@ PentCloud makes bounded, read-only checks while verification is pending, never
 sends mail or downloads attachments, and does not delete mail from AgentMail.
 Manage provider-side retention separately from PentCloud’s expiring challenges.
 
-PentCloud accepts authenticated mail up to 256 KiB, extracts one unambiguous code
+PentCloud accepts authenticated mail (passing DMARC or a verified DKIM signature
+matching the sender domain) up to 256 KiB, extracts one unambiguous code
 or same-target HTTPS verification link and retains pending challenges for at most
 ten minutes. It stores no full inbox, message bodies or attachments. A second run
 must wait if the same target account already has a pending email login. Some forwarding

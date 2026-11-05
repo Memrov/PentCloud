@@ -34,3 +34,11 @@ it('isolates providers and accounts in a shared inbox and exposes only a live pe
  expect(()=>store.begin({...shared,key:'three',owner:'three'},'fill')).toThrow(/pending/);
  advance(600000);expect(store.pending(scope.key,owner)).toBeUndefined();
 });
+it('refuses a fetched batch after its setup owner or operation is replaced in the same second',()=>{
+ const {store}=fixture(),setup={...scope,purpose:'setup' as const,sender:'',provider:'agentmail' as const};
+ store.begin(setup,'operation-one');const delivery={...message,provider:'agentmail' as const};
+ expect(store.receive(delivery,{key:scope.key,owner,operationId:'operation-one'})).toBe(true);
+ store.clear(scope.key);store.begin({...setup,key:'target-two',owner:'target-two'},'operation-two');
+ expect(store.receive({...delivery,id:'message-two'},{key:scope.key,owner,operationId:'operation-one'})).toBe(false);expect(store.peek('target-two','target-two')).toBeUndefined();
+ store.clear('target-two');store.begin(setup,'operation-new');expect(store.receive({...delivery,id:'message-three'},{key:scope.key,owner,operationId:'operation-one'})).toBe(false);
+});

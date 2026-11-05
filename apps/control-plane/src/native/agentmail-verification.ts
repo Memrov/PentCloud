@@ -10,8 +10,8 @@ function senderMatches(from:string,sender:string){const domain=from.split('@')[1
 function recipientMatches(m:Record<string,any>,account?:string){
  if(!account)return true;
  const originalTo=Object.entries(m.headers??{}).find(([k])=>k.toLowerCase()==='to')?.[1];
- const recipients=[...(Array.isArray(m.to)?m.to:[]),...(typeof originalTo==='string'?[originalTo]:[])].flatMap(v=>typeof v==='string'?addresses(v):[]);
- return recipients.includes(account.toLowerCase());
+ const recipients=(typeof originalTo==='string'?[originalTo]:Array.isArray(m.to)?m.to:[]).flatMap(v=>typeof v==='string'?addresses(v):[]);
+ return recipients.length===1&&recipients[0]===account.toLowerCase();
 }
 async function boundedJSON(response:Response){
  if(!response.ok||response.redirected||!response.body){await response.body?.cancel();throw Error('unavailable');}
@@ -38,7 +38,8 @@ export async function readAgentMail(env:Env,window:Window,options:{fetcher?:type
    if(now()>=window.expiresAt)break;
    const m=await get(prefix+'/'+encodeURIComponent(candidate.message_id));
    const froms=addresses(String(m.from??'')),from=froms[0],auth=m.authentication_results;
-   if(m.inbox_id!==inbox||m.message_id!==candidate.message_id||m.message_id.length>256||froms.length!==1||!from||!senderMatches(from,window.sender)||auth?.dmarc!=='pass'||auth.dmarc_domain?.toLowerCase()!==from.split('@')[1]||!Array.isArray(m.labels)||!m.labels.includes('received')||m.labels.some((v:unknown)=>typeof v==='string'&&/spam|blocked|unauthenticated|trash/i.test(v))||!Number.isFinite(m.size)||m.size>256*1024)continue;
+   const domain=from?.split('@')[1],authenticated=auth?.dmarc!=='fail'&&(auth?.dmarc==='pass'&&auth.dmarc_domain?.toLowerCase()===domain||auth?.dkim==='pass'&&auth.dkim_domain?.toLowerCase()===domain);
+   if(m.inbox_id!==inbox||m.message_id!==candidate.message_id||m.message_id.length>256||froms.length!==1||!from||!senderMatches(from,window.sender)||!authenticated||!Array.isArray(m.labels)||!m.labels.includes('received')||m.labels.some((v:unknown)=>typeof v==='string'&&/spam|blocked|unauthenticated|trash/i.test(v))||!Number.isFinite(m.size)||m.size>256*1024)continue;
    const sentAt=Date.parse(m.timestamp),receivedAt=Date.parse(m.created_at);if(!Number.isFinite(sentAt)||!Number.isFinite(receivedAt)||sentAt<window.createdAt||receivedAt<window.createdAt||sentAt>now()+60000||receivedAt>now()+60000)continue;
    if(!recipientMatches(m,window.account)||!m.message_id||/[\r\n]/.test(m.message_id)||m.size<0)continue;
    if(m.text!==undefined&&typeof m.text!=='string'||m.html!==undefined&&typeof m.html!=='string')continue;
