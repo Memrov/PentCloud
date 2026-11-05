@@ -67,6 +67,37 @@ allowance or privacy restriction needs its own correction. Do not bypass it by
 switching billing routes or enabling Extra Usage. Target API credentials retain
 their existing separate setup flow.
 
+## Target login and API secrets
+
+Create optional assessment credentials on the **app Worker**, using names that
+start with `PENTCLOUD_TARGET_` followed by uppercase letters, numbers or underscores.
+Keep each target's credentials separate from OpenCode and account-administration
+credentials. In Dashboard, add encrypted Worker secrets such as
+`PENTCLOUD_TARGET_DEMO_USERNAME`, `PENTCLOUD_TARGET_DEMO_PASSWORD` and
+`PENTCLOUD_TARGET_DEMO_API_KEY`. Existing Secrets Store `.get()` bindings with
+these names also work; no new store or additional service is required.
+
+The installed Wrangler can collect each value in its private terminal prompt:
+
+```sh
+npm exec --workspace @pentagi-artifacts/control-plane -- wrangler secret put PENTCLOUD_TARGET_DEMO_USERNAME --config /private/instance-state/app.wrangler.json
+npm exec --workspace @pentagi-artifacts/control-plane -- wrangler secret put PENTCLOUD_TARGET_DEMO_PASSWORD --config /private/instance-state/app.wrangler.json
+npm exec --workspace @pentagi-artifacts/control-plane -- wrangler secret put PENTCLOUD_TARGET_DEMO_API_KEY --config /private/instance-state/app.wrangler.json
+```
+
+Use only the needed secrets. Enter their **names**, login URL and API header
+format in **Targets → Network and login settings**. No credential values belong
+in chat, researcher headers, source or uploaded context. The optional API binding
+uses the existing protected read-only endpoint test before authenticated analysis;
+it is not automatically forwarded to every browser/scanner request. Existing
+application-managed API credentials continue to work.
+
+Setup assistants should guide the operator through native Cloudflare secret
+entry, verify binding names without reading values back, then confirm the saved
+target's address and credential audience. Never request an account API token as
+a target credential. Credentials on a saved target are reused by future runs;
+run snapshots preserve their selected references.
+
 ## Confirm setup
 
 Open the protected app and configure models for the desired roles. Catalog

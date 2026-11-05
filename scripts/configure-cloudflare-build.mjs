@@ -52,6 +52,8 @@ export function validateBuildConfig(kind, value, template, expectedName, install
     }
     for (const key of ['browser', 'ai']) if (config[key]?.binding !== template[key].binding) throw new Error(`Preserve the ${key} binding.`);
   } else {
+    const egress=config.services?.filter(item=>item.binding==='TARGET_EGRESS');
+    if(!Array.isArray(egress)||egress.length!==1||egress[0].entrypoint!=='TargetEgress'||!/^[-a-z0-9]{1,63}$/.test(egress[0].service??'')||egress[0].service===config.name)throw new Error('Configure the private TARGET_EGRESS service binding to this installation’s app Worker. Upgrade the app provider before its gateway.');
     const container = config.containers?.[0];
     if (config.containers?.length !== 1 || container.class_name !== 'KaliToolbox' || container.scheduling_policy !== 'durable_object' || !container.name || !container.images?.stock?.image) throw new Error('Configure the prepared stock Kali container.');
   }

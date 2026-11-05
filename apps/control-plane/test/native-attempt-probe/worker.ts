@@ -24,6 +24,7 @@ import type {ToolboxReadiness, ToolboxActivity, ToolboxFailure} from "../../../.
 import stockCatalog from "../fixtures/stock-kali-catalog.json";
 export { WorkspaceServiceProxy } from "@cloudflare/computer";
 export { NativeDynamicWorkerTail } from "../../src/native/dynamic-worker-tail";
+export {TargetEgress} from "../../src/native/target-egress";
 
 async function fixtureReady(ctx: DurableObjectState, expected?: string): Promise<ToolboxReadiness | ToolboxFailure> {
   const generation = (await ctx.storage.get<string>("fixture:generation")) ?? "fixture-generation";
@@ -272,6 +273,7 @@ export class ProbeAttempt extends NativeAttempt {
         }),
       },
       TOOLBOX: {
+        configureAccess:async()=>{},
         putFile:async (scope:{attemptId:string},file:{path:string;size:number;sha256:string},body:ReadableStream<Uint8Array>)=>{
           const bytes=new Uint8Array(await new Response(body).arrayBuffer());if(bytes.length!==file.size||await evidenceBytesHash(bytes)!==file.sha256)throw new Error("fixture byte mismatch");
           const path=`/fixture-kali/${ctx.id}/${file.path}`;await this.workspace.fs.mkdir(path.slice(0,path.lastIndexOf('/')),{recursive:true});await this.workspace.fs.writeFile(path,bytes);

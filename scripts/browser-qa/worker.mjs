@@ -1,5 +1,6 @@
 import {connect} from '@cloudflare/playwright';
 import {readFile} from 'node:fs/promises';
+import {reviewTargetAccess} from './target-access.mjs';
 const safeURL=value=>{try{const u=new URL(value);return u.origin+u.pathname;}catch{return '[invalid URL]';}};
 const check=(value,message)=>{if(!value)throw Error(message);};
 export async function reviewUI(env,input) {
@@ -195,5 +196,5 @@ export default {async fetch(request,env,ctx){
   if(request.method==='GET'&&new URL(request.url).pathname==='/health')return Response.json({ready:true,taskId:env.QA_RUN_ID},{headers:{'Cache-Control':'no-store'}});
   if(request.method!=='POST'||new URL(request.url).pathname!=='/run')return new Response('Not found',{status:404});
   const input=await request.json();if(input.origin!==env.QA_ORIGIN)return new Response('Wrong installation',{status:400});
-  return Response.json(await reviewUI(env,input),{headers:{'Cache-Control':'no-store'}});
+  return Response.json(await (input.targetAccess?reviewTargetAccess(env,input):reviewUI(env,input)),{headers:{'Cache-Control':'no-store'}});
 }};

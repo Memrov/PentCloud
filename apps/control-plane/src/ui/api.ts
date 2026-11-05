@@ -33,7 +33,7 @@ export interface UIRun {
   phase?:string;
   discoveryDrained?:boolean;
   discoveryAcknowledged?:boolean;
-  target?:{id:string;name:string;url:string;kind:"website"|"api";revision:number;sources?:{id:string;repo:string;branch:string;commit:string;origin?:string}[]};
+  target?:{id:string;name:string;url:string;kind:"website"|"api";revision:number;access?:{managed:boolean;loginConfigured:boolean;apiConfigured:boolean;program?:string};sources?:{id:string;repo:string;branch:string;commit:string;origin?:string}[]};
   lifecycle?: RunLifecycle;
   lifecycleRevision?: number;
   id: string;

@@ -59,6 +59,16 @@ private source/credentials and preserved generated config. This public repo has
 no deployment credentials, creator-account bindings or automatic deployment
 workflow. Installation uses the guided CLI; no one-click deploy button is available.
 
+Managed target access adds a private gateway binding, `TARGET_EGRESS`, to the
+app's `TargetEgress` entrypoint. Upgrade the app provider before the gateway that
+consumes this new entrypoint; the guided upgrade handles that ordering. Preserve
+the gateway's existing identity, image, migrations and MCP secret. Drain any
+legacy active scanner generation before restarting it with native outbound
+interception. Do not restart an uncertain scan. For native Builds, update the
+gateway's private deployment configuration to include this binding before its
+new-source build; the build helper rejects a missing binding. Keep deployment
+metadata in Cloudflare, not the public repository.
+
 ## Lifecycle
 
 The CLI also supports upgrade, export, import-targets and uninstall; consult

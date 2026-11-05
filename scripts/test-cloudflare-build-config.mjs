@@ -13,7 +13,7 @@ for (const [kind, path] of [['app', '../apps/control-plane/wrangler.jsonc'], ['g
     assert.throws(() => validateBuildConfig(kind, undefined, template), /Set PENTCLOUD/);
     assert.throws(() => validateBuildConfig(kind, '{"private-value":', template), /^Error: PENTCLOUD_DEPLOY_CONFIG must be valid JSON\.$/);
     assert.throws(() => validateBuildConfig(kind, JSON.stringify(config), template, 'another-worker'), /does not match/);
-    for (const patch of [{ migrations: [] }, { durable_objects: {} }, { main: 'other.js' }, { env: {} }, { build: {} }, { vars: [] }, { vars: { OPENCODE_GO_API_KEY: 'example' } }, ...(kind === 'app' ? [{ services: [] }, { workflows: [] }, { artifacts: [] }, { browser: {} }, { ai: {} }, { services: [{ binding: 'TOOLBOX', service: 'example-toolbox', entrypoint: 'OtherGateway' }] }] : [{ containers: [] }])]) {
+    for (const patch of [{ migrations: [] }, { durable_objects: {} }, { main: 'other.js' }, { env: {} }, { build: {} }, { vars: [] }, { vars: { OPENCODE_GO_API_KEY: 'example' } }, ...(kind === 'app' ? [{ services: [] }, { workflows: [] }, { artifacts: [] }, { browser: {} }, { ai: {} }, { services: [{ binding: 'TOOLBOX', service: 'example-toolbox', entrypoint: 'OtherGateway' }] }] : [{ containers: [] },{services:[]},{services:[{binding:'TARGET_EGRESS',service:'example-app',entrypoint:'Wrong'}]}])]) {
       assert.throws(() => validateBuildConfig(kind, JSON.stringify({ ...config, ...patch }), template));
     }
   });

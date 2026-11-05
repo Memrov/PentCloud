@@ -81,7 +81,16 @@ guarded Workspace files; it is not Linux libcurl. Check `curl --help`: `-D` /
 headers plus body; `-o` writes the body only. Set the supplied task cwd and an
 explicit request timeout. The separate JavaScript backend still has no network.
 
-Stock Kali tools run in the existing internet-enabled Container. For WhatWeb
+Stock Kali tools run in the existing Container with native HTTP/HTTPS outbound
+interception and direct internet disabled. The gateway restores interception
+before assigning the current attempt; stopped attempts fail access checks. A
+legacy running generation must drain and restart before managed access is used.
+The stock image is unchanged. Startup installs Cloudflare's interception CA into
+system trust and common Python/Node/curl trust variables. HTTP(S) target matching
+does not make raw TCP/UDP/DNS scans work: those are blocked. Tools using their own
+certificate stores or certificate pinning can still fail. Tests through this
+route observe the interception certificate, not the target's original TLS chain.
+For WhatWeb
 baselines use `aggression: stealthy`. Check `http_status`, errors and actual
 coverage rather than treating a completed envelope as a successful request. For FFUF, import a small explicit
 wordlist, set threads/rate within the engagement budget, and compare a known

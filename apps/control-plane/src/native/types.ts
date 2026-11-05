@@ -29,6 +29,7 @@ export type Status =
   | "integration_failed"
   | "interrupted";
 export interface AttemptInput {
+  targetConfig?:SavedTarget;
   findingsVersion?: 1;
   execution?: NativeExecution;
   modelConfig?: PinnedModel;
@@ -88,6 +89,7 @@ export interface AttemptRecord extends AttemptInput {
   recovery?: RuntimeRecovery;
 }
 export interface RunRecord {
+  boundAPIAccess?:boolean;
   discoveryAcknowledged?:boolean;
   discoveryDrained?:boolean;
   definition?:TargetDefinition;
@@ -125,6 +127,8 @@ export interface RunRecord {
   finalResponse?: string;
 }
 export interface CoordinatorAPI {
+  targetFetch(id:string,request:Request,authenticated?:boolean):Promise<Response>;
+  browserState(id:string,state?:import("./browser-target-access").BrowserAuthState):Promise<import("./browser-target-access").BrowserAuthState|undefined>;
   readRunWork(requesterId:string,sourceId?:string,offset?:number):Promise<import("./recorded-work").RecordedWorkPage>;
   readSourceContext(id:string,sourceId:string,kind:"tree"|"file",path:string,offset:number):Promise<unknown>;
   assertConversation(id:string):Promise<void>;

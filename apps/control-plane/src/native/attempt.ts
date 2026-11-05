@@ -21,7 +21,12 @@ import curlCommands from "@cloudflare/computer/shell/curl";
 import { WorkerJavaScriptBackend } from "@cloudflare/computer/backends/worker-javascript";
 import { Plugin } from "@opencode/plugin";
 import { Lifecycle, type MemoryLimitContext } from "agents/lifecycle";
-import { Browser, browserRun } from "agents/browser";
+import { Browser, browserRun,type BrowserRunOptions,type BrowserConnection } from "agents/browser";
+import {connect as connectPlaywright,type Browser as PlaywrightBrowser,type BrowserContext} from "@cloudflare/playwright";
+import {Buffer} from "node:buffer";
+import {browserGuardrails,readTargetSecret,type ScopedTarget} from "../../../../shared/target-access";
+import {guardBrowserCDP,fillLogin,type LoginFields} from "./browser-target-access";
+import {interceptBrowserContext} from "./browser-interception";
 import { createAITools } from "@cloudflare/computer/tools/ai-sdk";
 import type { ExecWorkspaceLike } from "@cloudflare/computer/tools/core";
 import { browserTool } from "agents/browser/ai-sdk";
@@ -165,6 +170,8 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
   private admittingConversation:Promise<void>|undefined;
   private reloadConversation:(()=>Promise<void>)|undefined;
   private readonly credentialRedactions:string[]=[];
+  private readonly browserOptions:BrowserRunOptions={};
+  private scopedBrowser:Promise<{client:PlaywrightBrowser;context:BrowserContext;contextId:string;interception:Awaited<ReturnType<typeof interceptBrowserContext>>}>|undefined;
   private pollingRemote: Promise<void> | undefined;
   private running: Promise<AttemptResult> | undefined;
   private publishing: Promise<AttemptResult> | undefined;
@@ -192,7 +199,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
               workspace: { binding: "ATTEMPTS", id: this.ctx.id.toString() },
               id: "native-shell",
               commands: [curlCommands],
-              egress: { mode: "direct" },
+              egress: { mode: "http-gateway",gateway:this.ctx.exports.TargetEgress({props:{attempt:this.ctx.id.toString()}}) },
             }),
             // The JS isolate gets only scratch. Source writes go through role-checked host tools.
             new WorkerJavaScriptBackend({
@@ -244,7 +251,53 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         }
       : {}),
   });
-  readonly cloudBrowser = new Browser({ provider: browserRun(this.env.BROWSER) });
+  readonly cloudBrowser = new Browser({ provider: browserRun(this.env.BROWSER,this.browserOptions) });
+  private async scopedBrowserContext(){
+    if(this.scopedBrowser){const managed=await this.scopedBrowser;managed.interception.assertConnected();return managed;}
+    const work=(async()=>{
+      const state=await this.active(),target=state.input.targetConfig;if(!target?.access)throw new Error("409: Managed browser settings are not configured");
+      this.browserOptions.guardrails=browserGuardrails(target);
+      const resolved=await this.cloudBrowser.resolve(),client=await connectPlaywright(this.env.BROWSER,resolved.sessionId);
+      const stored=await this.ctx.storage.get<{sessionId:string;contextId:string}>("browser:managed-context");
+      let context:BrowserContext|undefined,contextId="";
+      if(stored?.sessionId===resolved.sessionId)for(const candidate of client.contexts())for(const page of candidate.pages()){
+        const cdp=await candidate.newCDPSession(page);try{const {targetInfo}=await cdp.send("Target.getTargetInfo");if(targetInfo.browserContextId===stored.contextId){context=candidate;contextId=stored.contextId;}}finally{await cdp.detach();}
+      }
+      if(!context){
+        const saved=await this.coordinator().browserState(state.input.id);
+        if(saved){for(const c of saved.cookies)this.credentialRedactions.push(c.value);for(const o of saved.origins)for(const item of o.localStorage)this.credentialRedactions.push(item.value);}
+        context=await client.newContext({serviceWorkers:"block",...(saved?{storageState:saved}:{})});
+        const page=await context.newPage(),cdp=await context.newCDPSession(page);
+        try{contextId=(await cdp.send("Target.getTargetInfo")).targetInfo.browserContextId??"";}finally{await cdp.detach();}
+        if(!contextId)throw new Error("503: Browser context isolation is unavailable");
+        await this.ctx.storage.put("browser:managed-context",{sessionId:resolved.sessionId,contextId});
+      }
+      const interception=await interceptBrowserContext(this.env.BROWSER,resolved.sessionId,contextId,request=>this.targetFetch(request),async()=>{
+        this.scopedBrowser=undefined;await this.ctx.storage.delete("browser:managed-context");
+        await Promise.allSettled([this.cloudBrowser.close(),client.close()]);
+      });
+      await context.routeWebSocket("**/*",ws=>ws.close({code:1008,reason:"Managed target scope"}));
+      client.on("disconnected",()=>{this.scopedBrowser=undefined;});
+      interception.assertConnected();return {client,context,contextId,interception};
+    })();
+    this.scopedBrowser=work;try{return await work;}catch(error){if(this.scopedBrowser===work)this.scopedBrowser=undefined;throw error;}
+  }
+  private async browserConnection(options?:Parameters<Browser["connect"]>[0]):Promise<BrowserConnection>{
+    const state=await this.state(),target=state.input.targetConfig;if(!target?.access)return this.cloudBrowser.connect(options);
+    const managed=await this.scopedBrowserContext(),connection=await this.cloudBrowser.connect(options);
+    return {...connection,cdp:guardBrowserCDP(connection.cdp,target,managed.contextId,managed.interception.assertConnected)};
+  }
+  async targetFetch(request:Request):Promise<Response>{
+    const state=await this.active();
+    if(state.input.targetConfig?.access)return this.coordinator().targetFetch(state.input.id,request);
+    return fetch(new Request(request,{redirect:"manual",signal:AbortSignal.any([request.signal,AbortSignal.timeout(30000)])}));
+  }
+  private async saveBrowserLogin(){
+    const state=await this.active();if(!state.input.targetConfig?.access?.login||!this.scopedBrowser)return;
+    const {context}=await this.scopedBrowser,stateData=await context.storageState();
+    for(const c of stateData.cookies)this.credentialRedactions.push(c.value);for(const o of stateData.origins)for(const item of o.localStorage)this.credentialRedactions.push(item.value);
+    await this.coordinator().browserState(state.input.id,stateData);
+  }
   private async cloudflareTools() {
     const workspace = this.guardedWorkspace(await this.state());
     const runtime: ExecWorkspaceLike["runtime"] = {
@@ -299,9 +352,13 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         execute:({source_id,path,offset})=>this.coordinator().readSourceContext(state.input.id,source_id,kind==="tree"?"tree":"file",path??"",offset??0),
       }))):[]),
       ...evidence,...kali,
+      ...(state.input.targetConfig?.access?.login?[openCodeTool("pentcloud_browser_login",aiTool({description:"Fill the current target's login form with Cloudflare-held credentials. Inspect the page first, supply CSS selectors for its username/password fields, then submit using the browser tool and verify success. No password is returned. Login state is privately reused for this saved target.",inputSchema:jsonSchema<LoginFields>({type:"object",properties:{pageURL:{type:"string",maxLength:2048},usernameSelector:{type:"string",maxLength:512},passwordSelector:{type:"string",maxLength:512}},required:["pageURL","usernameSelector","passwordSelector"],additionalProperties:false}),execute:async input=>{
+        await this.active();const {context}=await this.scopedBrowserContext(),pages=context.pages().filter(page=>page.url()===input.pageURL);if(pages.length!==1)throw new Error("409: Choose one unambiguous login page");
+        return fillLogin(state.input.targetConfig!,pages[0]!,input,async name=>{const value=await readTargetSecret(this.env,name);this.credentialRedactions.push(value);return value;});
+      }}))]:[]),
       ...api,
       ...Object.entries(computer).map(([name, tool]) => openCodeTool(`computer_${name}`, tool)),
-      openCodeTool("cloudflare_browser", browserTool({ browser: { name: this.cloudBrowser.name, connect: (options) => this.cloudBrowser.connect(options) }, loader: this.env.LOADER })),
+      openCodeTool("cloudflare_browser", browserTool({ browser: { name: this.cloudBrowser.name, connect: (options) => this.browserConnection(options) }, loader: this.env.LOADER })),
     ]);
   }
   private async callCloudflareTool(tool: CloudflareTool, args: unknown, id: string, signal: AbortSignal) {
@@ -318,6 +375,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       }, async () => {
         const result = await tool.execute(args, id, AbortSignal.any([signal, this.abortController.signal]));
         await this.conversationActive();
+        if(tool.name==="cloudflare_browser")await this.saveBrowserLogin();
         if(tool.name==="cloudflare_browser"&&result.metadata?.cloudflareImages?.length)
           await this.captureToolEvidence(tool.name,{},id,{content:result.metadata.cloudflareImages.map(url=>({type:"image",mimeType:url.slice(5,url.indexOf(';')),data:url.slice(url.indexOf(',')+1)}))});
         // Recorded-work records are redacted before paging. Rewriting the
@@ -617,7 +675,8 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     const input=validateAPIRequest(access,raw),key="remote:api-"+id;
     this.inFlightTools++;
     try {
-      const result=await journalAPIRequest(this.ctx.storage,key,input,async()=>this.safe(await performAPIRequest(access,input,fetch,signal?AbortSignal.any([signal,this.abortController.signal]):this.abortController.signal)));
+      const fetcher:typeof fetch=state.input.targetConfig?.access?(url,init)=>this.coordinator().targetFetch(state.input.id,new Request(url,init),!!access.value):fetch;
+      const result=await journalAPIRequest(this.ctx.storage,key,input,async()=>this.safe(await performAPIRequest(access,input,fetcher,signal?AbortSignal.any([signal,this.abortController.signal]):this.abortController.signal)));
       await this.active();return result;
     }finally{this.inFlightTools--;}
   }
@@ -1603,6 +1662,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         // Persist boot identity before any MCP initialization or paid host setup.
         await this.ctx.storage.put("toolboxGeneration", ready);
       }
+      if(!terminal)await this.env.TOOLBOX.configureAccess(ready,this.ctx.id.toString());
       return ready;
     })().finally(() => { this.preparingToolbox = undefined; }));
   }
@@ -2353,7 +2413,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     const combined = signal ? AbortSignal.any([signal, this.abortController.signal]) : this.abortController.signal;
     this.inFlightTools++;
     try {
-      const result = await managedBrowser(args, { binding: this.env.AI, scopes, signal: combined });
+      const result = await managedBrowser(args, { binding: this.env.AI, scopes, signal: combined,...(state.input.targetConfig?.access?{fetch:((url,init)=>this.targetFetch(new Request(url,init))) as typeof fetch}:{}) });
       await this.active();
       return this.safe(result);
     } finally { this.inFlightTools--; }
@@ -2917,6 +2977,7 @@ async function boundedText(response: Response, maximum: number) {
 
 function immutableInput(input: AttemptInput): AttemptInput {
   return {
+    ...(input.targetConfig?{targetConfig:input.targetConfig}:{}),
     ...(input.findingsVersion ? {findingsVersion:input.findingsVersion} : {}),
     ...(input.execution ? { execution: input.execution } : {}),
     ...(input.modelConfig ? { modelConfig: input.modelConfig } : {}),

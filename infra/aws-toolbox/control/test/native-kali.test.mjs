@@ -18,9 +18,11 @@ const { KaliToolbox } = await import(`data:text/javascript;base64,${Buffer.from(
 const GENERATION = "X-Pentcloud-Toolbox-Generation";
 
 function fixture(running = false, initial = {}) {
-  const calls = {starts: [], timeouts: [], upstream: []};
+  const calls = {starts: [], timeouts: [], upstream: [],intercepts:[],egress:[]};
   const state = {running, labels: running ? {"pentcloud-gen": "retained-generation"} : {}, readyStatus: 503, fail: false, ...initial};
   const container = {
+    async interceptAllOutboundHttp(worker){calls.intercepts.push({kind:'http',worker});},
+    async interceptOutboundHttps(host,worker){calls.intercepts.push({kind:'https',host,worker});},
     get running() { return state.running; }, images: {stock: "registry.test/exact-stock@sha256:pinned"},
     start(options) {
       if (state.startError) throw state.startError;
@@ -48,8 +50,9 @@ function fixture(running = false, initial = {}) {
     }}; },
   };
   const pending = [];
-  const ctx = {container, waitUntil(promise) {pending.push(promise);}, blockConcurrencyWhile(run) {return run();}};
-  const env = {KALI_MCP_TOKEN: "native-mcp-token-long-enough"};
+  const records=new Map();
+  const ctx = {container,exports:{KaliOutbound:({props})=>props},storage:{get:async key=>records.get(key),put:async(key,value)=>{records.set(key,value);}}, waitUntil(promise) {pending.push(promise);}, blockConcurrencyWhile(run) {return run();}};
+  const env = {KALI_MCP_TOKEN: "native-mcp-token-long-enough",TARGET_EGRESS:{fetch:async request=>{calls.egress.push(request);return new Response('allowed');}}};
   const runtime = new KaliToolbox(ctx, env);
   const fetch = (path, generation, init = {}) => runtime.fetch(new Request(`https://toolbox.internal${path}`, {
     ...init, headers: {...init.headers, ...(generation ? {[GENERATION]: generation} : {})},
@@ -100,7 +103,8 @@ test("health never boots; ready starts the exact stock image once with native in
   const options = calls.starts[0];
   assert.equal(options.image, "registry.test/exact-stock@sha256:pinned");
   assert.deepEqual(options.instance, {vcpu: 2, memoryMib: 6144, diskMb: 20000});
-  assert.equal(options.enableInternet, true);
+  assert.equal(options.enableInternet, false);
+  assert.deepEqual(calls.intercepts.map(i=>i.kind),['http','https']);
   assert.deepEqual(calls.timeouts, [1800000]);
   assert.deepEqual(options.entrypoint.slice(0, 2), ["/bin/bash", "-c"]);
   assert.ok(options.entrypoint[2].includes("umask 077"));
@@ -109,6 +113,25 @@ test("health never boots; ready starts the exact stock image once with native in
   assert.equal(options.env.PENTCLOUD_KALI_TOKEN, "native-mcp-token-long-enough");
   assert.equal(options.env.MCP_GATEWAY_TOKEN_FILE, "/tmp/pentcloud-mcp-token");
   assert.equal(options.env.PATH, undefined, "the stock image's OCI PATH remains authoritative");
+});
+test("starts deny-by-default before awaiting native interception readiness",async()=>{
+ const f=fixture();let release;const gate=new Promise(resolve=>{release=resolve;});
+ f.container.interceptAllOutboundHttp=()=>gate;
+ const ready=f.ready();await new Promise(resolve=>setTimeout(resolve,10));
+ try{assert.equal(f.calls.starts.length,1,"interception may await a running controller");assert.equal(f.calls.starts[0].enableInternet,false);}
+ finally{release();await ready;}
+});
+
+test("outbound traffic requires a current generation and active assessment owner before forwarding",async()=>{
+ const f=fixture(),boot=await f.ready(),owner='a'.repeat(64);
+ const request=()=>new Request('https://example.com/api/');
+ assert.equal((await f.runtime.outbound(boot.generation,request())).status,403);assert.equal(f.calls.egress.length,0);
+ await f.runtime.configureAccess(boot.generation,owner);
+ assert.equal((await f.runtime.outbound('old-generation',request())).status,403);
+ const response=await f.runtime.outbound(boot.generation,request());assert.equal(response.status,200);
+ assert.equal(f.calls.egress[0].headers.get('X-Pentcloud-Egress-Attempt'),owner);
+ assert.equal(f.calls.egress[0].headers.has('Authorization'),false);
+ assert.ok(f.calls.starts[0].entrypoint[2].includes('update-ca-certificates'));
 });
 
 test("native running is not readiness; authenticated stock MCP HTTP must respond first", async () => {

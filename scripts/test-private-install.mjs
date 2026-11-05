@@ -72,6 +72,8 @@ async function fixture(t) {
     if (args.includes('list') && args.includes('images')) return Buffer.from('[]');
     if (kind === 'wrangler' && args[0] === 'deploy' || kind === 'node' && args[0].endsWith('deploy-native-app.mjs')) {
       const file = args[args.indexOf('--config') + 1], worker = await readJson(file);
+      if(worker.name===n.gateway&&worker.services?.some(s=>s.entrypoint==='TargetEgress'))assert(remote.appSupportsTargetEgress,'TargetEgress provider must be upgraded before its consumer');
+      if(worker.name===n.app)remote.appSupportsTargetEgress=true;
       if (!remote.scripts.some((script) => script.id === worker.name)) remote.scripts.push({ id: worker.name });
       remote.settings[worker.name] = { bindings: [...(worker.secrets_store_secrets??[]).map((item) => ({ ...item, name: item.binding })),
         ...(worker.services ?? []).map((item) => ({ ...item, name: item.binding })), ...(worker.artifacts ?? []).map((item) => ({ ...item, name: item.binding })),
@@ -111,6 +113,16 @@ async function legacy(f){
   await privateJson(join(directory,'credentials.json'),{operator:'legacy-private-operator',mcp:'legacy-private-mcp',accessClientId:'legacy-client',accessClientSecret:'legacy-private-access'});
   await installer.save();
 }
+test('installation wires private target egress after the app exists and keeps the gateway unexposed',async t=>{
+ const f=await fixture(t);await f.installer.install();
+ const binding=f.remote.settings[f.n.gateway].bindings.find(item=>item.name==='TARGET_EGRESS');
+ assert.deepEqual(binding,{binding:'TARGET_EGRESS',name:'TARGET_EGRESS',service:f.n.app,entrypoint:'TargetEgress'});
+ assert.equal(f.remote.routes[f.n.gateway].enabled,false);
+});
+test('upgrades the existing app provider before adding its new gateway capability',async t=>{
+ const f=await fixture(t);await f.installer.install();f.remote.appSupportsTargetEgress=false;
+ await f.installer.install({upgrade:true});assert.equal(f.remote.appSupportsTargetEgress,true);
+});
 test('upgrade proves native access before retiring only owned legacy credentials, preserving MCP and the Store',async t=>{
   const f=await fixture(t);await f.installer.install();await legacy(f);
   const {installer,remote,directory}=f;

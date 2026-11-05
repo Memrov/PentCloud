@@ -27,22 +27,32 @@ See [authentication](docs/operations/authentication.md).
 
 ## Network and data risks
 
-A saved target and agent instructions are not a network firewall. PentCloud does
-not enforce a universal hostname, IP, CIDR or redirect boundary across all tools.
+A saved target alone is not a network firewall. Optional managed target settings
+add HTTP/HTTPS restrictions described below. PentCloud does not provide universal
+IP/CIDR confinement, DNS pinning, protocol isolation or program-rule enforcement.
 
-- Every agent role can use cloud Chromium. Redirects, frames, page scripts,
-  forms and subresources may contact additional hosts; browser-driver isolation
-  does not confine the browser's network access.
-- Coder, Maintenance and Pentester can use the internet-enabled Kali toolbox,
-  including scanners, scripts, a separate browser and supported sessions,
-  listeners and callbacks. Private MCP authentication and pinned tool schemas
-  do not restrict destination hosts.
+- Every agent role can use cloud Chromium. Managed targets configure native
+  Browser Run hostname guardrails and trusted interception for origin/path,
+  exclusions, redirects and required headers, including popup requests. Hostname
+  guardrails persist on the session; losing the trusted interception connection
+  retires the managed browser and invalidates its controls. Detailed interception
+  still depends on a live trusted Worker connection; this is not a promise of
+  independent browser-wide path isolation after a platform failure. Browser WebSockets are disabled.
+  Plain targets without managed settings retain broader browser reach.
+- Coder, Maintenance and Pentester use shared Kali with direct internet disabled
+  and native HTTP/HTTPS interception on ports 80/443. Managed targets pass through
+  the target matcher; plain targets retain their prior HTTP destination behavior.
+  Raw TCP/UDP scans, other ports and ordinary external DNS tools are blocked.
+  TLS interception changes observed certificates and may break pinned clients.
 - The Worker shell supports fetch-backed HTTP(S) curl. Its JavaScript execution
   backend has no network, but that restriction does not apply to the browser,
   curl or Kali tools.
-- Selected API/retrieval routes check URLs, paths and redirects. Saved API keys
+- Managed curl, API and retrieval routes check URLs, paths and redirects. Saved API keys
   are bound to their configured audience/path. These checks do not provide
   engagement-wide host confinement or DNS/IP pinning.
+- Public catalog revisions can be incomplete or stale. Program instructions,
+  request rates, forbidden testing methods, data handling and authorization must
+  still be reviewed by the operator. Importing scope does not enforce those rules.
 - Prompts, research queries, selected files and tool content may be sent to
   OpenCode, configured model providers, research services and Cloudflare
   conversion/audit services. Review each provider's data terms before use.

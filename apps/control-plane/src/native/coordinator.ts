@@ -33,7 +33,11 @@ import { renderLaunch } from "./prompts";
 import { memoryRecovery, recoveryPending, runtimeVersion, type RuntimeRecovery } from "./runtime-diagnostics";
 import { knownRuntimeSecrets } from "../../../../shared/runtime-secrets";
 import { TargetDefinitions, type TargetDefinition } from "./target-definitions";
-import { OnboardingStore, type SetupDraft } from "./onboarding";
+import { OnboardingStore, assertAudience, type SetupDraft } from "./onboarding";
+import {ScopeCatalog} from "./scope-catalog";
+import {performTargetFetch} from "./target-fetch";
+import {assertTargetRequest,targetAccessBrief,readTargetSecret,type ScopedTarget} from "../../../../shared/target-access";
+import {validateBrowserState,type BrowserAuthState} from "./browser-target-access";
 import {SourceLibrary,readSource,type ImportReceipt} from "./source-context";
 import {parseByokProviders,type OpenCodeRoute} from "./opencode-models";
 import type { NewRunInput } from "./types";
@@ -136,9 +140,12 @@ export class Coordinator extends DurableObject<NativeEnv> {
     get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value),list:<T>(prefix:string)=>this.list<T>(prefix),
     remove:key=>{this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key);},
     modelBindings:()=>modelSecretMetadata(this.env),readModelSecret:id=>readModelSecret(this.env,id),
+    readTargetSecret:async binding=>{const secret=await readTargetSecret(this.env,binding);this.targetSecretRedactions.push(secret);return secret;},
     byokProviders:()=>parseByokProviders(this.env.OPENCODE_BYOK_PROVIDERS),
     probe:(model,key)=>this.env.MODEL_TESTS.getByName(crypto.randomUUID()).probeModel(model,key),
   });
+  private readonly scopeCatalog=new ScopeCatalog({get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value)});
+  private readonly targetSecretRedactions:string[]=[];
   private readonly sources=new SourceLibrary({
     artifacts:this.env.ARTIFACTS,get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value),
     target:id=>this.onboarding.target(id),save:(id,revision,sources,actor)=>this.onboarding.saveSources(id,revision,sources,actor),
@@ -458,6 +465,19 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.assertAdmissionOpen();
     try {
       switch(action){
+        case "scope.search":return await this.scopeCatalog.search(String(value.query??""),typeof value.platform==="string"&&value.platform?value.platform:undefined);
+        case "scope.preview":return await this.scopeCatalog.preview(String(value.programId));
+        case "scope.import":{
+          const id=identifier(value.id),target=this.onboarding.target(id);if(target.revision!==revision||target.archived)throw new Error("409: Target changed or archived; reload");
+          const program=await this.scopeCatalog.import(String(value.programId),target.url);this.assertAdmissionOpen();
+          return this.onboarding.saveTargetAccess(id,revision!,target.access??{headers:[]},actor,program);
+        }
+        case "scope.detach":return this.onboarding.saveTargetAccess(identifier(value.id),Number(value.revision),this.onboarding.target(identifier(value.id)).access??{headers:[]},actor,null);
+        case "access.save":return this.onboarding.saveTargetAccess(identifier(value.id),Number(value.revision),value.access,actor);
+        case "access.clearlogin":{
+          const target=this.onboarding.target(identifier(value.id));if(target.revision!==revision)throw new Error("409: Target changed; reload");
+          const prefix="target-auth:"+target.id+":";this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",prefix.length,prefix);return {cleared:true};
+        }
         case "source.list":return await this.sources.list(typeof value.cursor==="string"?value.cursor:undefined);
         case "source.attach":return await this.sources.attach(identifier(value.id),Number(value.revision),value.repo,value.branch,actor);
         case "source.refresh":return await this.sources.refresh(identifier(value.id),Number(value.revision),identifier(value.sourceId),actor);
@@ -472,6 +492,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
             for(const key of ["onboarding:defaults:"+id,"onboarding:definition:"+id])this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key);
             await this.workspace.fs.rm("/target-definitions/"+id,{recursive:true,force:true});
             for(const prefix of ["onboarding:definition-version:"+id+":","material:target-definition:"+id+":"])this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",prefix.length,prefix);
+            const authPrefix="target-auth:"+id+":";this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",authPrefix.length,authPrefix);
             this.collectCredentialVersions();
           }
           return result;
@@ -612,10 +633,23 @@ export class Coordinator extends DurableObject<NativeEnv> {
     if(job.modelConfig.credentialFingerprint&&await digest(key)!==job.modelConfig.credentialFingerprint)throw new Error("409: Cloudflare model secret changed; test it and start a new run");
     return key;
   }
-  async apiCredential(id:string) {
+  async apiCredential(id:string):Promise<import("./api-access").APIAccess> {
     await this.assertActive(id);const run=this.run(this.job(id).runId);
     if(!run.target||run.target.kind!=="api")throw new Error("403: This run has no API target");
+    if(run.boundAPIAccess&&run.target.access?.api){const config=run.target.access.api,value=await readTargetSecret(this.env,config.binding);this.targetSecretRedactions.push(value);return {targetURL:config.url,header:config.header,value:config.scheme==="bearer"?"Bearer "+value:value};}
     return run.apiAccess?this.onboarding.apiConfig(run.target,run.apiAccess):{targetURL:run.target.url};
+  }
+  async targetFetch(id:string,request:Request,authenticated=false):Promise<Response>{
+    await this.assertActive(id);const target=this.run(this.job(id).runId).target;if(!target)throw new Error("403: No saved target");
+    if(target.access){const access=authenticated?await this.apiCredential(id):undefined;if(access)assertAudience(access.targetURL,request.url);return performTargetFetch(target,request,fetch,access?.header&&access.value?{header:access.header,value:access.value}:undefined);}
+    return fetch(new Request(request,{redirect:"manual",signal:AbortSignal.any([request.signal,AbortSignal.timeout(30000)])}));
+  }
+  async browserState(id:string,state?:BrowserAuthState):Promise<BrowserAuthState|undefined>{
+    await this.assertActive(id);const target=this.run(this.job(id).runId).target;if(!target?.access?.login)return;
+    const key="target-auth:"+target.id+":"+await digest({url:target.url,login:target.access.login});
+    await this.assertActive(id);
+    if(state){const clean=validateBrowserState(target,state);this.put(key,{expiresAt:Date.now()+12*3600000,state:clean});return;}
+    const cached=this.get<{expiresAt:number;state:BrowserAuthState}>(key);return cached&&cached.expiresAt>Date.now()?validateBrowserState(target,cached.state):undefined;
   }
   async activateAnalysis(id:string,expectedRevision:number,requestId:string,acknowledgeFailure=false,definitionVersion=0) {
     identifier(requestId,"analysis request id");await this.start();this.assertMutable(id);
@@ -636,6 +670,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const definitionUploads:string[]=[];
     if(definition){this.definitionBusy++;try{definitionUploads.push(await this.definitions.copyIntoRun(definition,id,run.authorization?.actor??"operator"));}finally{this.definitionBusy--;}}
     const next:RunRecord={...run,phase:"primary",status:"created",modelsByRole,
+      boundAPIAccess:!draft.publicAPI&&!!run.target.access?.api,
       ...(definition?{definition}:{}),
       settingsRevision:await digest({settings:run.settings,modelsByRole,target:run.target,definition,apiAccess:draft.publicAPI?null:draft.apiCredential}),
       ...(!draft.publicAPI&&draft.apiCredential?{apiAccess:draft.apiCredential}:{}),
@@ -719,7 +754,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       evidence: this.jobs(run.id).filter(j=>j.evidence).map(j=>({job_id:j.id,checkpoint:j.evidence,files:j.evidenceFiles??[],unavailable:j.evidenceUnavailable??[]})),
       enabledTools: supportedOptionalTools(job.role),
       browserAllowedURLs: run.target ? [run.target.url] : this.browserScopes(run.task),
-      ...(run.target ? {target:run.target, networkReach:"Target is guidance, not universal host confinement", apiAuth:run.apiAccess ? "Use pentcloud_api_request for authenticated API calls. Most stock scanners do not accept API authorization headers." : "Unauthenticated coverage"} : {}),
+      ...(run.target ? {target:{id:run.target.id,name:run.target.name,kind:run.target.kind,url:run.target.url,revision:run.target.revision,objective:run.target.objective,exclusions:run.target.exclusions},networkReach:targetAccessBrief(run.target),apiAuth:run.apiAccess||run.target.access?.api ? "Use pentcloud_api_request for authenticated API calls. Browser/curl requests can assess anonymous coverage." : "Unauthenticated coverage"} : {}),
       run_id: run.id,
       ...(run.materials ? {materials: run.materials} : {}),
       ...(run.target?.sources?.length?{sourceContexts:run.target.sources}:{}),
@@ -955,7 +990,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   }
   private safe(value: string) {
     let text = value;
-    for (const secret of [...knownRuntimeSecrets(this.env), ...plainModelSecretValues(this.env), ...this.onboarding.secretValues()])
+    for (const secret of [...knownRuntimeSecrets(this.env), ...plainModelSecretValues(this.env), ...this.onboarding.secretValues(),...this.targetSecretRedactions])
       if (secret) text = text.split(secret).join("[redacted]");
     return text.slice(0, 2000);
   }
@@ -1670,7 +1705,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       assertAdmission(this.admissionJobs(), job.id, job.fingerprint);
       this.put("run:"+id, run);
       const defaults=this.get<{draft:SetupDraft}>("onboarding:defaults:"+target.id);
-      this.put("onboarding:setup:"+id,defaults?{...defaults.draft,revision:0,updatedBy:"target defaults"}:{revision:0,publicAPI:target.kind!=="api"||addressProof.classification!=="needs-auth",updatedBy:"system"});
+      this.put("onboarding:setup:"+id,defaults?{...defaults.draft,revision:0,updatedBy:"target defaults"}:{revision:0,publicAPI:target.kind!=="api"||!target.access?.api&&addressProof.classification!=="needs-auth",updatedBy:"system"});
       this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?","project:owned:"+id);
       this.enqueue(job, pushes);
       admitted = true;
@@ -1710,6 +1745,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       repo: run.repo,
       remote: run.remote,
       settingsRevision: run.settingsRevision,
+      ...(run.target?.access?{targetConfig:run.target}:{}),
       settings: run.modelsByRole ? {...settings,model:run.modelsByRole[role].id,reasoningEffort:"default"} : settings,
       ...(run.modelsByRole ? {modelConfig:run.modelsByRole[role]} : {}),
       ...(revisionOf?.parentJobId

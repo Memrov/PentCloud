@@ -6,6 +6,45 @@ independent of its runs; editing it affects future runs, and deleting a run
 does not remove the target. Archive hides a target; delete removes its reusable
 defaults while retained run snapshots and Git evidence remain.
 
+## Bounty scope and target login
+
+**Find a bounty program** searches the public
+[PentCloud scope catalog](https://github.com/Memrov/PentCloud-scopes). Choose a
+website/API asset, or enter a concrete hostname for a wildcard. Import saves a
+checksummed catalog revision, applicable rules and exclusions on the target.
+Only the selected origin and base path are granted; other program assets are not
+automatically reachable. Non-web assets and ambiguous network exclusions can
+require manual review. Catalog data is not authorization: check the program's
+official rules, permitted methods, rate limits and account requirements yourself.
+Refresh its saved scope before subsequent hunts; existing runs keep their snapshot.
+
+Under **Network and login settings**, add nonsecret researcher identification
+headers and optional Cloudflare credential **binding names**. See the
+[secret setup walkthrough](../cloudflare-setup.md#target-login-and-api-secrets).
+Required headers overwrite agent-provided values on managed requests. The browser
+agent inspects the login form, calls `pentcloud_browser_login` with its selectors,
+then submits and checks the result using its existing browser tool. No human login
+handoff or new model provider is involved. Login must stay inside the selected
+target; external identity providers, MFA and CAPTCHA need additional support.
+
+Cookies and local storage are held privately in Coordinator storage for up to
+12 hours and reused by later agent browser contexts for that target/login
+configuration. They are not Git artifacts or part of settings export. **Forget
+saved login** clears the reusable snapshot; it does not revoke the target's
+sessions, erase active browser contexts or delete Cloudflare secrets. Operators
+on one installation share these capabilities. A target page and its scripts can
+see the credentials supplied to it; use disposable assessment accounts.
+
+Managed targets use native Browser Run hostname guardrails plus trusted CDP
+request interception for paths, exclusions, redirects and headers. Computer curl,
+the API adapter, retrieval and Kali HTTP/HTTPS requests use the same target
+matcher. Browser WebSockets are disabled. Kali permits intercepted HTTP/HTTPS on
+ports 80/443; raw sockets, other ports and external DNS-based tools are unavailable.
+Some scanners need extra proxy/CA configuration; TLS interception cannot preserve
+the target's original TLS certificate. This is not a universal network sandbox;
+review the [remaining network risks](../../SECURITY.md#network-and-data-risks).
+Plain targets without managed settings retain their prior guidance behavior.
+
 Below the saved address, **Source context (optional)** can attach up to five
 existing Artifacts repositories or import public GitHub source through the native
 Artifacts binding. Each run freezes the selected repository identities and exact

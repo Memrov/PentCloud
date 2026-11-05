@@ -12,6 +12,7 @@ function fixture(fetcher?:typeof fetch) {
     remove:(key:string)=>{records.delete(key);}, now:()=>time,
     fetcher:fetcher??(async()=>Response.json({data:[{id:'test-model',name:'Test model',type:'chat',capabilities:{tools:{supported:true}},limit:{context:128000,output:8192},api:{'chat-completions':{base_url:'https://opencode.ai/inference/go/openai/v1'}}}]})),
     probe:async()=>{}, boundGoKey:()=>bound,
+    readTargetSecret:async()=>"cloudflare-api-secret",
   });
   return {store,records,setBoundKey:(value:string)=>{bound=value;},advance:(ms:number)=>{time+=ms;}};
 }
@@ -30,6 +31,24 @@ describe('saved targets and credential readiness',()=>{
     expect(()=>store.saveTarget({...target,url:'example.com/v2'},target.revision-1,'owner')).toThrow(/changed/);
     const next=store.saveTarget({...target,url:'example.com/v2'},target.revision,'owner');
     expect(next.revision).toBe(target.revision+1);
+  });
+  it('keeps Cloudflare login references and required headers on the target for later runs',()=>{
+    const {store,records}=fixture();const target=store.saveTarget({id:'target-login',kind:'website',name:'Site',url:'https://example.com/'},null,'owner');
+    const configured=store.saveTargetAccess(target.id,target.revision,{headers:[{name:'X-Researcher',value:'researcher'}],login:{url:'https://example.com/login',usernameBinding:'PENTCLOUD_TARGET_USER',passwordBinding:'PENTCLOUD_TARGET_PASS'}},'owner');
+    expect(store.target(target.id).access?.login?.passwordBinding).toBe('PENTCLOUD_TARGET_PASS');
+    expect(()=>store.saveTargetAccess(target.id,target.revision,{headers:[]},'owner')).toThrow(/changed/);
+    const renamed=store.saveTarget({...configured,name:'Renamed'},configured.revision,'owner');expect(renamed.access).toEqual(configured.access);
+    expect(()=>store.saveTarget({...renamed,url:'https://other.example/'},renamed.revision,'owner')).toThrow();
+    expect([...records.keys()].some(key=>key.startsWith('onboarding:value:'))).toBe(false);
+  });
+  it('tests a Cloudflare-held target API key without adding it to the application credential store',async()=>{
+    const seen:Headers[]=[];const {store,records}=fixture(async(_url,init)=>{const headers=new Headers(init?.headers);seen.push(headers);return new Response(headers.has('Authorization')?'private':'denied',{status:headers.has('Authorization')?200:401});});
+    const t=store.saveTarget({id:'bound-api',kind:'api',name:'API',url:'https://example.com/v1/'},null,'owner');
+    const configured=store.saveTargetAccess(t.id,t.revision,{headers:[{name:'X-Researcher',value:'required'}],api:{url:t.url,binding:'PENTCLOUD_TARGET_API_KEY',header:'Authorization',scheme:'bearer'}},'owner');
+    store.saveDraft('run-bound-api',{publicAPI:false,endpoint:'https://example.com/v1/me',expectedStatus:200},0,'owner');
+    await expect(store.testAPI('run-bound-api',configured,'test-bound-api','owner')).resolves.toMatchObject({verified:true});
+    expect(seen.map(h=>h.get('X-Researcher'))).toEqual(['required','required']);expect(seen.map(h=>h.get('Authorization'))).toEqual([null,'Bearer cloudflare-api-secret']);
+    expect(JSON.stringify([...records.values()])).not.toContain('cloudflare-api-secret');
   });
   it('refuses to persist OpenCode keys in application storage',()=>{
     const {store,records}=fixture();

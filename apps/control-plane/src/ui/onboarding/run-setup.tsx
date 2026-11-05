@@ -107,19 +107,21 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
       </section>
       <section className="onboarding-card onboarding-form" aria-label="API test access">
         <h2>{run.target?.kind==="api"?"API test access":"Website test access"}</h2>
-        {run.target?.kind!=="api"?<p>This first version checks the public website. Automated website login, cookies, OAuth and mTLS are not configured by this setup.</p>:<>
+        {run.target?.kind!=="api"?<p>{run.target?.access?.loginConfigured?"Agents can fill the website's login form with Cloudflare-held credentials. Private browser state is reused for this target.":"Add optional Cloudflare login references in the saved target's network and login settings. This run uses the target settings captured when it started."}</p>:<>
           <Select label="Access type" aria-label="API access type" required value={publicAPI?"public":"authenticated"} disabled={busy} onValueChange={value=>{setPublicAPI(value==="public");edit();}}><Select.Option value="public">Public API / unauthenticated coverage</Select.Option><Select.Option value="authenticated">Authenticated API</Select.Option></Select>
           {!publicAPI&&<>
+            {run.target.access?.apiConfigured?<Banner variant="secondary" description="This target uses its saved Cloudflare API credential binding. Test a protected endpoint below; key values stay in Cloudflare."/>:<>
             <Select label="Saved API key" aria-label="Saved API key" value={apiKey||null} placeholder="Choose a saved API key" disabled={busy} onValueChange={value=>{setAPIKey(String(value??""));edit();}}>{apiCredentials.map(c=><Select.Option key={c.id} value={c.id}>{c.label}{c.missing?" · re-enter key":""}</Select.Option>)}</Select>
             <Select label="Key format" aria-label="API key format" required value={apiScheme} disabled={busy} onValueChange={value=>setAPIScheme(value as "bearer"|"header")}><Select.Option value="bearer">Bearer token</Select.Option><Select.Option value="header">API key header</Select.Option></Select>
             {apiScheme==="header"&&<Input label="Header name" value={header} onValueChange={setHeader} disabled={busy}/>}
             <SensitiveInput label="New API test key" value={apiValue} onValueChange={setAPIValue} autoComplete="new-password" disabled={busy}/>
             <div className="onboarding-row"><Button variant="secondary" disabled={busy||!apiValue.trim()} onClick={()=>void saveAPIKey()}>Save API key</Button><Button variant="ghost" disabled={busy||!apiKey} onClick={()=>{setRevoking(apiCredentials.find(c=>c.id===apiKey));setRevokeOpen(true);}}>Revoke selected API key</Button></div>
+            </>}
             <Input label="Protected read-only test endpoint" value={endpoint} onValueChange={value=>{setEndpoint(value);edit();}} disabled={busy}/>
             <Input label="Expected success status" value={expectedStatus} onValueChange={value=>{setExpectedStatus(value);edit();}} disabled={busy}/>
             <Input label="Response must contain (optional)" value={expectedText} onValueChange={value=>{setExpectedText(value);edit();}} disabled={busy}/>
             <p>The test compares an anonymous GET with an authenticated GET. A public 200 response alone does not prove the key works.</p>
-            <Button variant="secondary" disabled={busy||!apiKey||!endpoint} onClick={()=>void testAPI()}>Test protected API access</Button>
+            <Button variant="secondary" disabled={busy||!apiKey&&!run.target.access?.apiConfigured||!endpoint} onClick={()=>void testAPI()}>Test protected API access</Button>
           </>}
           <p>Saved keys are injected by the API request tool. Most stock scanners do not accept arbitrary authorization headers; reports must distinguish authenticated requests from unauthenticated scanner coverage.</p>
         </>}

@@ -3,12 +3,15 @@ import { boundedText, checkAddress, normalizeTargetURL, type AddressCheck } from
 import { operatorIdentityHeader, targetHeaders } from "./target-headers";
 import { normalizeCatalog, type OpenCodeRoute, type OpenCodeModel, type PinnedModel } from "./opencode-models";
 import type {SourceContext} from "./source-context";
+import {validateTargetAccess,type TargetAccess,type ProgramScope} from "../../../../shared/target-access";
+import {performTargetFetch} from "./target-fetch";
 
 import {MODEL_ROLES,type ModelRole} from "./onboarding-roles";
 export {MODEL_ROLES,type ModelRole} from "./onboarding-roles";
 export type ModelChoice={model:string;credentialId:string;credentialVersion:number};
 export interface ModelProfile {default:ModelChoice;overrides:Partial<Record<ModelRole,ModelChoice>>}
 export interface SavedTarget {
+  access?:TargetAccess;
   sources?:SourceContext[];
   id:string;kind:"website"|"api";name:string;url:string;revision:number;archived:boolean;deleted?:boolean;
   createdAt:number;updatedAt:number;updatedBy:string;objective:string;exclusions:string;
@@ -25,6 +28,7 @@ export interface SetupDraft {
 }
 type Catalog={models:OpenCodeModel[];fetchedAt:string;stale:boolean;digest:string;modelDigests:Record<string,string>;providerConfig?:string};
 export interface OnboardingIO {
+  readTargetSecret?:(binding:string)=>Promise<string>;
   get<T>(key:string):T|undefined;put(key:string,value:unknown):void;list<T>(prefix:string):T[];remove(key:string):void;
   now?:()=>number;fetcher?:typeof fetch;probe?:(model:OpenCodeModel,key:string)=>Promise<void>;boundGoKey?:()=>string|undefined;modelBindings?:()=>CredentialMetadata[];readModelSecret?:(id:string)=>Promise<string>;byokProviders?:()=>import("./opencode-models").OpenCodeByokProvider[];
 }
@@ -47,8 +51,16 @@ export class OnboardingStore {
     if(!["website","api"].includes(raw.kind)||typeof raw.name!=="string"||!raw.name.trim()||raw.name.length>160)throw new Error("400: Target type and name are required");
     for(const v of [raw.objective,raw.exclusions])if(v!==undefined&&(typeof v!=="string"||v.length>16000))throw new Error("400: Target notes are too long");
     const target:SavedTarget={id,kind:raw.kind as SavedTarget["kind"],name:raw.name.trim(),url:normalizeTargetURL(raw.url),revision:(prior?.revision??0)+1,
-      archived:prior?.archived??false,createdAt:prior?.createdAt??this.now(),updatedAt:this.now(),updatedBy:actor,objective:raw.objective??"",exclusions:raw.exclusions??"",...(prior?.sources?{sources:prior.sources}:{})};
+      archived:prior?.archived??false,createdAt:prior?.createdAt??this.now(),updatedAt:this.now(),updatedBy:actor,objective:raw.objective??"",exclusions:raw.exclusions??"",...(prior?.sources?{sources:prior.sources}:{}),...(prior?.access?{access:validateTargetAccess(normalizeTargetURL(raw.url),prior.access)}:{})};
     this.io.put(this.key("target",id),target);this.audit(prior?"target.update":"target.create",id,actor);return target;
+  }
+  saveTargetAccess(id:string,revision:number,raw:unknown,actor:string,program?:ProgramScope|null){
+    const target=this.target(id);if(target.archived||target.revision!==revision)throw new Error("409: Target changed or archived; reload");
+    if(!raw||typeof raw!=="object"||Array.isArray(raw))throw new Error("400: Invalid target access settings");
+    const nextProgram=program===undefined?target.access?.program:program??undefined;
+    const access=validateTargetAccess(target.url,{...raw,program:nextProgram});
+    const next={...target,access,revision:revision+1,updatedAt:this.now(),updatedBy:actor};
+    this.io.put(this.key("target",id),next);this.audit(program?"scope.import":"target.access",id,actor);return next;
   }
   saveSources(id:string,revision:number,sources:SourceContext[],actor:string){
     const target=this.target(id);
@@ -62,10 +74,11 @@ export class OnboardingStore {
     this.io.put(this.key("target",id),next);this.audit("target."+action,id,actor);
     return next;
   }
-  async checkTarget(id:string,revision:number,operation:string,actor:string,checker:(url:string)=>Promise<AddressCheck>=url=>checkAddress(url,this.io.fetcher)) {
+  async checkTarget(id:string,revision:number,operation:string,actor:string,checker?:(url:string)=>Promise<AddressCheck>) {
     const target=this.target(id);if(target.archived||target.revision!==revision)throw new Error("409: Target changed or archived; reload");
     return this.operation("check",operation,{id,revision},async()=>{
-      const checked=await checker(target.url);const current=this.target(id);
+      const fetcher:typeof fetch=target.access?(url,init)=>performTargetFetch(target,new Request(url,init),this.io.fetcher):this.io.fetcher??fetch;
+      const checked=await (checker??(url=>checkAddress(url,fetcher)))(target.url);const current=this.target(id);
       if(current.revision!==revision||current.archived)throw new Error("409: Target changed during verification; verify again");
       const proof:TargetProof={...checked,targetId:id,targetRevision:revision,checkedAt:this.now(),expiresAt:this.now()+300000};
       this.io.put(this.key("target-proof",id),proof);this.audit("target.check",id,actor);return proof;
@@ -213,17 +226,17 @@ export class OnboardingStore {
     return {targetURL:meta.audienceURL,header:meta.header!,value:meta.scheme==="bearer"?"Bearer "+value:value};
   }
   async testAPI(runId:string,target:SavedTarget,operation:string,actor:string) {
-    const draft=this.draft(runId);if(!draft.apiCredential||!draft.endpoint||!draft.expectedStatus)throw new Error("400: Choose a key, protected read-only endpoint and expected status");
-    const config=this.apiConfig(target,draft.apiCredential);assertAudience(target.url,draft.endpoint);
+    const draft=this.draft(runId),bound=target.access?.api;if((!bound&&!draft.apiCredential)||!draft.endpoint||!draft.expectedStatus)throw new Error("400: Choose a key, protected read-only endpoint and expected status");
+    const config=bound?{targetURL:bound.url,header:bound.header,value:(bound.scheme==="bearer"?"Bearer ":"")+(this.io.readTargetSecret?await this.io.readTargetSecret(bound.binding):(()=>{throw new Error("409: Configure the Cloudflare target binding");})())}:this.apiConfig(target,draft.apiCredential!);assertAudience(config.targetURL,draft.endpoint);
     const identity={runId,revision:draft.revision,targetRevision:target.revision};
     return this.operation("api-test",operation,identity,async()=>{
-      const request=(authenticated:boolean)=>(this.io.fetcher??fetch)(draft.endpoint!,{method:"GET",headers:targetHeaders(undefined,authenticated?config:undefined),redirect:"manual",signal:AbortSignal.timeout(5000)});
+      const request=(authenticated:boolean)=>{const init={method:"GET",headers:targetHeaders(undefined,authenticated?config:undefined),redirect:"manual" as const,signal:AbortSignal.timeout(5000)};return target.access?performTargetFetch(target,new Request(draft.endpoint!,init),this.io.fetcher,authenticated?config:undefined):(this.io.fetcher??fetch)(draft.endpoint!,init);};
       const anonymous=await request(false),anonymousText=await boundedText(anonymous);
       const response=await request(true),text=await boundedText(response);
       const matches=(status:number,body:string)=>status===draft.expectedStatus&&(!draft.expectedText||body.includes(draft.expectedText));
       if(!matches(response.status,text)||matches(anonymous.status,anonymousText))throw new Error("409: The response did not distinguish authenticated access. Use a protected read-only endpoint and an accurate success condition.");
       if(this.draft(runId).revision!==draft.revision)throw new Error("409: Setup changed during API test");
-      this.apiConfig(target,draft.apiCredential!);
+      if(!bound)this.apiConfig(target,draft.apiCredential!);
       const proof={...identity,configuration:apiProofIdentity(draft,target),credential:draft.apiCredential,testedAt:this.now(),expiresAt:this.now()+86400000};
       this.io.put(this.key("api-proof",runId),proof);this.audit("api.test",target.id,actor);return {verified:true,testedAt:proof.testedAt};
     });
@@ -232,7 +245,7 @@ export class OnboardingStore {
     const draft=this.draft(runId);if(target.kind!=="api"||draft.publicAPI)return;
     const proof=this.io.get<{revision:number;targetRevision:number;expiresAt:number;configuration:string}>(this.key("api-proof",runId));
     if(!proof||proof.configuration!==apiProofIdentity(draft,target)||proof.targetRevision!==target.revision||proof.expiresAt<this.now())throw new Error("409: Test API access before authenticated analysis");
-    this.apiConfig(target,draft.apiCredential!);
+    if(!target.access?.api)this.apiConfig(target,draft.apiCredential!);
   }
   async operation<T>(kind:string,id:string,input:unknown,run:()=>Promise<T>):Promise<T>{
     identifier(id,"operation id");const key=this.key("operation",kind+":"+id),fingerprint=await digest(input);
@@ -250,7 +263,8 @@ export class OnboardingStore {
     if(!raw||raw.version!==1||!Array.isArray(raw.targets)||!Array.isArray(raw.credentials))throw new Error("400: Invalid onboarding export");
     if(this.targets().length||this.credentials().some(c=>!c.id.startsWith("bound-")))throw new Error("409: Import needs an empty target/credential library");
     for(const target of raw.targets){
-      const imported=this.saveTarget(target,null,actor);
+      let imported=this.saveTarget(target,null,actor);
+      if(target.access)imported=this.saveTargetAccess(imported.id,imported.revision,target.access,actor,target.access.program??null);
       if(target.archived)this.lifecycleTarget(imported.id,imported.revision,"archive",actor);
     }
     for(const c of raw.credentials){
