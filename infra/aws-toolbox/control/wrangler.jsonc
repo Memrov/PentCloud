@@ -8,7 +8,6 @@
   ],
   "workers_dev": false,
   "preview_urls": false,
-  "services":[{"binding":"TARGET_EGRESS","service":"pentcloud-app","entrypoint":"TargetEgress"}],
   "observability": {
     "enabled": true,
     "redact_query_string": true,

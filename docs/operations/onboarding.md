@@ -8,7 +8,7 @@ defaults while retained run snapshots and Git evidence remain.
 
 ## Bounty scope and target login
 
-**Find a bounty program** searches the public
+**Find a bounty program** opens a searchable, scrollable list from the public
 [PentCloud scope catalog](https://github.com/Memrov/PentCloud-scopes). Choose a
 website/API asset, or enter a concrete hostname for a wildcard. Import saves a
 checksummed catalog revision, applicable rules and exclusions on the target.
@@ -18,32 +18,35 @@ require manual review. Catalog data is not authorization: check the program's
 official rules, permitted methods, rate limits and account requirements yourself.
 Refresh its saved scope before subsequent hunts; existing runs keep their snapshot.
 
-Under **Network and login settings**, add nonsecret researcher identification
-headers and optional Cloudflare credential **binding names**. See the
+Under **Network and login settings**, enable optional headers, browser login or
+API authentication. Copy the generated names into Cloudflare Worker secrets or
+Secrets Store bindings; no credential values are entered in PentCloud. See the
 [secret setup walkthrough](../cloudflare-setup.md#target-login-and-api-secrets).
-Required headers overwrite agent-provided values on managed requests. The browser
-agent inspects the login form, calls `pentcloud_browser_login` with its selectors,
-then submits and checks the result using its existing browser tool. No human login
-handoff or new model provider is involved. Login must stay inside the selected
-target; external identity providers, MFA and CAPTCHA need additional support.
+**Check** verifies availability and supported format only, not authentication.
+Generic passwords and API keys have no universal validity test. The API setup
+provides an explicit read-only authenticated check; the browser agent confirms
+login by inspecting the resulting page. Header secrets are a JSON object of
+header names and values and overwrite agent-provided values on managed requests.
 
-Cookies and local storage are held privately in Coordinator storage for up to
-12 hours and reused by later agent browser contexts for that target/login
-configuration. They are not Git artifacts or part of settings export. **Forget
-saved login** clears the reusable snapshot; it does not revoke the target's
-sessions, erase active browser contexts or delete Cloudflare secrets. Operators
-on one installation share these capabilities. A target page and its scripts can
-see the credentials supplied to it; use disposable assessment accounts.
+The agent inspects the form, calls `pentcloud_browser_login` with its selectors,
+then submits using its existing browser tool. Login must remain inside the saved
+target; external identity providers, MFA and CAPTCHA require additional support.
+Each run starts fresh. Cookies and local storage are shared only among that run's
+agents, stored privately for up to 30 minutes since their last update, and cleared
+on completion, stop or deletion. They are not Git artifacts or settings exports.
+Cleanup does not revoke the target's server-side sessions. Operators on one
+installation share these capabilities. Target pages/scripts can see supplied
+credentials; use disposable assessment accounts.
 
-Managed targets use native Browser Run hostname guardrails plus trusted CDP
-request interception for paths, exclusions, redirects and headers. Computer curl,
-the API adapter, retrieval and Kali HTTP/HTTPS requests use the same target
-matcher. Browser WebSockets are disabled. Kali permits intercepted HTTP/HTTPS on
-ports 80/443; raw sockets, other ports and external DNS-based tools are unavailable.
-Some scanners need extra proxy/CA configuration; TLS interception cannot preserve
-the target's original TLS certificate. This is not a universal network sandbox;
-review the [remaining network risks](../../SECURITY.md#network-and-data-risks).
-Plain targets without managed settings retain their prior guidance behavior.
+Managed browsers use native hostname guardrails and trusted CDP interception for
+paths, exclusions, redirect hops and headers. Chromium retains response streaming,
+uploads, cookies and TLS; responses are not buffered through an application proxy.
+Computer curl, the API adapter and retrieval use the same URL matcher. Browser
+WebSockets are disabled. **Kali retains direct Internet access: scope is not
+network-enforced for Kali.** Required browser headers and login are not silently
+injected into every Kali tool. Program rules, rate limits and permitted testing
+remain operator and agent responsibilities. Review the
+[network risks](../../SECURITY.md#network-and-data-risks).
 
 Below the saved address, **Source context (optional)** can attach up to five
 existing Artifacts repositories or import public GitHub source through the native

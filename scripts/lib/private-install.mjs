@@ -184,7 +184,6 @@ export class Installer {
       vars: { CONTROL_BASE_URL: this.state.appUrl, ACCESS_TEAM_DOMAIN: this.config.accessTeamDomain, ACCESS_AUD: this.state.resources.access.aud, ARTIFACTS_NAMESPACE: this.names.namespace },
     });
     Object.assign(gateway, common, { name: this.names.gateway, main: join(this.root, 'infra/aws-toolbox/control/src/worker.ts'),
-      services:this.state.resources.app?.status==='ready'?[{binding:'TARGET_EGRESS',service:this.names.app,entrypoint:'TargetEgress'}]:[],
       containers: [{ name: this.names.container, class_name: 'KaliToolbox', scheduling_policy: 'durable_object', images: { stock: { image: this.state.image.image } } }] });
     // Worker secrets are provisioned before the public route is enabled. They
     // are not put into configs, arguments, dry-run output or the manifest.
@@ -286,9 +285,6 @@ export class Installer {
     this.state.resources.access.aud = access.aud; await this.save();
     await this.render(false);
     await this.run('build', []);
-    // Existing gateways already satisfy the app's TOOLBOX binding. Upgrade the
-    // provider first, before a gateway can name its new TargetEgress entrypoint.
-    if(this.state.resources.app?.status==='ready')await this.deploy('app');
     await this.deploy('gateway');
     if (!this.state.steps.mcp) {
       const bound=await this.api.request(`${this.base}/workers/scripts/${this.names.gateway}/secrets`);
@@ -297,10 +293,6 @@ export class Installer {
       this.state.steps.mcp=true; await this.save();
     }
     await this.deploy('app');
-    // Bootstrap the private app first, then finish the reverse capability. Until
-    // this binding exists the new container's outbound handler denies traffic.
-    await this.render(false);
-    await this.deploy('gateway');
     for(const [name,step] of [['OPENCODE_GO_API_KEY','model'],['OPENCODE_API_KEY','consoleModel']])if(!this.state.steps[step]&&this.environment[name]){await this.workerSecret(this.names.app,name,this.environment[name]);this.state.steps[step]=true;await this.save();}
     await this.render(true);
     // Only routing changes; use the same bundle proof after regenerating it.
@@ -404,8 +396,6 @@ export class Installer {
         assert(bindings.some((item) => item.name === 'TOOLBOX' && item.service === this.names.gateway && item.entrypoint === 'ToolboxGateway'), 'Private gateway service binding mismatch');
         assert(bindings.some((item) => item.name === 'ARTIFACTS' && item.namespace === this.names.namespace), 'Private Artifacts namespace binding mismatch');
         assert(!bindings.some((item) => item.name === 'LEGACY_STATE_COMMIT'), 'Fresh installs must not import legacy history');
-      } else {
-        assert(bindings.some(item=>item.name==='TARGET_EGRESS'&&item.service===this.names.app&&item.entrypoint==='TargetEgress'),'Target egress service binding mismatch');
       }
       checks.push(`${key} bindings`);
     }

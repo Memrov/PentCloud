@@ -39,11 +39,10 @@ IP/CIDR confinement, DNS pinning, protocol isolation or program-rule enforcement
   still depends on a live trusted Worker connection; this is not a promise of
   independent browser-wide path isolation after a platform failure. Browser WebSockets are disabled.
   Plain targets without managed settings retain broader browser reach.
-- Coder, Maintenance and Pentester use shared Kali with direct internet disabled
-  and native HTTP/HTTPS interception on ports 80/443. Managed targets pass through
-  the target matcher; plain targets retain their prior HTTP destination behavior.
-  Raw TCP/UDP scans, other ports and ordinary external DNS tools are blocked.
-  TLS interception changes observed certificates and may break pinned clients.
+- Coder, Maintenance and Pentester use shared Kali with direct Internet access.
+  Scope is not enforced at its network layer. Browser headers and login state do
+  not automatically apply to stock scanners. Operators must configure engagement
+  egress and ensure agents respect program rules and rate limits.
 - The Worker shell supports fetch-backed HTTP(S) curl. Its JavaScript execution
   backend has no network, but that restriction does not apply to the browser,
   curl or Kali tools.

@@ -90,6 +90,7 @@ export interface AttemptRecord extends AttemptInput {
 }
 export interface RunRecord {
   boundAPIAccess?:boolean;
+  boundAPIFingerprint?:string;
   discoveryAcknowledged?:boolean;
   discoveryDrained?:boolean;
   definition?:TargetDefinition;
@@ -127,7 +128,6 @@ export interface RunRecord {
   finalResponse?: string;
 }
 export interface CoordinatorAPI {
-  targetFetch(id:string,request:Request,authenticated?:boolean):Promise<Response>;
   browserState(id:string,state?:import("./browser-target-access").BrowserAuthState):Promise<import("./browser-target-access").BrowserAuthState|undefined>;
   readRunWork(requesterId:string,sourceId?:string,offset?:number):Promise<import("./recorded-work").RecordedWorkPage>;
   readSourceContext(id:string,sourceId:string,kind:"tree"|"file",path:string,offset:number):Promise<unknown>;

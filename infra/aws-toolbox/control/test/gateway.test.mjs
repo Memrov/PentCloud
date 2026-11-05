@@ -22,19 +22,18 @@ before(async () => {
       }}`,
       serviceBindings: { TOOLBOX: { name: "toolbox", entrypoint: "ToolboxGateway" } },
     }, {
-      name: "toolbox", modules: true, compatibilityDate: "2026-10-19", compatibilityFlags: ["nodejs_compat","enable_ctx_exports"],
+      name: "toolbox", modules: true, compatibilityDate: "2026-10-19", compatibilityFlags: ["nodejs_compat"],
       modules: [{type: "ESModule", path: new URL("../dist/fixture.mjs", import.meta.url).pathname, contents: `
         import worker, {KaliToolbox} from './worker.js';
         export default {async fetch(request, env, ctx) {
           if(new URL(request.url).pathname === '/fixture') return Response.json(await env.KALI_TOOLBOX.getByName('shared').fixture(await request.json()));
           return worker.fetch(request,env,ctx);
         }};
-        export {ToolboxGateway,KaliOutbound} from './worker.js';
+        export {ToolboxGateway} from './worker.js';
         export class FixtureKali extends KaliToolbox {
           fixtureState = {running:true,generation:'fixture-generation',starts:0,timeouts:[],failTimeout:false};
           async fixture(options) {Object.assign(this.fixtureState,options);return this.fixtureState;}
           get container() { const target=this.env.KALI, state=this.fixtureState; return {
-            interceptAllOutboundHttp:async()=>{},interceptOutboundHttps:async()=>{},
             get running(){return state.running;}, images:{stock:'exact-stock-fixture'},
             inspect:async()=>state.running?{labels:{'pentcloud-gen':state.generation},image:'exact-stock-fixture'}:null,
             getTcpPort:port=>{if(port!==8081)throw Error('wrong port');return target;},

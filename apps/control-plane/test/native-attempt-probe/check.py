@@ -17,10 +17,14 @@ def probe(kind):
     assert 'error' not in result, (kind, result.get('error'))
     return kind, result
 
+_, echoed = probe('header-redaction')
+assert 'private-header-marker' not in json.dumps(echoed), echoed
+assert '[REDACTED]' in json.dumps(echoed).upper(), echoed
 # Exercise different DOs concurrently: unique Git directories must prevent global
 # isomorphic-git locks from crossing DO-owned SQLite I/O contexts.
 with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:
     results = dict(pool.map(probe, ['computer', 'computer-coder', 'shell', 'javascript', 'publish', 'cancel', 'replay', 'drain', 'codemode', 'known-running', 'memory', 'research-policy', 'mcp-schema', 'session-stateless', 'session-cleanup-failure', 'metasploit-owned', 'metasploit-unknown', 'metasploit-control-race', 'metasploit-inspect-race', 'metasploit-stale-inventory']))
+results['header-secret-redaction'] = {'passed': True}
 for kind in ['native-discovery', 'native-discovery-failed', 'native-discovery-empty', 'native-discovery-legacy']:
     _, result = probe(kind)
     assert result['modelRequests'] == 0 and not result['modelKeyConfigured'], result

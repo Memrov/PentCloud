@@ -186,10 +186,13 @@ A failure to become ready blocks UI assertions rather than passing an error page
 
 ## Target setup fixtures
 
-After building the UI, add `--target-access` to the interactive command to test
+After building the UI, add `--target-access --fixture-origin https://YOUR-OWNED-TEST-TARGET`
+to the interactive command to test
 program search/import, saved scope, headers and Cloudflare credential references
 at desktop and phone sizes. This mode serves actual built UI assets and uses
-production stores against synthetic catalog/target responses. It makes no model
+production stores against a synthetic catalog and your reachable, disposable login
+fixture. Use only a task-owned test host with fake credentials. Responses travel
+through Chromium, not a synthetic response relay. It makes no model
 requests and starts no assessment or production scanner.
 
 The native Browser Run checks include login POST/redirect/cookie reuse, binary

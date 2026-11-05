@@ -10,7 +10,6 @@ import {
 type Env = Cloudflare.Env;
 const INACTIVITY_MS = 30 * 60 * 1000;
 const GENERATION_LABEL = "pentcloud-gen";
-const EGRESS_LABEL="pentcloud-net";
 const mcpMethods = ["GET", "POST", "DELETE"];
 type StartupPhase = "container_binding" | "bearer_configuration" | "stock_image_configuration" | "container_start" | "inactivity_timeout";
 
@@ -53,7 +52,6 @@ function mcpRequest(request: Request, token: string): Request {
 export class KaliToolbox extends DurableObject<Env> implements ToolboxLifecycle {
   private lifecycleGate: Promise<void> = Promise.resolve();
   private timeoutSetup: Promise<void> | undefined;
-  private intercepts:Promise<void>|undefined;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     if (ctx.container?.running) {
@@ -86,36 +84,23 @@ export class KaliToolbox extends DurableObject<Env> implements ToolboxLifecycle 
     const generation = info.labels[GENERATION_LABEL];
     return { running: true, ...(generation ? { generation } : {}) };
   }
-  private async installOutbound(generation:string){
-    if(this.intercepts)return this.intercepts;
-    const work=(async()=>{const worker=this.ctx.exports.KaliOutbound({props:{generation}});await this.container.interceptAllOutboundHttp(worker);await this.container.interceptOutboundHttps("*",worker);})();
-    this.intercepts=work;try{await work;}catch(error){if(this.intercepts===work)this.intercepts=undefined;throw error;}
-  }
-  private async start(image: string): Promise<string> {
+  private start(image: string): string {
     this.timeoutSetup = undefined;
-    this.intercepts=undefined;
     const generation = crypto.randomUUID();
     this.container.start({
       image,
       instance: { vcpu: 2, memoryMib: 6144, diskMb: 20000 },
-      enableInternet: false,
-      labels: { [GENERATION_LABEL]: generation,[EGRESS_LABEL]:"managed-v1" },
+      enableInternet: true,
+      labels: { [GENERATION_LABEL]: generation },
       env: {
         PENTCLOUD_KALI_TOKEN: this.env.KALI_MCP_TOKEN,
         MCP_GATEWAY_TOKEN_FILE: "/tmp/pentcloud-mcp-token",
         MCP_GATEWAY_USE_TLS: "false",
-        SSL_CERT_FILE:"/etc/ssl/certs/ca-certificates.crt",
-        CURL_CA_BUNDLE:"/etc/ssl/certs/ca-certificates.crt",
-        REQUESTS_CA_BUNDLE:"/etc/ssl/certs/ca-certificates.crt",
-        NODE_EXTRA_CA_CERTS:"/etc/cloudflare/certs/cloudflare-containers-ca.crt",
       },
       // Preserve the exact image/entrypoint and inherited OCI PATH. Supply the
       // runtime-only bearer through the stock secret-file contract.
-      entrypoint: ["/bin/bash", "-c", 'umask 077; for i in {1..100}; do [ -s /etc/cloudflare/certs/cloudflare-containers-ca.crt ] && break; sleep 0.1; done; test -s /etc/cloudflare/certs/cloudflare-containers-ca.crt || exit 78; cp /etc/cloudflare/certs/cloudflare-containers-ca.crt /usr/local/share/ca-certificates/pentcloud-outbound.crt; update-ca-certificates >/dev/null 2>&1 || exit 78; printf %s "$PENTCLOUD_KALI_TOKEN" > /tmp/pentcloud-mcp-token; unset PENTCLOUD_KALI_TOKEN; exec /usr/bin/tini -g -- /opt/kali-mcp/bin/entrypoint.sh'],
+      entrypoint: ["/bin/bash", "-c", 'umask 077; printf %s "$PENTCLOUD_KALI_TOKEN" > /tmp/pentcloud-mcp-token; unset PENTCLOUD_KALI_TOKEN; exec /usr/bin/tini -g -- /opt/kali-mcp/bin/entrypoint.sh'],
     });
-    // Native interception readiness can await the running controller. Internet
-    // stays disabled while startup waits for its injected CA certificate.
-    await this.installOutbound(generation);
     return generation;
   }
   /** Serialize inspection/start through dispatch; upstream responses never hold this gate. */
@@ -146,7 +131,6 @@ export class KaliToolbox extends DurableObject<Env> implements ToolboxLifecycle 
       if(this.container.running)await this.container.destroy();
       if(this.container.running)throw new Error("Container cleanup has not finished");
       this.timeoutSetup=undefined;
-      this.intercepts=undefined;
       return {state:"stopped" as const};
     });
   }
@@ -164,7 +148,7 @@ export class KaliToolbox extends DurableObject<Env> implements ToolboxLifecycle 
         const image = this.container.images?.stock;
         if (typeof image !== "string" || !image) throw new Error("Named stock image is unavailable");
         scope.phase = "container_start";
-        const generation = await this.start(image);
+        const generation = this.start(image);
         scope.phase = "inactivity_timeout";
         await this.ensureTimeout();
         return {state: "booting", generation};
@@ -201,18 +185,6 @@ export class KaliToolbox extends DurableObject<Env> implements ToolboxLifecycle 
       // Receiving the RPC is native activity; no timer or monitor renews it.
       return {state: "running", generation: current.generation};
     });
-  }
-  async configureAccess(generation:string,attempt:string):Promise<void>{
-    if(!toolboxGeneration(generation)||!/^[a-f0-9]{64}$/.test(attempt))throw new Error("Invalid target access owner");
-    const current=await this.current(),info=current.running?await this.container.inspect():undefined;
-    if(current.generation!==generation||info?.labels[EGRESS_LABEL]!=="managed-v1")throw new Error("409: Drain and restart the legacy Kali generation before using managed target access");
-    await this.installOutbound(generation);await this.ctx.storage.put("egress:owner",{generation,attempt});
-  }
-  async outbound(generation:string,request:Request):Promise<Response>{
-    const current=await this.current(),owner=await this.ctx.storage.get<{generation:string;attempt:string}>("egress:owner");
-    if(!current.running||current.generation!==generation||owner?.generation!==generation||!this.env.TARGET_EGRESS)return new Response("No active target access",{status:403});
-    const headers=new Headers(request.headers);headers.set("X-Pentcloud-Egress-Attempt",owner.attempt);
-    return this.env.TARGET_EGRESS.fetch(new Request(request,{headers,redirect:"manual"}));
   }
   private readonly files=new KaliFiles(()=>this.container,async scope=>{
     toolboxFileRoot(scope);
@@ -253,7 +225,6 @@ function toolbox(env: Env) {
 
 /** A service-binding capability; never selected by the public default handler. */
 export class ToolboxGateway extends WorkerEntrypoint<Env> implements ToolboxLifecycle {
-  async configureAccess(generation:string,attempt:string):Promise<void>{return toolbox(this.env).configureAccess(generation,attempt);}
   async clear():Promise<{state:"stopped"}|ToolboxUnavailable>{return toolbox(this.env).clear();}
   async status(): Promise<ToolboxStatus | ToolboxUnavailable> { return toolbox(this.env).status(); }
   async ready(expectedGeneration?: string): Promise<ToolboxReadiness | ToolboxFailure> { return toolbox(this.env).ready(expectedGeneration); }
@@ -268,10 +239,6 @@ export class ToolboxGateway extends WorkerEntrypoint<Env> implements ToolboxLife
     if (!request.headers.get(GENERATION_HEADER)) return lost();
     return toolbox(this.env).fetch(request);
   }
-}
-
-export class KaliOutbound extends WorkerEntrypoint<Env,{generation:string}> {
-  override fetch(request:Request):Promise<Response>{return toolbox(this.env).outbound(this.ctx.props.generation,request);}
 }
 
 // All runtime capabilities are exposed only through ToolboxGateway bindings.

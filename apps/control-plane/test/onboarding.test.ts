@@ -4,7 +4,7 @@ import { normalizeTargetURL, checkAddress } from '../src/native/target-check';
 import { normalizeCatalog } from '../src/native/opencode-models';
 
 function fixture(fetcher?:typeof fetch) {
-  const records = new Map<string, unknown>(); let time=1000000,bound="bound-test-key";
+  const records = new Map<string, unknown>(); let time=1000000,bound="bound-test-key",targetSecret="cloudflare-api-secret";
   const store=new OnboardingStore({
     get:<T>(key:string)=>structuredClone(records.get(key)) as T|undefined,
     put:(key:string,value:unknown)=>{records.set(key,structuredClone(value));},
@@ -12,11 +12,18 @@ function fixture(fetcher?:typeof fetch) {
     remove:(key:string)=>{records.delete(key);}, now:()=>time,
     fetcher:fetcher??(async()=>Response.json({data:[{id:'test-model',name:'Test model',type:'chat',capabilities:{tools:{supported:true}},limit:{context:128000,output:8192},api:{'chat-completions':{base_url:'https://opencode.ai/inference/go/openai/v1'}}}]})),
     probe:async()=>{}, boundGoKey:()=>bound,
-    readTargetSecret:async()=>"cloudflare-api-secret",
+    readTargetSecret:async()=>targetSecret,
   });
-  return {store,records,setBoundKey:(value:string)=>{bound=value;},advance:(ms:number)=>{time+=ms;}};
+  return {store,records,setTargetSecret:(value:string)=>{targetSecret=value;},setBoundKey:(value:string)=>{bound=value;},advance:(ms:number)=>{time+=ms;}};
 }
 describe('saved targets and credential readiness',()=>{
+  it('checks native credential readiness without claiming a login or persisting values',async()=>{
+    const {store,records}=fixture();const t=store.saveTarget({id:'target-secrets',kind:'website',name:'Example',url:'example.com'},null,'owner');
+    const result=await store.checkTargetSecret(t.id,t.revision,'password','owner');
+    expect(result).toMatchObject({ready:true,authenticated:false,status:'ready'});
+    expect(JSON.stringify([...records.values()])).not.toContain('cloudflare-api-secret');
+    await expect(store.checkTargetSecret(t.id,t.revision+1,'password','owner')).rejects.toThrow(/changed/i);
+  });
   it('keeps API roots, schemes and ports distinct and removes URL credentials',()=>{
     expect(normalizeTargetURL('EXAMPLE.com')).toBe('https://example.com/');
     expect(normalizeTargetURL('http://Example.com:8080/v2/')).toBe('http://example.com:8080/v2/');
@@ -49,6 +56,15 @@ describe('saved targets and credential readiness',()=>{
     await expect(store.testAPI('run-bound-api',configured,'test-bound-api','owner')).resolves.toMatchObject({verified:true});
     expect(seen.map(h=>h.get('X-Researcher'))).toEqual(['required','required']);expect(seen.map(h=>h.get('Authorization'))).toEqual([null,'Bearer cloudflare-api-secret']);
     expect(JSON.stringify([...records.values()])).not.toContain('cloudflare-api-secret');
+  });
+  it('rejects a rotated native API credential after its successful read-only check',async()=>{
+    const {store,setTargetSecret}=fixture(async(_url,init)=>new Response(new Headers(init?.headers).has('Authorization')?'private':'denied',{status:new Headers(init?.headers).has('Authorization')?200:401}));
+    const t=store.saveTarget({id:'rotated-api',kind:'api',name:'API',url:'https://example.com/v1/'},null,'owner');
+    const target=store.saveTargetAccess(t.id,t.revision,{headers:[],api:{url:t.url,binding:'PENTCLOUD_TARGET_API',header:'Authorization',scheme:'bearer'}},'owner');
+    store.saveDraft('run-rotate',{publicAPI:false,endpoint:t.url+'me',expectedStatus:200},0,'owner');
+    await store.testAPI('run-rotate',target,'check-original','owner');
+    await expect(store.verifyAPIProof('run-rotate',target)).resolves.toMatchObject({credentialFingerprint:expect.any(String)});
+    setTargetSecret('rotated-untested-key');await expect(store.verifyAPIProof('run-rotate',target)).rejects.toThrow(/changed|test/i);
   });
   it('refuses to persist OpenCode keys in application storage',()=>{
     const {store,records}=fixture();

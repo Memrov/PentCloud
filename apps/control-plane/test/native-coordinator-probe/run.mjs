@@ -589,6 +589,9 @@ await fixture(async () => {
     "infrastructure failure is preserved",
   );
 });
+await fixture(async()=>{
+  assert.deepEqual(await get("/browser-auth-lifecycle"),{cancelled:true,completed:true,archived:true});
+});
 console.log(
   "workerd coordinator: Queue/deadman/reset, cancellation drain/FIFO/capacity, continuation CAS, role/revision authority, real Git candidate validation and durable publication replay passed",
 );

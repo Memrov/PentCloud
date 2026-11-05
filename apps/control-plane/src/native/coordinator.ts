@@ -35,9 +35,9 @@ import { knownRuntimeSecrets } from "../../../../shared/runtime-secrets";
 import { TargetDefinitions, type TargetDefinition } from "./target-definitions";
 import { OnboardingStore, assertAudience, type SetupDraft } from "./onboarding";
 import {ScopeCatalog} from "./scope-catalog";
-import {performTargetFetch} from "./target-fetch";
-import {assertTargetRequest,targetAccessBrief,readTargetSecret,type ScopedTarget} from "../../../../shared/target-access";
-import {validateBrowserState,type BrowserAuthState} from "./browser-target-access";
+import {targetAccessBrief,readTargetSecret,type ScopedTarget} from "../../../../shared/target-access";
+import {type BrowserAuthState} from "./browser-target-access";
+import {RunBrowserAuth} from "./run-browser-auth";
 import {SourceLibrary,readSource,type ImportReceipt} from "./source-context";
 import {parseByokProviders,type OpenCodeRoute} from "./opencode-models";
 import type { NewRunInput } from "./types";
@@ -224,6 +224,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return row ? (JSON.parse(row.value) as T) : undefined;
   }
   private put(key: string, value: unknown) {
+    if(key.startsWith("run:")&&value&&typeof value==="object"){const run=value as RunRecord;if(["completed","cancelled"].includes(run.phase)||(run.lifecycle??"active")!=="active")this.browserAuth.clear(run.id);}
     this.ctx.storage.sql.exec(
       "INSERT INTO native_records(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
       key,
@@ -385,6 +386,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.track(work);
   }
   private async recover() {
+    this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key LIKE 'target-auth:%' OR (key LIKE 'browser-auth:%' AND json_extract(value,'$.expiresAt')<=?)",Date.now());
     if (recoveryPending(this.get<RuntimeRecovery>("platform:recovery"))) return;
     for (const receipt of this.list<Publication | null>("publication:"))
       if (receipt) await this.projectAccepted(receipt.runId);
@@ -452,7 +454,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const draft=run?this.onboarding.draft(run.id):undefined;
     const defaults=this.list<{targetId:string;draft:SetupDraft}>("onboarding:defaults:");
     let modelsTested=false,apiTested=false;
-    if(run){try{await this.onboarding.verifyModelProfile(run.id);modelsTested=true;}catch{}try{this.onboarding.requireAPIProof(run.id,run.target!);apiTested=true;}catch{}}
+    if(run){try{await this.onboarding.verifyModelProfile(run.id);modelsTested=true;}catch{}try{await this.onboarding.verifyAPIProof(run.id,run.target!);apiTested=true;}catch{}}
     return {targets:this.onboarding.targets(),credentials:this.onboarding.credentials(),defaults,definitions:this.list<TargetDefinition>("onboarding:definition:"),checks:this.list("onboarding:target-proof:"),
       sourceImports:this.list<ImportReceipt>("onboarding:source-import:").filter(r=>r.status==="pending").map(({requestId,targetId,revision,repo,url,branch,replaceId})=>({requestId,targetId,revision,repo,url,...(branch?{branch}:{}),...(replaceId?{replaceId}:{})})),
       ...(run ? {run:publicRun(run),draft,definition:run.definition??(run.target?.kind==="api"?this.definitions.current(run.target.id):undefined),discovery:this.jobs(run.id).filter(j=>j.execution).map(this.presentJob),
@@ -465,6 +467,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.assertAdmissionOpen();
     try {
       switch(action){
+        case "scope.names":return await this.scopeCatalog.names();
         case "scope.search":return await this.scopeCatalog.search(String(value.query??""),typeof value.platform==="string"&&value.platform?value.platform:undefined);
         case "scope.preview":return await this.scopeCatalog.preview(String(value.programId));
         case "scope.import":{
@@ -474,8 +477,10 @@ export class Coordinator extends DurableObject<NativeEnv> {
         }
         case "scope.detach":return this.onboarding.saveTargetAccess(identifier(value.id),Number(value.revision),this.onboarding.target(identifier(value.id)).access??{headers:[]},actor,null);
         case "access.save":return this.onboarding.saveTargetAccess(identifier(value.id),Number(value.revision),value.access,actor);
+        case "access.check":return this.onboarding.checkTargetSecret(identifier(value.id),Number(value.revision),String(value.kind),actor);
         case "access.clearlogin":{
           const target=this.onboarding.target(identifier(value.id));if(target.revision!==revision)throw new Error("409: Target changed; reload");
+          for(const run of this.list<RunRecord>("run:"))if(run.target?.id===target.id)this.browserAuth.clear(run.id);
           const prefix="target-auth:"+target.id+":";this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",prefix.length,prefix);return {cleared:true};
         }
         case "source.list":return await this.sources.list(typeof value.cursor==="string"?value.cursor:undefined);
@@ -492,6 +497,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
             for(const key of ["onboarding:defaults:"+id,"onboarding:definition:"+id])this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key);
             await this.workspace.fs.rm("/target-definitions/"+id,{recursive:true,force:true});
             for(const prefix of ["onboarding:definition-version:"+id+":","material:target-definition:"+id+":"])this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",prefix.length,prefix);
+            for(const run of this.list<RunRecord>("run:"))if(run.target?.id===id)this.browserAuth.clear(run.id);
             const authPrefix="target-auth:"+id+":";this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",authPrefix.length,authPrefix);
             this.collectCredentialVersions();
           }
@@ -636,20 +642,14 @@ export class Coordinator extends DurableObject<NativeEnv> {
   async apiCredential(id:string):Promise<import("./api-access").APIAccess> {
     await this.assertActive(id);const run=this.run(this.job(id).runId);
     if(!run.target||run.target.kind!=="api")throw new Error("403: This run has no API target");
-    if(run.boundAPIAccess&&run.target.access?.api){const config=run.target.access.api,value=await readTargetSecret(this.env,config.binding);this.targetSecretRedactions.push(value);return {targetURL:config.url,header:config.header,value:config.scheme==="bearer"?"Bearer "+value:value};}
+    if(run.boundAPIAccess&&run.target.access?.api){const config=run.target.access.api,value=await readTargetSecret(this.env,config.binding);this.targetSecretRedactions.push(value);const credential=config.scheme==="bearer"?"Bearer "+value:value;if(!run.boundAPIFingerprint||await digest(credential)!==run.boundAPIFingerprint)throw new Error("409: Cloudflare API secret changed; test it and start a new run");await this.assertActive(id);return {targetURL:config.url,header:config.header,value:credential};}
     return run.apiAccess?this.onboarding.apiConfig(run.target,run.apiAccess):{targetURL:run.target.url};
   }
-  async targetFetch(id:string,request:Request,authenticated=false):Promise<Response>{
-    await this.assertActive(id);const target=this.run(this.job(id).runId).target;if(!target)throw new Error("403: No saved target");
-    if(target.access){const access=authenticated?await this.apiCredential(id):undefined;if(access)assertAudience(access.targetURL,request.url);return performTargetFetch(target,request,fetch,access?.header&&access.value?{header:access.header,value:access.value}:undefined);}
-    return fetch(new Request(request,{redirect:"manual",signal:AbortSignal.any([request.signal,AbortSignal.timeout(30000)])}));
-  }
+  private readonly browserAuth=new RunBrowserAuth({get:key=>this.get(key),put:(key,value)=>this.put(key,value),remove:key=>this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key)});
   async browserState(id:string,state?:BrowserAuthState):Promise<BrowserAuthState|undefined>{
-    await this.assertActive(id);const target=this.run(this.job(id).runId).target;if(!target?.access?.login)return;
-    const key="target-auth:"+target.id+":"+await digest({url:target.url,login:target.access.login});
-    await this.assertActive(id);
-    if(state){const clean=validateBrowserState(target,state);this.put(key,{expiresAt:Date.now()+12*3600000,state:clean});return;}
-    const cached=this.get<{expiresAt:number;state:BrowserAuthState}>(key);return cached&&cached.expiresAt>Date.now()?validateBrowserState(target,cached.state):undefined;
+    await this.assertActive(id);const run=this.run(this.job(id).runId),target=run.target;if(!target?.access?.login)return;
+    if(state){this.browserAuth.write(run.id,target,state);return;}
+    return this.browserAuth.read(run.id,target);
   }
   async activateAnalysis(id:string,expectedRevision:number,requestId:string,acknowledgeFailure=false,definitionVersion=0) {
     identifier(requestId,"analysis request id");await this.start();this.assertMutable(id);
@@ -664,13 +664,14 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const discoveries=this.jobs(id).filter(j=>j.execution);
     if(!discoveries.length)throw new Error("409: Initial discovery is missing");
     const draft=this.onboarding.draft(id);if(draft.revision!==expectedRevision)throw new Error("409: Setup changed; reload");
-    const modelsByRole=await this.onboarding.verifyModelProfile(id);this.onboarding.requireAPIProof(id,run.target);
+    const modelsByRole=await this.onboarding.verifyModelProfile(id),apiProof=await this.onboarding.verifyAPIProof(id,run.target);
     const definition=run.target.kind==="api"?this.definitions.current(run.target.id):undefined;
     if((definition?.version??0)!==definitionVersion)throw new Error("409: API definition changed; reload and review it before analysis");
     const definitionUploads:string[]=[];
     if(definition){this.definitionBusy++;try{definitionUploads.push(await this.definitions.copyIntoRun(definition,id,run.authorization?.actor??"operator"));}finally{this.definitionBusy--;}}
     const next:RunRecord={...run,phase:"primary",status:"created",modelsByRole,
       boundAPIAccess:!draft.publicAPI&&!!run.target.access?.api,
+      ...(apiProof?.credentialFingerprint?{boundAPIFingerprint:apiProof.credentialFingerprint}:{}),
       ...(definition?{definition}:{}),
       settingsRevision:await digest({settings:run.settings,modelsByRole,target:run.target,definition,apiAccess:draft.publicAPI?null:draft.apiCredential}),
       ...(!draft.publicAPI&&draft.apiCredential?{apiAccess:draft.apiCredential}:{}),
@@ -1261,6 +1262,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const cleared=await this.env.TOOLBOX.clear();
     if(!("state" in cleared) || cleared.state!=="stopped")throw new Error("503: scanner scratch cleanup is pending; retry deletion");
     for(const job of jobs){await this.queue.cancel(job.id);await this.attempt(job.id).purge(id);}
+    this.browserAuth.clear(id);
     await this.workspace.artifacts.delete(run.repo);
     for(const root of ["/projects","/accepted","/uploads"])await this.workspace.fs.rm(`${root}/${id}`,{recursive:true,force:true});
     this.ctx.storage.transactionSync(()=>{

@@ -1,5 +1,17 @@
 import {describe,it,expect} from "vitest";
-import {compileProgramScope,assertTargetRequest,validateTargetAccess,browserGuardrails,requestHeaders,readTargetSecret} from "../../../shared/target-access";
+import {compileProgramScope,assertTargetRequest,validateTargetAccess,browserGuardrails,requestHeaders,readTargetSecret,targetSecretBindings,resolveTargetHeaders} from "../../../shared/target-access";
+
+it("generates stable distinct Cloudflare names without embedding target names or addresses",async()=>{
+ const a=await targetSecretBindings("target-one"),b=await targetSecretBindings("target_one");
+ expect(a).toEqual(await targetSecretBindings("target-one"));expect(a).not.toEqual(b);
+ expect(a.username).toMatch(/^PENTCLOUD_TARGET_[A-F0-9]{24}_USERNAME$/);
+});
+it("resolves required headers only from Cloudflare and rejects identity/header injection",async()=>{
+ const target={url:"https://example.com/",access:{headers:[],headerBinding:"PENTCLOUD_TARGET_HEADERS"}};
+ const value=await resolveTargetHeaders(target,async()=>JSON.stringify({"X-Bug-Bounty":"researcher"}));
+ expect(requestHeaders(value).get("X-Bug-Bounty")).toBe("researcher");expect(JSON.stringify(target)).not.toContain("researcher");
+ for(const raw of ['{"Cookie":"session=x"}','{"X-Researcher":"line\\nvalue"}','[]','bad'])await expect(resolveTargetHeaders(target,async()=>raw)).rejects.toThrow(/header/i);
+});
 
 const program={id:"hackerone:example",name:"Example",platform:"hackerone",url:"https://hackerone.com/example",targets:{in_scope:[{type:"URL",value:"https://example.com/api/",instructions:null},{type:"WILDCARD",value:"*.example.net",instructions:null}],out_of_scope:[{type:"URL",value:"https://example.com/api/admin/",instructions:null},{type:"URL",value:"private.example.net",instructions:null}]}};
 const provenance={catalogCommit:"a".repeat(40),sourceCommit:"b".repeat(40),sha256:"c".repeat(64),publishedAt:"2026-11-04T12:00:00Z"};

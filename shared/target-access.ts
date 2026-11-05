@@ -7,7 +7,7 @@ export interface ProgramScope {
 export interface TargetLogin {url:string;usernameBinding:string;passwordBinding:string}
 export interface TargetHeader {name:string;value:string}
 export interface TargetAPICredential {url:string;binding:string;header:string;scheme:"bearer"|"header"}
-export interface TargetAccess {program?:ProgramScope;headers:TargetHeader[];login?:TargetLogin;api?:TargetAPICredential}
+export interface TargetAccess {program?:ProgramScope;headers:TargetHeader[];headerBinding?:string;login?:TargetLogin;api?:TargetAPICredential}
 export interface ScopedTarget {url:string;access?:TargetAccess}
 interface Asset {type:string;value:string;instructions?:string|null;eligible_for_submission?:boolean|null}
 export interface ScopeProgram {id:string;name:string;platform:string;url:string;targets:{in_scope:Asset[];out_of_scope:Asset[]}}
@@ -77,6 +77,7 @@ export function validateTargetAccess(url:string,raw:unknown):TargetAccess {
   names.add(h.name.toLowerCase());return {name:h.name,value:h.value};
  });
  const next:TargetAccess={headers};
+ if(data.headerBinding){if(!bindingName.test(data.headerBinding))throw new Error("400: Invalid required headers binding");next.headerBinding=data.headerBinding;}
  if(data.program){
   const p=data.program;if(!/^[a-f0-9]{40}$/.test(p.catalogCommit)||!/^[a-f0-9]{64}$/.test(p.sha256)||!Array.isArray(p.allow)||!Array.isArray(p.deny)||p.allow.length+p.deny.length>10000)throw new Error("400: Invalid imported program scope");
   if(typeof p.id!=="string"||typeof p.name!=="string"||p.name.length>500||typeof p.platform!=="string"||typeof p.url!=="string"||!Number.isFinite(Date.parse(p.publishedAt))||!Array.isArray(p.instructions)||p.instructions.some(i=>typeof i!=="string"||i.length>2000))throw new Error("400: Invalid program metadata");
@@ -110,6 +111,22 @@ export async function readTargetSecret(env:object,name:string):Promise<string>{
  if(!bindingName.test(name))throw new Error("403: Only target credential bindings can be resolved");
  const binding:unknown=Reflect.get(env,name);let value:unknown;
  try{value=typeof binding==="string"?binding:binding&&typeof binding==="object"&&typeof Reflect.get(binding,"get")==="function"?await (binding as {get():Promise<string>}).get():undefined;}catch{throw new Error("503: Cloudflare target secret unavailable");}
- if(typeof value!=="string"||!value.trim()||value.length>8192||/[\r\n\0]/.test(value))throw new Error("409: Configure the target credential binding in Cloudflare");return value;
+ if(typeof value!=="string"||!value.trim())throw new Error("409: Configure the target credential binding in Cloudflare");
+ if(value.length>8192||/[\r\n\0]/.test(value))throw new Error("409: Target secret has invalid format");return value;
 }
-export function targetAccessBrief(target:ScopedTarget){return {url:target.url,scope:target.access?"Managed HTTP/HTTPS access is restricted to this saved target. Imported exclusions apply. Raw network scanning and browser WebSockets are unavailable.":"Target is guidance, not universal host confinement",...(target.access?.program?{program:target.access.program.name,scopeRevision:target.access.program.catalogCommit,instructions:target.access.program.instructions}:{}),...(target.access?.login?{login:"Use pentcloud_browser_login to fill Cloudflare-held credentials, then submit and inspect the result."}:{}),...(target.access?.api?{api:"Use pentcloud_api_request for Cloudflare-held target API credentials."}:{})};}
+/** Stable names reveal neither the target hostname nor credential values. */
+export async function targetSecretBindings(id:string){
+ const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(id));
+ const prefix="PENTCLOUD_TARGET_"+[...new Uint8Array(bytes)].slice(0,12).map(v=>v.toString(16).padStart(2,"0")).join("").toUpperCase();
+ return {username:prefix+"_USERNAME",password:prefix+"_PASSWORD",api:prefix+"_API_KEY",headers:prefix+"_HEADERS"};
+}
+export function parseTargetHeaders(value:string):TargetHeader[]{
+ let data:unknown;try{data=JSON.parse(value);}catch{throw new Error("409: Required headers secret must be a JSON object of header names and values");}
+ if(!data||typeof data!=="object"||Array.isArray(data))throw new Error("409: Required headers secret must be a JSON object");
+ return validateTargetAccess("https://headers.example/",{headers:Object.entries(data).map(([name,value])=>({name,value}))}).headers;
+}
+export async function resolveTargetHeaders<T extends ScopedTarget>(target:T,resolve:(name:string)=>Promise<string>):Promise<T>{
+ if(!target.access?.headerBinding)return target;
+ return {...target,access:{...target.access,headers:[...target.access.headers,...parseTargetHeaders(await resolve(target.access.headerBinding))]}};
+}
+export function targetAccessBrief(target:ScopedTarget){return {url:target.url,scope:target.access?"Browser and managed HTTP requests stay within this saved target and imported exclusions. Browser WebSockets are unavailable. Kali has direct Internet access: scope is NOT enforced there. Abide by the program rules with every tool.":"Target is guidance, not universal host confinement",...(target.access?.program?{program:target.access.program.name,scopeRevision:target.access.program.catalogCommit,instructions:target.access.program.instructions}:{}),...(target.access?.login?{login:"Use pentcloud_browser_login to fill Cloudflare-held credentials, then submit and inspect the result. Login is fresh for each run and shared only within this run."}:{}),...(target.access?.api?{api:"Use pentcloud_api_request for Cloudflare-held target API credentials."}:{})};}

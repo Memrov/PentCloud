@@ -16,7 +16,6 @@ export interface ToolboxLifecycle {
   activity(generation: string): Promise<ToolboxActivity | ToolboxFailure>;
 }
 export interface ToolboxService extends ToolboxLifecycle, ToolboxFileService {
-  configureAccess(generation:string,attempt:string):Promise<void>;
   /** Explicit operator purge only, after global admission/drain fencing. Never boots. */
   clear():Promise<{state:"stopped"}|ToolboxUnavailable>;
   /** Official SDK streaming MCP transport, separate from lifecycle RPC. */

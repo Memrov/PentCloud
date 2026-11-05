@@ -516,6 +516,17 @@ export class ProbeCoordinator extends Coordinator {
     const afterStop=await this.files(job.runId,job.id),stoppedContent=await (await this.file(job.runId,commit,path)).text();
     return {listing,content,forged,crossRun,afterStop,stoppedContent,mainUnchanged:read<{headCommit:string}>("run:"+job.runId).headCommit===job.inputCommit,job:read<AttemptRecord>("job:"+job.id)};
   }
+  async browserAuthLifecycle(){
+    await this.seed(1,"coder",false);
+    const key="browser-auth:run-0",entry={expiresAt:Date.now()+1800000,state:{cookies:[],origins:[]}};
+    const exists=()=>!!this.ctx.storage.sql.exec("SELECT key FROM native_records WHERE key=?",key).toArray().length;
+    this.write(key,entry);await this.cancelRun("run-0");const cancelled=!exists();
+    for(const value of [{id:"run-0",phase:"completed"},{id:"run-0",phase:"setup",lifecycle:"archived"}]){
+      this.write(key,entry);(this as unknown as {put(k:string,v:unknown):void}).put("run:run-0",value);
+      if(exists())throw Error("Terminal/lifecycle update retained browser login");
+    }
+    return {cancelled,completed:true,archived:true};
+  }
   async seed(count = 2, role: "primary" | "coder" = "coder", notify = true) {
     await this.lifecycle.start();
     const settings = {
@@ -951,6 +962,7 @@ export default {
       if (url.pathname === "/platform-backoff") { await coordinator.onAlarmMemoryLimit({ sealed: false, nextTime: Date.now() + 60000 }); return Response.json(await coordinator.diagnostics()); }
       if (url.pathname === "/end-platform-backoff") return Response.json(await coordinator.endPlatformBackoff());
       if (url.pathname === "/platform-rearm") return Response.json(await coordinator.rearmPlatformRecovery({ scope: url.searchParams.get("scope") === "attempt" ? "attempt" : "coordinator", observedAt: Number(url.searchParams.get("at")), ...(url.searchParams.get("id") ? { attemptId: url.searchParams.get("id")! } : {}) }));
+      if(url.pathname==="/browser-auth-lifecycle")return Response.json(await coordinator.browserAuthLifecycle());
       if (url.pathname === "/seed")
         return Response.json(
           await coordinator.seed(

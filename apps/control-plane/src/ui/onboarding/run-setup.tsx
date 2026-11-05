@@ -1,7 +1,7 @@
 import {reconcileFormRevision} from "./form-revision";
 import { DiscoveryProgress } from "./discovery-progress";
 import { ExternalLink } from "../components/external-link";
-import { Badge, Banner, Button, Checkbox, Collapsible, Dialog, Input, Select, SensitiveInput } from "@cloudflare/kumo";
+import { Badge, Banner, Button, Checkbox, Collapsible, Dialog, Input, Select } from "@cloudflare/kumo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UIJob, UIRun } from "../api";
 import { MODEL_ROLES,type ModelRole } from "../../native/onboarding-roles";
@@ -13,7 +13,7 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
   const [keyVersion,setKeyVersion]=useState(0),[overrideKeys,setOverrideKeys]=useState<Partial<Record<ModelRole,{id:string;version:number}>>>({});
   const [conflict,setConflict]=useState(false),[catalogErrors,setCatalogErrors]=useState<string[]>([]);
   const [key,setKey]=useState(""),[defaultModel,setDefaultModel]=useState(""),[overrides,setOverrides]=useState<Partial<Record<ModelRole,string>>>({});
-  const [publicAPI,setPublicAPI]=useState(true),[apiKey,setAPIKey]=useState(""),[apiValue,setAPIValue]=useState(""),[apiScheme,setAPIScheme]=useState<"bearer"|"header">("bearer"),[header,setHeader]=useState("X-API-Key");
+  const [publicAPI,setPublicAPI]=useState(true),[apiKey,setAPIKey]=useState("");
   const [endpoint,setEndpoint]=useState(""),[expectedStatus,setExpectedStatus]=useState("200"),[expectedText,setExpectedText]=useState("");
   const [busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[error,setError]=useState<string>(),[notice,setNotice]=useState<string>(),[ack,setAck]=useState(false),[revoking,setRevoking]=useState<CredentialMetadata>(),[revokeOpen,setRevokeOpen]=useState(false);
   const initialized=useRef(false),startRequest=useRef<string|undefined>(undefined),formRevision=useRef(0),dirtyRef=useRef(false),conflictRef=useRef(false);
@@ -71,10 +71,6 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
     }
     await refresh();setNotice("Selected OpenCode models passed the native connection test.");
   });
-  const saveAPIKey=()=>perform(async()=>{
-    const meta=await action<CredentialMetadata>("credential.save",{id:"api-"+crypto.randomUUID(),purpose:"api",targetId:run.target!.id,label:"API test key",value:apiValue,header:apiScheme==="bearer"?"Authorization":header,scheme:apiScheme,revision:null});
-    setAPIValue("");setAPIKey(meta.id);setPublicAPI(false);edit();await refresh();setNotice("API key saved. Test it against a protected read-only endpoint.");
-  });
   const testAPI=()=>perform(async()=>{await saveDraft();await action("api.test",{runId:run.id,requestId:"api-test-"+crypto.randomUUID()});await refresh();setNotice("Protected API access verified. Scanner authentication support varies by tool.");});
   const start=()=>perform(async()=>{
     if(dirtyRef.current||conflictRef.current||data?.draft?.revision!==formRevision.current)throw new Error("Reload or save and test the displayed configuration first");
@@ -107,15 +103,13 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
       </section>
       <section className="onboarding-card onboarding-form" aria-label="API test access">
         <h2>{run.target?.kind==="api"?"API test access":"Website test access"}</h2>
-        {run.target?.kind!=="api"?<p>{run.target?.access?.loginConfigured?"Agents can fill the website's login form with Cloudflare-held credentials. Private browser state is reused for this target.":"Add optional Cloudflare login references in the saved target's network and login settings. This run uses the target settings captured when it started."}</p>:<>
+        {run.target?.kind!=="api"?<p>{run.target?.access?.loginConfigured?"Agents can fill the website's login form with Cloudflare-held credentials. Each run starts a fresh login; its agents reuse that run’s private browser state.":"Add optional Cloudflare login references in the saved target's network and login settings. This run uses the target settings captured when it started."}</p>:<>
           <Select label="Access type" aria-label="API access type" required value={publicAPI?"public":"authenticated"} disabled={busy} onValueChange={value=>{setPublicAPI(value==="public");edit();}}><Select.Option value="public">Public API / unauthenticated coverage</Select.Option><Select.Option value="authenticated">Authenticated API</Select.Option></Select>
           {!publicAPI&&<>
             {run.target.access?.apiConfigured?<Banner variant="secondary" description="This target uses its saved Cloudflare API credential binding. Test a protected endpoint below; key values stay in Cloudflare."/>:<>
             <Select label="Saved API key" aria-label="Saved API key" value={apiKey||null} placeholder="Choose a saved API key" disabled={busy} onValueChange={value=>{setAPIKey(String(value??""));edit();}}>{apiCredentials.map(c=><Select.Option key={c.id} value={c.id}>{c.label}{c.missing?" · re-enter key":""}</Select.Option>)}</Select>
-            <Select label="Key format" aria-label="API key format" required value={apiScheme} disabled={busy} onValueChange={value=>setAPIScheme(value as "bearer"|"header")}><Select.Option value="bearer">Bearer token</Select.Option><Select.Option value="header">API key header</Select.Option></Select>
-            {apiScheme==="header"&&<Input label="Header name" value={header} onValueChange={setHeader} disabled={busy}/>}
-            <SensitiveInput label="New API test key" value={apiValue} onValueChange={setAPIValue} autoComplete="new-password" disabled={busy}/>
-            <div className="onboarding-row"><Button variant="secondary" disabled={busy||!apiValue.trim()} onClick={()=>void saveAPIKey()}>Save API key</Button><Button variant="ghost" disabled={busy||!apiKey} onClick={()=>{setRevoking(apiCredentials.find(c=>c.id===apiKey));setRevokeOpen(true);}}>Revoke selected API key</Button></div>
+            <Banner variant="secondary" description="For new credentials, configure Cloudflare API authentication in the saved target’s settings, then start a fresh run to use it. Existing saved keys remain available above."/>
+            <Button variant="ghost" disabled={busy||!apiKey} onClick={()=>{setRevoking(apiCredentials.find(c=>c.id===apiKey));setRevokeOpen(true);}}>Revoke selected API key</Button>
             </>}
             <Input label="Protected read-only test endpoint" value={endpoint} onValueChange={value=>{setEndpoint(value);edit();}} disabled={busy}/>
             <Input label="Expected success status" value={expectedStatus} onValueChange={value=>{setExpectedStatus(value);edit();}} disabled={busy}/>

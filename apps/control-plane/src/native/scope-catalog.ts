@@ -10,7 +10,7 @@ export class ScopeCatalog {
  constructor(private readonly io:{get<T>(key:string):T|undefined;put(key:string,value:unknown):void;fetcher?:typeof fetch}){}
  private async read(url:string){
   const response=await (this.io.fetcher??fetch)(url,{redirect:"manual",headers:{"User-Agent":"PentCloud scope catalog","Accept":"application/json"},signal:AbortSignal.timeout(10000)});
-  if(!response.ok){await response.body?.cancel();throw new Error("503: Scope catalog unavailable; retry later");}
+  if(!response.ok){await response.body?.cancel();throw new Error("503: Scope catalog unavailable ("+new URL(url).hostname+" HTTP "+response.status+"); retry later");}
   return boundedText(response,4*1024*1024);
  }
  private async catalog():Promise<Catalog>{
@@ -32,6 +32,10 @@ export class ScopeCatalog {
   if(typeof query!=="string"||query.length>160||platform&&!platforms.includes(platform))throw new Error("400: Invalid program search");
   const catalog=await this.catalog(),needle=query.trim().toLowerCase(),matches=catalog.programs.filter(p=>(!platform||p.platform===platform)&&(!needle||(p.name+" "+p.id).toLowerCase().includes(needle)));
   return {catalogCommit:catalog.commit,publishedAt:catalog.manifest.published_at,total:matches.length,programs:matches.slice(0,50).map(({path:_path,...p})=>p)};
+ }
+ async names(){
+  const catalog=await this.catalog();
+  return {programs:catalog.programs.map(({id,name,platform})=>({id,name,platform})).sort((a,b)=>a.name.localeCompare(b.name))};
  }
  private async program(id:string){
   const catalog=await this.catalog(),row=catalog.programs.find(p=>p.id===id);if(!row)throw new Error("404: Program not found; search the catalog first");

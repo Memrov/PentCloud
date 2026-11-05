@@ -69,34 +69,31 @@ their existing separate setup flow.
 
 ## Target login and API secrets
 
-Create optional assessment credentials on the **app Worker**, using names that
-start with `PENTCLOUD_TARGET_` followed by uppercase letters, numbers or underscores.
-Keep each target's credentials separate from OpenCode and account-administration
-credentials. In Dashboard, add encrypted Worker secrets such as
-`PENTCLOUD_TARGET_DEMO_USERNAME`, `PENTCLOUD_TARGET_DEMO_PASSWORD` and
-`PENTCLOUD_TARGET_DEMO_API_KEY`. Existing Secrets Store `.get()` bindings with
-these names also work; no new store or additional service is required.
+In **Targets → Network and login settings**, enable the needed options and copy
+the generated secret names. Create these on the **app Worker** as encrypted Worker
+secrets, or bind existing Secrets Store secrets under the exact generated names.
+Keep assessment credentials separate from OpenCode and account-administration keys.
+No new secret store or credential broker is required.
 
-The installed Wrangler can collect each value in its private terminal prompt:
+Wrangler can collect a value in its private terminal prompt (replace the name
+with the one copied from your target):
 
 ```sh
-npm exec --workspace @pentagi-artifacts/control-plane -- wrangler secret put PENTCLOUD_TARGET_DEMO_USERNAME --config /private/instance-state/app.wrangler.json
-npm exec --workspace @pentagi-artifacts/control-plane -- wrangler secret put PENTCLOUD_TARGET_DEMO_PASSWORD --config /private/instance-state/app.wrangler.json
-npm exec --workspace @pentagi-artifacts/control-plane -- wrangler secret put PENTCLOUD_TARGET_DEMO_API_KEY --config /private/instance-state/app.wrangler.json
+npm exec --workspace @pentagi-artifacts/control-plane -- wrangler secret put PENTCLOUD_TARGET_COPIED_NAME --config /private/instance-state/app.wrangler.json
 ```
 
-Use only the needed secrets. Enter their **names**, login URL and API header
-format in **Targets → Network and login settings**. No credential values belong
-in chat, researcher headers, source or uploaded context. The optional API binding
-uses the existing protected read-only endpoint test before authenticated analysis;
-it is not automatically forwarded to every browser/scanner request. Existing
-application-managed API credentials continue to work.
+For required headers, use a JSON object such as
+`{"X-Bug-Bounty":"your-researcher-name"}`. Cookies, authorization and Cloudflare
+identity headers are reserved. Optional API authentication has its own binding.
+**Check** verifies that the binding is readable and has a supported format; it
+does not prove login or key validity. Use the explicit read-only API check during
+setup. Browser authentication is confirmed by the agent after form submission.
+Never put credential values in chat, source, uploaded context or command arguments.
 
-Setup assistants should guide the operator through native Cloudflare secret
-entry, verify binding names without reading values back, then confirm the saved
-target's address and credential audience. Never request an account API token as
-a target credential. Credentials on a saved target are reused by future runs;
-run snapshots preserve their selected references.
+Secret references belong to the saved target and are pinned into each run. Browser
+login is fresh for every run; its agents reuse only that run's short-lived login.
+Existing application-managed API keys remain compatible. Cloudflare's limit on
+Worker variables/secrets still applies; provision only the bindings you need.
 
 ## Confirm setup
 

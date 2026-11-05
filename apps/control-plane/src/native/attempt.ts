@@ -24,9 +24,10 @@ import { Lifecycle, type MemoryLimitContext } from "agents/lifecycle";
 import { Browser, browserRun,type BrowserRunOptions,type BrowserConnection } from "agents/browser";
 import {connect as connectPlaywright,type Browser as PlaywrightBrowser,type BrowserContext} from "@cloudflare/playwright";
 import {Buffer} from "node:buffer";
-import {browserGuardrails,readTargetSecret,type ScopedTarget} from "../../../../shared/target-access";
+import {browserGuardrails,readTargetSecret,resolveTargetHeaders,assertTargetRequest,requestHeaders,type ScopedTarget} from "../../../../shared/target-access";
 import {guardBrowserCDP,fillLogin,type LoginFields} from "./browser-target-access";
 import {interceptBrowserContext} from "./browser-interception";
+import {performTargetFetch} from "./target-fetch";
 import { createAITools } from "@cloudflare/computer/tools/ai-sdk";
 import type { ExecWorkspaceLike } from "@cloudflare/computer/tools/core";
 import { browserTool } from "agents/browser/ai-sdk";
@@ -272,7 +273,11 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         if(!contextId)throw new Error("503: Browser context isolation is unavailable");
         await this.ctx.storage.put("browser:managed-context",{sessionId:resolved.sessionId,contextId});
       }
-      const interception=await interceptBrowserContext(this.env.BROWSER,resolved.sessionId,contextId,request=>this.targetFetch(request),async()=>{
+      const configured=await this.targetHeaderSecrets(target);
+      const interception=await interceptBrowserContext(this.env.BROWSER,resolved.sessionId,contextId,async request=>{
+        await this.active();assertTargetRequest(configured,request.url);
+        return requestHeaders(configured,request.headers,{cookies:true,targetContext:true});
+      },async()=>{
         this.scopedBrowser=undefined;await this.ctx.storage.delete("browser:managed-context");
         await Promise.allSettled([this.cloudBrowser.close(),client.close()]);
       });
@@ -287,9 +292,21 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     const managed=await this.scopedBrowserContext(),connection=await this.cloudBrowser.connect(options);
     return {...connection,cdp:guardBrowserCDP(connection.cdp,target,managed.contextId,managed.interception.assertConnected)};
   }
-  async targetFetch(request:Request):Promise<Response>{
-    const state=await this.active();
-    if(state.input.targetConfig?.access)return this.coordinator().targetFetch(state.input.id,request);
+  private async targetHeaderSecrets(target:ScopedTarget){
+    const configured=await resolveTargetHeaders(target,async name=>{const value=await readTargetSecret(this.env,name);this.credentialRedactions.push(value);return value;});
+    this.credentialRedactions.push(...(configured.access?.headers??[]).map(h=>h.value));
+    return configured;
+  }
+  async targetFetch(request:Request,authenticated=false):Promise<Response>{
+    const state=await this.active(),target=state.input.targetConfig;
+    if(target?.access){
+      // Resolve once in the consuming attempt: the exact injected values must
+      // reach its redactor before a response can enter tool output or evidence.
+      const configured=await this.targetHeaderSecrets(target),access=authenticated?await this.coordinator().apiCredential(state.input.id):undefined;
+      if(access?.value)this.credentialRedactions.push(access.value,access.value.startsWith("Bearer ")?access.value.slice(7):access.value);
+      await this.active();
+      return performTargetFetch(configured,request,fetch,access?.header&&access.value?{header:access.header,value:access.value}:undefined);
+    }
     return fetch(new Request(request,{redirect:"manual",signal:AbortSignal.any([request.signal,AbortSignal.timeout(30000)])}));
   }
   private async saveBrowserLogin(){
@@ -675,7 +692,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     const input=validateAPIRequest(access,raw),key="remote:api-"+id;
     this.inFlightTools++;
     try {
-      const fetcher:typeof fetch=state.input.targetConfig?.access?(url,init)=>this.coordinator().targetFetch(state.input.id,new Request(url,init),!!access.value):fetch;
+      const fetcher:typeof fetch=state.input.targetConfig?.access?(url,init)=>this.targetFetch(new Request(url,init),!!access.value):fetch;
       const result=await journalAPIRequest(this.ctx.storage,key,input,async()=>this.safe(await performAPIRequest(access,input,fetcher,signal?AbortSignal.any([signal,this.abortController.signal]):this.abortController.signal)));
       await this.active();return result;
     }finally{this.inFlightTools--;}
@@ -1662,7 +1679,6 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         // Persist boot identity before any MCP initialization or paid host setup.
         await this.ctx.storage.put("toolboxGeneration", ready);
       }
-      if(!terminal)await this.env.TOOLBOX.configureAccess(ready,this.ctx.id.toString());
       return ready;
     })().finally(() => { this.preparingToolbox = undefined; }));
   }

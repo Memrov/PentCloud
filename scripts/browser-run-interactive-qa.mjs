@@ -24,10 +24,12 @@ async function fixtureAssets(){
 }
 const cf=async(accountId,args)=>{const r=JSON.parse((await privateProcess('cf',['browser-run','devtools',...args],{env:{...process.env,CLOUDFLARE_ACCOUNT_ID:accountId},accountAuthorization:true,timeout:60_000})).toString());return r.result??r;};
 export async function main(args=process.argv.slice(2)) {
-  const {values}=parseArgs({args,options:{account:{type:'string'},origin:{type:'string'},output:{type:'string'},'run-id':{type:'string'},'target-access':{type:'boolean'},probe:{type:'boolean'},help:{type:'boolean'}}});
-  if(values.help){console.log('Usage: npm run qa:ui:interactive -- --account ACCOUNT_ID --origin https://APP_HOST --output OUTSIDE_REPO [--run-id EXISTING_COMPLETED_RUN] [--probe]');return;}
+  const {values}=parseArgs({args,options:{account:{type:'string'},origin:{type:'string'},output:{type:'string'},'run-id':{type:'string'},'target-access':{type:'boolean'},'fixture-origin':{type:'string'},probe:{type:'boolean'},help:{type:'boolean'}}});
+  if(values.help){console.log('Usage: npm run qa:ui:interactive -- --account ACCOUNT_ID --origin https://APP_HOST --output OUTSIDE_REPO [--run-id EXISTING_COMPLETED_RUN] [--probe] [--target-access --fixture-origin https://OWNED_TEST_HOST]');return;}
   const accountId=values.account??process.env.CLOUDFLARE_ACCOUNT_ID;assert.match(accountId??'',/^[a-f0-9]{32}$/);
-  const origin=qaOrigin(values.origin??'');assert(values.output,'Select --output outside the repository');
+  const origin=qaOrigin(values.origin??'');
+  const fixtureOrigin=values['fixture-origin']?qaOrigin(values['fixture-origin']):undefined;
+  if(values['target-access'])assert(fixtureOrigin,'Target access QA requires --fixture-origin for a task-owned synthetic target');assert(values.output,'Select --output outside the repository');
   if(values['run-id'])assert.match(values['run-id'],/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/);
   const directory=resolve(values.output);await mkdir(directory,{recursive:true,mode:0o700});
   const outside=relative(await realpath(root),await realpath(directory));assert(outside.startsWith('..'+sep)||isAbsolute(outside),'Evidence must stay outside the repository');
@@ -55,7 +57,7 @@ export async function main(args=process.argv.slice(2)) {
       await withQAServiceAuth({api,accountId,app:devApp,proof:proof.devAccess,existingCredential},async()=>{
         try {
           controller.signal.throwIfAborted();
-          const created=await cf(accountId,['browser','create','--keep-alive','180000','--body',JSON.stringify({guardrails:{allowedDomains:values.probe?[]:values['target-access']?['ui.pentcloud.test','target.example']:[new URL(origin).hostname]}})]);
+          const created=await cf(accountId,['browser','create','--keep-alive','180000','--body',JSON.stringify({guardrails:{allowedDomains:values.probe?[]:values['target-access']?['ui.pentcloud.test',new URL(fixtureOrigin).hostname]:[new URL(origin).hostname]}})]);
           ownedId=created.sessionId;assert.match(ownedId??'',/^[a-f0-9-]{36}$/);proof.sessionId=ownedId;
           await save();deployAttempted=true;
           await privateProcess('node',[resolve(root,'node_modules/wrangler/bin/wrangler.js'),'deploy','--config',resolve(root,'scripts/browser-qa/wrangler.jsonc'),'--name',workerName,
@@ -74,7 +76,7 @@ export async function main(args=process.argv.slice(2)) {
           assert(ready,`QA Worker not ready after deployment (HTTP ${proof.healthStatus})`);
           const anonymous=await fetch(qaOriginURL+'/health',{redirect:'manual',signal:AbortSignal.timeout(10_000)});
           assert(!anonymous.ok,'QA Worker accepted an unauthenticated request');proof.anonymousAccessDenied=true;
-          const response=await fetch(qaOriginURL+'/run',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({origin,headers,runId:values['run-id'],probe:values.probe,...(values['target-access']?{targetAccess:true,assets:await fixtureAssets()}:{} )}),redirect:'manual',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(480_000)])});
+          const response=await fetch(qaOriginURL+'/run',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({origin,headers,runId:values['run-id'],probe:values.probe,...(values['target-access']?{targetAccess:true,fixtureOrigin,assets:await fixtureAssets()}:{} )}),redirect:'manual',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(480_000)])});
           assert(response.ok,`Native QA invocation HTTP ${response.status}`);
           const evidence=await response.json();assert.equal(evidence.sessionId,ownedId,'QA session provenance mismatch');
           for(const capture of evidence.captures??[]){assert.match(capture.screenshot,/^[a-z-]+-\d+\.png$/);await writeFile(resolve(directory,capture.screenshot),Buffer.from(capture.png,'base64'),{mode:0o600});delete capture.png;}
