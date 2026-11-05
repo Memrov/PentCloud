@@ -38,12 +38,12 @@ export async function readVerificationEmail(input:Input):Promise<VerificationDel
  }catch{return undefined;}
 }
 /** Shared deterministic extraction; mail is data, never agent instructions. */
-export function verificationContent(plain?:string,html?:string):Pick<VerificationDelivery,'code'|'links'>|undefined{
-  const text=(plain??html?.replace(/<[^>]*>/g,' ')??'').slice(0,32000);
+export function verificationContent(plain?:string,html?:string):Pick<VerificationDelivery,'code'|'excerpt'|'links'>|undefined{
+  const text=(plain?.trim()?plain:html?.replace(/<[^>]*>/g,' ')??'').slice(0,32000);
   const marked=[...text.matchAll(/(?:verification|confirmation|security|login|one[- ]time|authentication|code|otp)[^\d\r\n]{0,48}\b(\d{4,10})\b/gi)].map(m=>m[1]!);
   const candidates=[...new Set(marked.length?marked:[...text.matchAll(/\b\d{4,10}\b/g)].map(m=>m[0]).filter(v=>!(v.length===4&&Number(v)>=1900&&Number(v)<=2100)))];
-  if(candidates.length>1)return;
   const links=[...new Set([...((html??'').slice(0,32000)+' '+text).matchAll(/https:\/\/[^\s<>"']+/g)].map(m=>m[0].replace(/&amp;/g,'&').replace(/[).,]+$/,'')))].filter(value=>{try{const u=new URL(value);return !u.username&&!u.password&&value.length<=2048;}catch{return false;}}).slice(0,8);
-  if(!candidates.length&&!links.length)return;
-  return {...(candidates[0]?{code:candidates[0]}:{}),links};
+  const code=candidates.length===1?candidates[0]:undefined,excerpt=code?undefined:text.trim().slice(0,1000);
+  if(!code&&!links.length&&!excerpt)return;
+  return {...(code?{code}:{}),...(excerpt?{excerpt}:{}),links};
 }

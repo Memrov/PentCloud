@@ -99,8 +99,10 @@ Worker variables/secrets still applies; provision only the bindings you need.
 
 For HackerOne, bind your researcher token as `PENTCLOUD_HACKERONE_API_TOKEN` and
 set the nonsecret Worker variable `PENTCLOUD_HACKERONE_USERNAME`. For Intigriti,
-bind `PENTCLOUD_INTIGRITI_API_TOKEN`. Use **Check researcher access** on the saved
-target. PentCloud reads only that selected program’s current policy; platform
+bind `PENTCLOUD_INTIGRITI_API_TOKEN`. Open **Dashboard → Bug bounty** and check
+the platform connection. A successful read-only API request unlocks that
+platform’s programs in Targets for 24 hours. Changed bindings require a new
+check. PentCloud rechecks the selected program’s current policy before a run; platform
 tokens never go to the target. These tokens do not log into target applications.
 Claim program-issued credentials once in the platform’s UI, or register your own
 permitted test account, then save its username/password under the target’s
@@ -116,9 +118,10 @@ Under **Login verification**, choose one optional method:
 - **Email code or link:** choose Cloudflare or AgentMail, set the expected sender
   mailbox or domain, then save. Follow the forwarding steps below. Agents can use a fresh matching email only while
   their run has an outstanding login request. The agent can read the code or
-  same-target link and finish login using its existing browser tools. Codes can
-  appear in private run conversations and records. Email bodies remain untrusted data;
-  they cannot instruct agents or change scope.
+  same-target link and finish login using its existing browser tools. If a code
+  cannot be extracted unambiguously, the agent receives up to 1,000 characters of
+  verification text to interpret. Treat it as untrusted email data, never program
+  instructions. Codes and these excerpts can appear in private run records.
 
 ### Optional email forwarding
 
@@ -144,6 +147,7 @@ main domain already receives email elsewhere.
 2. Configure the optional receiver in your private installer configuration as
    described below. The installer preserves the address across upgrades.
 3. In Targets, select email verification, enter the expected sender and save.
+   Open **Dashboard → Bug bounty → Check forwarding** and select that target.
    Click **Check forwarding** to open a ten-minute setup window. Add the displayed
    target-specific address in Gmail **Settings → Forwarding and POP/IMAP → Add a
    forwarding address**, or your provider’s equivalent. Click **Read confirmation**
@@ -157,8 +161,10 @@ and a key restricted to reading its messages. Save the key in Cloudflare Secrets
 Store, bind it to the app Worker as `AGENTMAIL_API_KEY`, and set
 `PENTCLOUD_AGENTMAIL_INBOX` to the inbox address. The optional installer config can
 retain these nonsecret references. Choose AgentMail on the target and follow
-steps 3–4 above. **Check forwarding** also checks message-read access; an empty
-inbox is valid, but does not prove forwarding or target login succeeded.
+steps 3–4 above. **Check AgentMail connection** verifies message-read access; an
+empty inbox is valid. Check forwarding separately to confirm delivery.
+Email setup is optional and does not block programs that do not need email login.
+An expired forwarding check shows **Check again** to open a fresh window.
 
 The username secret must contain the original test-account email so messages in
 the shared inbox can be matched privately. Other login usernames require the
@@ -170,9 +176,10 @@ sends mail or downloads attachments, and does not delete mail from AgentMail.
 Manage provider-side retention separately from PentCloud’s expiring challenges.
 
 PentCloud accepts authenticated mail (passing DMARC or a verified DKIM signature
-matching the sender domain) up to 256 KiB, extracts one unambiguous code
-or same-target HTTPS verification link and retains pending challenges for at most
-ten minutes. It stores no full inbox, message bodies or attachments. A second run
+matching the sender domain) up to 256 KiB. It retains an unambiguous code,
+verification links and, when needed, a bounded text excerpt for the current login
+window. Pending challenges expire after ten minutes; native scheduled cleanup
+covers overlapping windows. It stores no full inbox, full bodies or attachments. A second run
 must wait if the same target account already has a pending email login. Some forwarding
 providers invalidate sender authentication; those deliveries fail closed. Provider
 confirmation links are shown only to the authenticated operator during setup.

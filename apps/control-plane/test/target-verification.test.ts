@@ -25,3 +25,7 @@ it('lets the agent read the code and only same-target verification links, withou
  const reply=verificationChallenge({url:'https://owned.example/'},{code:'384217',links:['https://owned.example/verify?token=test','https://other.example/verify','http://owned.example/verify']});
  expect(reply).toEqual({code:'384217',links:['https://owned.example/verify?token=test']});expect(reply).not.toHaveProperty('body');
 });
+it('passes bounded untrusted verification text to the existing browser agent for non-numeric codes',()=>{
+ const reply=verificationChallenge({url:'https://owned.example/'},{excerpt:'Your code is ABCD-EFGH. '+'x'.repeat(1500),links:[]});
+ expect(reply.verificationText).toContain('ABCD-EFGH');expect(reply.verificationText?.length).toBe(1000);expect(reply).not.toHaveProperty('body');
+});

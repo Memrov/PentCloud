@@ -49,3 +49,10 @@ it("authenticates optional source actions and preserves revision/import identity
   expect((await call("/onboarding/source.import",value)).status).toBe(200);
   expect(JSON.parse(await control().calls())).toEqual([{method:"onboardingAction",args:["source.import",value,"operator"]}]);
 });
+
+it("authenticates bounty connections and receiver checks before dispatching to the Coordinator",async()=>{
+ for(const [name,value] of [['bounty.status',{}],['bounty.check',{platform:'hackerone'}],['bounty.email.check',{provider:'agentmail'}]] as const){
+  expect((await call('/onboarding/'+name,value,false)).status).toBe(401);
+  expect((await call('/onboarding/'+name,value)).status).toBe(200);
+ }
+});

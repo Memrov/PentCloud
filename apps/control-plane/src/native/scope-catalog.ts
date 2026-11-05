@@ -42,9 +42,9 @@ export class ScopeCatalog {
    const value={commit,manifest,programs,fetchedAt:Date.now()};this.io.put("scope-catalog:current",value);return value;
   }catch(error){if(error instanceof Error&&/^50[23]:/.test(error.message))throw error;throw new Error("502: Invalid public scope catalog");}
  }
- async search(query:string,platform?:string){
+ async search(query:string,platform?:string,allowedPlatforms?:readonly string[]){
   if(typeof query!=="string"||query.length>160||platform&&!platforms.includes(platform))throw new Error("400: Invalid program search");
-  const catalog=await this.catalog(),needle=query.trim().toLowerCase(),matches=catalog.programs.filter(p=>(!platform||p.platform===platform)&&(!needle||(p.name+" "+p.id).toLowerCase().includes(needle)));
+  const catalog=await this.catalog(),needle=query.trim().toLowerCase(),matches=catalog.programs.filter(p=>(!allowedPlatforms||allowedPlatforms.includes(p.platform))&&(!platform||p.platform===platform)&&(!needle||(p.name+" "+p.id).toLowerCase().includes(needle)));
   return {catalogCommit:catalog.commit,publishedAt:catalog.manifest.published_at,total:matches.length,programs:matches.slice(0,50).map(({path:_path,...p})=>p)};
  }
  async names(){

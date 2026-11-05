@@ -1,4 +1,40 @@
 import {boundedText} from './target-check';
+import {BOUNTY_PLATFORMS,type BountyPlatform,type BountyConnection} from '../../../../shared/bounty-connections';
+type ConnectionReceipt={fingerprint:string;checkedAt:number};
+/** A check receipt only. Credential values remain in native Cloudflare bindings. */
+export class BountyConnections {
+ constructor(private readonly env:object,private readonly io:{get<T>(key:string):T|undefined;put(key:string,value:unknown):void;remove(key:string):unknown;fetcher?:typeof fetch;now?:()=>number}){}
+ private now(){return(this.io.now??Date.now)();}
+ private key(platform:BountyPlatform){return 'bounty:connection:'+platform;}
+ private async credential(platform:BountyPlatform){
+  const config=BOUNTY_PLATFORMS.find(p=>p.id===platform);if(!config)throw Error('400: Unsupported bug bounty connection');
+  const token=await platformToken(this.env,config.token),username=platform==='hackerone'?Reflect.get(this.env,'PENTCLOUD_HACKERONE_USERNAME'):undefined;
+  if(platform==='hackerone'&&(typeof username!=='string'||!/^[-_a-z0-9]{1,100}$/i.test(username)))throw Error('409: Configure PENTCLOUD_HACKERONE_USERNAME');
+  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([token,username])));
+  return {token,username,fingerprint:[...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('')};
+ }
+ async status(platform:BountyPlatform):Promise<BountyConnection>{
+  let credential:Awaited<ReturnType<BountyConnections['credential']>>;try{credential=await this.credential(platform);}catch{return {platform,status:'missing'};}
+  const receipt=this.io.get<ConnectionReceipt>(this.key(platform));
+  return {platform,status:receipt?.fingerprint===credential.fingerprint&&receipt.checkedAt>this.now()-24*3600000?'ready':'unchecked',...(receipt?{checkedAt:receipt.checkedAt}:{})};
+ }
+ async list(){return Promise.all(BOUNTY_PLATFORMS.map(p=>this.status(p.id)));}
+ async require(platform:string){
+  if(!BOUNTY_PLATFORMS.some(p=>p.id===platform)||(await this.status(platform as BountyPlatform)).status!=='ready')throw Error('409: Check this platform connection in Dashboard → Bug bounty first');
+ }
+ async check(platform:BountyPlatform){
+  if(!BOUNTY_PLATFORMS.some(p=>p.id===platform))throw Error('400: Unsupported bug bounty connection');
+  this.io.remove(this.key(platform));const credential=await this.credential(platform),headers=new Headers({Accept:'application/json','User-Agent':'PentCloud connection check'});
+  const url=platform==='hackerone'?'https://api.hackerone.com/v1/hackers/programs?page%5Bsize%5D=1':'https://api.intigriti.com/external/researcher/v1/programs?limit=1&offset=0';
+  headers.set('Authorization',platform==='hackerone'?'Basic '+btoa(credential.username+':'+credential.token):'Bearer '+credential.token);
+  let response:Response;try{response=await(this.io.fetcher??fetch)(url,{method:'GET',headers,redirect:'manual',signal:AbortSignal.timeout(15000)});}catch{throw Error('503: Platform connection unavailable; retry the check');}
+  if(!response.ok){await response.body?.cancel();throw Error(response.status===401?'409: Platform credential is invalid or expired':response.status===403?'409: This credential cannot read programs':'503: Platform connection unavailable; retry the check');}
+  let records:unknown;try{const body=JSON.parse(await boundedText(response,512*1024));records=platform==='hackerone'?body.data:body.records;}catch{}
+  if(!Array.isArray(records))throw Error('502: Unexpected platform connection response');
+  if((await this.credential(platform)).fingerprint!==credential.fingerprint)throw Error('409: Platform binding changed; check the connection again');
+  this.io.put(this.key(platform),{fingerprint:credential.fingerprint,checkedAt:this.now()});return this.status(platform);
+ }
+}
 export function platformBinding(programId:string){
  if(/^hackerone:[a-z0-9_-]{1,100}$/i.test(programId))return {platform:'hackerone' as const,binding:'PENTCLOUD_HACKERONE_API_TOKEN',username:'PENTCLOUD_HACKERONE_USERNAME'};
  if(/^intigriti:[a-f0-9-]{36}$/i.test(programId))return {platform:'intigriti' as const,binding:'PENTCLOUD_INTIGRITI_API_TOKEN'};

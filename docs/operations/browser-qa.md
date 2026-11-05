@@ -200,3 +200,10 @@ request/response bytes, popup requests, excluded redirects and the Agents SDK CD
 capability boundary. Fixture credentials are disposable; they are never production
 secrets. Review the captured UI as well as the JSON results. Synthetic routes do
 not establish compatibility with a particular site's login or live Kali tools.
+
+The target-access fixture journey also covers the Bug bounty dashboard tab: a
+locked picker, a rejected connection, a successful native-binding check, and
+unlocking only that platform. It checks forwarding expiry/retry, readable
+verification labels and secret checks that do not display run-start status.
+Provider and email replies are synthetic in this fixture; its screenshots do not
+prove a live platform login or email delivery.

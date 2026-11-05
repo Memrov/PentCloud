@@ -1,5 +1,5 @@
 import type {VerificationProvider} from '../../../../shared/target-access';
-export interface VerificationDelivery {id:string;to:string;from:string;sentAt:number;code?:string;links:string[];provider?:VerificationProvider;account?:string}
+export interface VerificationDelivery {id:string;to:string;from:string;sentAt:number;code?:string;excerpt?:string;links:string[];provider?:VerificationProvider;account?:string}
 export interface VerificationScope {key:string;owner:string;recipient:string;sender:string;targetURL:string;purpose:'login'|'setup';provider?:VerificationProvider;account?:string}
 interface Entry extends VerificationScope {operationId:string;createdAt:number;expiresAt:number;message?:VerificationDelivery}
 interface IO {get(key:string):unknown;put(key:string,value:unknown):void;remove(key:string):unknown;list(prefix:string):Array<{key:string;value:unknown}>;now?:()=>number}
@@ -10,6 +10,7 @@ export class LoginChallenges {
  private key(id:string){return 'verification:challenge:'+id;}
  clear(id:string){this.io.remove(this.key(id));}
  expire(){for(const row of this.io.list('verification:'))if((row.value as {expiresAt?:number}).expiresAt!<=this.now())this.io.remove(row.key);}
+ nextExpiry(){const times=this.io.list('verification:').map(row=>(row.value as {expiresAt:number}).expiresAt).filter(Number.isFinite);return times.length?Math.min(...times):undefined;}
  begin(scope:VerificationScope,operationId:string){
   this.expire();const prior=this.io.get(this.key(scope.key)) as Entry|undefined;
   const others=this.io.list('verification:challenge:').filter(row=>{const e=row.value as Entry;return row.key!==this.key(scope.key)&&(e.provider??'cloudflare')===(scope.provider??'cloudflare')&&e.recipient.toLowerCase()===scope.recipient.toLowerCase();});

@@ -23,6 +23,10 @@ async function fixture(corrupt=false,gitRefs?:string){
  };
  return {catalog:new ScopeCatalog({get:<T>(k:string)=>cache.get(k) as T,put:(k,v)=>{cache.set(k,v);},fetcher}),requests};
 }
+it('counts and pages search results only from connected platforms',async()=>{
+ const {catalog}=await fixture();expect(await catalog.search('Example',undefined,['intigriti'])).toMatchObject({total:0,programs:[]});
+ expect(await catalog.search('Example',undefined,['hackerone'])).toMatchObject({total:1,programs:[{id:'hackerone:example'}]});
+});
 const advertised="001e# service=git-upload-pack\n00000040"+"a".repeat(40)+" refs/heads/catalog\n0000";
 it("imports the same immutable scope through public Git when the shared REST limit is exhausted",async()=>{
  const {catalog}=await fixture(false,advertised);

@@ -34,6 +34,7 @@ const fixture = async (run) => withNativeTestHarness({
   worker = {dispatchFetch: server.fetch};
   await run(url);
 });
+await fixture(async()=>{const value=await get('/bounty-gate-scenario');assert.deepEqual(value.denied,['scope.names','scope.search','scope.preview','scope.import']);assert.ok(value.status.connections.every(c=>c.status==='missing'));});
 const params = (values) =>
   new URLSearchParams(
     Object.fromEntries(

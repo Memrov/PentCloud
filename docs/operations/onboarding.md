@@ -8,9 +8,15 @@ defaults while retained run snapshots and Git evidence remain.
 
 ## Bounty scope and target login
 
-**Find a bounty program** opens a searchable, scrollable list from the public
+**Dashboard → Bug bounty** contains the supported HackerOne and Intigriti
+researcher connections and optional email receivers. Configure native Cloudflare
+bindings and click the platform’s connection check. A successful read-only check
+unlocks that platform for 24 hours; changed bindings require a new check. A
+platform connection is separate from the test account used on a target.
+
+In Targets, **Find a bounty program** opens a searchable, scrollable list from the public
 [PentCloud scope catalog](https://github.com/Memrov/PentCloud-scopes). Choose a
-website/API asset, or enter a concrete hostname for a wildcard. Import saves a
+website/API asset from a connected platform, or enter a concrete hostname for a wildcard. Import saves a
 checksummed catalog revision, applicable rules and exclusions on the target.
 Only the selected origin and base path are granted; other program assets are not
 automatically reachable. Non-web assets and ambiguous network exclusions can
@@ -30,7 +36,11 @@ header names and values and overwrite agent-provided values on managed requests.
 
 The agent inspects the form, calls `pentcloud_browser_login` with its selectors,
 then submits using its existing browser tool. Login must remain inside the saved
-target; external identity providers, MFA and CAPTCHA require additional support.
+target. Email codes/links and authenticator TOTP codes are supported; external
+identity providers, push approval, security keys and CAPTCHA need separate support.
+The agent reads a fresh code or bounded verification excerpt and completes the
+form with its existing browser tool. Receiver setup and forwarding confirmation
+are under Bug bounty; the expected sender and login bindings remain on the target.
 Each run starts fresh. Cookies and local storage are shared only among that run's
 agents, stored privately for up to 30 minutes since their last update, and cleared
 on completion, stop or deletion. They are not Git artifacts or settings exports.

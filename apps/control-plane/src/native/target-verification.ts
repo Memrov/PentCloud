@@ -1,4 +1,4 @@
-/** Small standards-based helpers; seeds and generated codes stay in trusted Workers. */
+/** Small standards-based helpers. Authenticator seeds stay in trusted Workers. */
 export function authenticator(value:string){
  try{
   if(value.length>2048)throw Error();let secret=value,digits=6,period=30,algorithm='SHA-1';
@@ -30,8 +30,8 @@ export async function verificationAddress(base:string,targetId:string){
  return local+'+'+[...new Uint8Array(hash)].slice(0,12).map(b=>b.toString(16).padStart(2,'0')).join('')+'@'+domain;
 }
 import {assertTargetRequest,type ScopedTarget} from '../../../../shared/target-access';
-/** Short-lived codes may be shown to the current agent. Mail bodies and seeds are excluded. */
-export function verificationChallenge(target:ScopedTarget,message:{code?:string;links:string[]}){
+/** Only fresh matched verification data reaches the agent; full bodies and seeds are excluded. */
+export function verificationChallenge(target:ScopedTarget,message:{code?:string;excerpt?:string;links:string[]}){
  const links=message.links.filter(url=>{try{assertTargetRequest(target,url);return new URL(url).protocol==='https:'&&new URL(url).origin===new URL(target.url).origin;}catch{return false;}});
- return {...(message.code?{code:message.code}:{}),links};
+ return {...(message.code?{code:message.code}:{}),...(message.excerpt?{verificationText:message.excerpt.slice(0,1000)}:{}),links};
 }

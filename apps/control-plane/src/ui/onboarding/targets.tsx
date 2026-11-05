@@ -15,6 +15,7 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
   const [programId,setProgramId]=useState<string>();
   const [editing,setEditing]=useState(true),[showArchived,setShowArchived]=useState(false),[authorized,setAuthorized]=useState(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState<string>(),[notice,setNotice]=useState<string>(),[deleting,setDeleting]=useState<SavedTarget>(),[deleteOpen,setDeleteOpen]=useState(false);
+  const [starting,setStarting]=useState(false);
   const [runId]=useState(()=>{const id=new URLSearchParams(window.location.search).get("draft");return id&&/^run-[A-Za-z0-9._-]{1,48}$/.test(id)?id:"run-"+crypto.randomUUID();});
   const materials=useMaterialDraft(runId);
   const submission=useRef<Parameters<typeof createRun>[0]|undefined>(undefined);
@@ -46,6 +47,7 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
     await refresh();if(selected?.id===target.id)setSelected(undefined);setDeleteOpen(false);
   });
   const start=()=>perform(async()=>{
+    setStarting(true);try{
     if(!selected||!authorized)return;
     window.history.replaceState(null,"","/?draft="+encodeURIComponent(runId)+"&target="+encodeURIComponent(selected.id));
     if(submission.current){
@@ -64,6 +66,7 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
     }
     try{const result=await createRun(submission.current);materials.draft.clear();onCreated(result.run,result.rootJob);}
     catch(error){if(error instanceof APIError&&[400,413,415,422,429].includes(error.status))submission.current=undefined;throw error;}
+    }finally{setStarting(false);}
   });
   const visible=data?.targets.filter(t=>showArchived?t.archived:!t.archived)??[];
   return <section className="onboarding" aria-busy={!data||busy}>
@@ -96,7 +99,7 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
           <InputArea label="Run objective" rows={3} value={runObjective} onValueChange={setRunObjective} disabled={busy||!!submission.current}/>
           <MaterialAttachments draft={materials.draft} files={materials.files} {...(materials.error?{error:materials.error}:{})} disabled={busy||!!submission.current}/>
           <p>The quick address check uses no model. Discovery may wait for the shared scanner to prepare. You can choose models and API test access while it runs.</p>
-          <Button variant="primary" icon={<ArrowRightIcon size={16}/>} disabled={busy||!authorized||selected.archived||!materials.ready} onClick={()=>void start()}>{busy?"Checking and starting…":submission.current?"Retry the same run":"Verify address & start discovery"}</Button>
+          <Button variant="primary" icon={<ArrowRightIcon size={16}/>} loading={starting} disabled={busy||!authorized||selected.archived||!materials.ready} onClick={()=>void start()}>{starting?"Checking and starting…":submission.current?"Retry the same run":"Verify address & start discovery"}</Button>
           <h3>Previous runs</h3>
           {runs.filter(r=>r.target?.id===selected.id).length?runs.filter(r=>r.target?.id===selected.id).map(r=><Link key={r.id} href={"/?run="+encodeURIComponent(r.id)}>{r.id} · {r.status}</Link>):<p>No runs for this target yet. Each new run gets fresh discovery and evidence.</p>}
         </div>:<Empty size="sm" icon={<GlobeIcon size={24}/>} title="Choose a saved target" description="Start a fresh run or add another website or API."/>}

@@ -12,10 +12,14 @@ it('uses only the fixed provider origin and authorization header, retaining narr
  expect(result).not.toHaveProperty('text');expect(result).not.toHaveProperty('headers');
  for(const [url,options] of fetcher.mock.calls as unknown as [string,RequestInit][]){expect(String(url)).toMatch(/^https:\/\/api\.agentmail\.to\/v0\/inboxes\//);expect(String(url)).not.toContain('fixture-provider-key');expect(options.redirect).toBe('manual');expect(new Headers(options.headers).get('Authorization')).toBe('Bearer fixture-provider-key');expect(options.method).toBe('GET');}
 });
-it('rejects wrong accounts, sender authentication, stale mail and ambiguous codes',async()=>{
- for(const patch of [{headers:{To:'other@wearehackerone.com'}},{authentication_results:{dmarc:'fail',dmarc_domain:'owned.example'}},{authentication_results:{dmarc:'pass',dmarc_domain:'attacker.example'}},{from:'attacker@elsewhere.example'},{timestamp:new Date(now-5000).toISOString()},{created_at:new Date(now-5000).toISOString()},{text:'code 384217 or code 948235'},{labels:['received','spam']},{size:300000},{inbox_id:'other@agentmail.to'}]){
+it('rejects wrong accounts, sender authentication and stale mail',async()=>{
+ for(const patch of [{headers:{To:'other@wearehackerone.com'}},{authentication_results:{dmarc:'fail',dmarc_domain:'owned.example'}},{authentication_results:{dmarc:'pass',dmarc_domain:'attacker.example'}},{from:'attacker@elsewhere.example'},{timestamp:new Date(now-5000).toISOString()},{created_at:new Date(now-5000).toISOString()},{labels:['received','spam']},{size:300000},{inbox_id:'other@agentmail.to'}]){
   expect(await readAgentMail(env,scope,{fetcher:client({...mail,...patch}) as typeof fetch,now:()=>now})).toEqual([]);
  }
+});
+it('preserves a bounded matched verification excerpt without guessing between two codes',async()=>{
+ const [result]=await readAgentMail(env,scope,{fetcher:client({...mail,text:'code 384217 or code 948235'}) as typeof fetch,now:()=>now});
+ expect(result?.code).toBeUndefined();expect(result?.excerpt).toBe('code 384217 or code 948235');expect(result).not.toHaveProperty('text');
 });
 it('does not trust original-recipient claims or authentication results planted in headers',async()=>{
  expect(await readAgentMail(env,scope,{fetcher:client({...mail,headers:{To:inbox,'X-Original-To':account,'Authentication-Results':'mx; dmarc=pass'}}) as typeof fetch,now:()=>now})).toEqual([]);

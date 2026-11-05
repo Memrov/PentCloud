@@ -3,29 +3,6 @@ import type {BrowserConnection} from "agents/browser";
 import {assertTargetRequest,type ScopedTarget} from "../../../../shared/target-access";
 export type BrowserAuthState=Awaited<ReturnType<BrowserContext["storageState"]>>;
 export interface LoginFields {pageURL:string;usernameSelector:string;passwordSelector:string}
-export interface VerificationField {pageURL:string;codeSelector:string}
-/** Resolve after the page is pinned; the code never becomes a tool result. */
-export async function fillVerification(target:ScopedTarget,page:Page,input:VerificationField,resolve:()=>Promise<string>,active:()=>Promise<unknown>=async()=>{}){
- assertTargetRequest(target,input.pageURL);if(page.url()!==input.pageURL)throw Error('409: Verification page changed; inspect again');
- if(!input.codeSelector||input.codeSelector.length>512)throw Error('400: Choose a bounded code field selector');
- await active();const code=await resolve();await active();
- if(!/^\d{4,10}$/.test(code))throw Error('409: No supported verification code is available');
- if(page.url()!==input.pageURL)throw Error('409: Verification page changed; inspect again');
- await page.evaluate(({url,selector,code})=>{
-  if(location.href!==url)throw Error('Verification page changed');
-  const fields=Array.from(document.querySelectorAll(selector));
-  if(!fields.length||fields.some(f=>!(f instanceof HTMLInputElement)||f.disabled||f.readOnly||!['text','tel','number','password'].includes(f.type))||
-    (fields.length===1?(fields[0] as HTMLInputElement).maxLength>0&&(fields[0] as HTMLInputElement).maxLength<code.length:fields.length!==code.length||fields.some(f=>(f as HTMLInputElement).maxLength!==1)))throw Error('Choose the code input, or all one-character code inputs in order');
-  const inputs=fields as HTMLInputElement[],set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!;
-  // Native masking protects screenshots as well as redacted text/tool results.
-  for(const field of inputs)field.type='password';
-  inputs.forEach((field,index)=>{
-   set.call(field,inputs.length===1?code:code[index]);
-   field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));field.type='password';
-  });
- },{url:input.pageURL,selector:input.codeSelector,code});
- await active();return {filled:true,message:'Verification filled. Some forms submit automatically; inspect the result before submitting or retrying.'};
-}
 export function validateBrowserState(target:ScopedTarget,raw:unknown):BrowserAuthState {
  if(JSON.stringify(raw).length>256*1024)throw new Error("413: Browser authentication state is too large");
  const state=raw as BrowserAuthState,host=new URL(target.url).hostname,origin=new URL(target.url).origin;

@@ -3,6 +3,14 @@ import {LoginChallenges} from '../src/native/login-challenge';
 function fixture(){let time=100000;const data=new Map<string,unknown>();return {data,advance:(n:number)=>{time+=n;},store:new LoginChallenges({get:k=>data.get(k),put:(k,v)=>data.set(k,v),remove:k=>data.delete(k),list:p=>[...data].filter(([k])=>k.startsWith(p)).map(([key,value])=>({key,value})),now:()=>time})};}
 const owner='run-one:target-one',recipient='codes+abc@auth.example',scope={key:'run-one',owner,recipient,sender:'login@owned.example',targetURL:'https://owned.example/',purpose:'login' as const};
 const message={id:'message-one',to:recipient,from:'login@owned.example',sentAt:100000,code:'384217',links:[]};
+it('rearms cleanup for staggered windows and late replay receipts until storage is empty',()=>{
+ const {store,advance,data}=fixture();store.begin(scope,'one');expect(store.nextExpiry()).toBe(700000);
+ advance(540000);store.begin({...scope,key:'two',owner:'two',recipient:'other@auth.example'},'two');
+ expect(store.nextExpiry()).toBe(700000);advance(50000);expect(store.receive({...message,id:'late',to:'other@auth.example',sentAt:690000})).toBe(true);advance(11000);store.expire();
+ expect(store.nextExpiry()).toBe(1240000);expect(data.has('verification:challenge:two')).toBe(true);
+ advance(540000);store.expire();expect(store.nextExpiry()).toBe(1290000);
+ advance(50000);store.expire();expect(store.nextExpiry()).toBeUndefined();expect(data.size).toBe(0);
+});
 it('delivers one fresh verification email only to its pending owner and consumes it once',()=>{
  const {store}=fixture();store.begin(scope,'fill-one');expect(store.receive(message)).toBe(true);
  expect(store.peek('run-two',owner)).toBeUndefined();expect(store.peek(scope.key,'another-target')).toBeUndefined();

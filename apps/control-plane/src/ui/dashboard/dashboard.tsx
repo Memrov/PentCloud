@@ -3,6 +3,7 @@ import {runName,runDate} from "../run-label";
 import {Findings} from "../components/findings";
 import Settings from "../settings/settings";
 import {TargetLibrary} from "../onboarding/targets";
+import {BountySettings} from "../onboarding/bounty-settings";
 import {RunManagement} from "../components/run-management";
 import {RunDeleteDialog,runDeletionDescription} from "../components/run-delete";
 import { useEffect, useMemo, useState } from "react";
@@ -49,8 +50,8 @@ function DashboardHome() {
             <div><span className="dashboard-kicker"><PulseIcon size={14} /> Operations</span><h1>Dashboard</h1><p>Findings, targets, runs and agent settings.</p></div>
             <LinkButton variant="primary" href={returnChat}><ChatCircleDotsIcon size={16} /> Open chats</LinkButton>
           </header>:<header className="flex items-center justify-between gap-3"><Text as="h1" variant="heading2">Dashboard</Text><LinkButton variant="ghost" href={returnChat}><ChatCircleDotsIcon size={16}/>Open chats</LinkButton></header>}
-          <Tabs aria-label="Dashboard sections" value={tab} onValueChange={value=>{setTab(value);const u=new URL(location.href);u.searchParams.set("view",value);history.replaceState(null,"",u);}} tabs={[{value:"overview",label:"Overview"},{value:"findings",label:"Findings"},{value:"targets",label:"Targets"},{value:"settings",label:"Settings"}]}/>
-          {tab==="findings"?<Findings runs={runs} inventoryLoading={loading} inventoryError={error} onRefresh={refreshInventory} initialTarget={new URLSearchParams(location.search).get("target")??undefined}/>:tab==="targets"?<TargetLibrary runs={runs} onCreated={(run,job)=>location.assign(chatPath(run.id,job.id))}/>:tab==="settings"?<Settings embedded/>:<>
+          <Tabs aria-label="Dashboard sections" value={tab} onValueChange={value=>{setTab(value);const u=new URL(location.href);u.searchParams.set("view",value);history.replaceState(null,"",u);}} tabs={[{value:"overview",label:"Overview"},{value:"findings",label:"Findings"},{value:"targets",label:"Targets"},{value:"bounty",label:"Bug bounty"},{value:"settings",label:"Settings"}]}/>
+          {tab==="findings"?<Findings runs={runs} inventoryLoading={loading} inventoryError={error} onRefresh={refreshInventory} initialTarget={new URLSearchParams(location.search).get("target")??undefined}/>:tab==="targets"?<TargetLibrary runs={runs} onCreated={(run,job)=>location.assign(chatPath(run.id,job.id))}/>:tab==="bounty"?<BountySettings/>:tab==="settings"?<Settings embedded/>:<>
           <section aria-label="Run summary"><Grid variant="side-by-side" gap="sm" className="lg:grid-cols-4">
             <StatCard label="Total runs" value={runs.length} icon={<ClockIcon size={18} />} />
             <StatCard label="Active" value={active} icon={<PulseIcon size={18} />} accent="active" />

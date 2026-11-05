@@ -39,7 +39,8 @@ import {targetAccessBrief,readTargetSecret,type ScopedTarget} from "../../../../
 import {LoginChallenges,type VerificationDelivery} from './login-challenge';
 import {agentMailAddress,readAgentMail} from './agentmail-verification';
 import {verificationAddress} from './target-verification';
-import {platformBinding,platformToken,checkProgramAccess} from './bounty-platform';
+import {BountyConnections,platformBinding,platformToken,checkProgramAccess} from './bounty-platform';
+import type {BountyPlatform} from '../../../../shared/bounty-connections';
 import {type BrowserAuthState} from "./browser-target-access";
 import {RunBrowserAuth} from "./run-browser-auth";
 import {SourceLibrary,readSource,type ImportReceipt} from "./source-context";
@@ -149,6 +150,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     probe:(model,key)=>this.env.MODEL_TESTS.getByName(crypto.randomUUID()).probeModel(model,key),
   });
   private readonly scopeCatalog=new ScopeCatalog({get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value)});
+  private readonly bountyConnections=new BountyConnections(this.env,{get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value),remove:key=>this.ctx.storage.sql.exec('DELETE FROM native_records WHERE key=?',key)});
   private readonly targetSecretRedactions:string[]=[];
   private readonly sources=new SourceLibrary({
     artifacts:this.env.ARTIFACTS,get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value),
@@ -182,7 +184,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   });
   readonly scheduler = new Scheduler({
     callbacks: {
-      expireVerification: () => { this.loginChallenges.expire(); },
+      expireVerification: async () => { this.loginChallenges.expire();await this.scheduleVerificationExpiry(); },
       recover: () => {
         this.wake();
       },
@@ -474,12 +476,27 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.assertAdmissionOpen();
     try {
       switch(action){
-        case "scope.names":return await this.scopeCatalog.names();
-        case "scope.search":return await this.scopeCatalog.search(String(value.query??""),typeof value.platform==="string"&&value.platform?value.platform:undefined);
-        case "scope.preview":return await this.scopeCatalog.preview(String(value.programId));
+        case 'bounty.status':return {connections:await this.bountyConnections.list(),email:{cloudflare:{configured:!!this.env.PENTCLOUD_VERIFICATION_EMAIL,address:this.env.PENTCLOUD_VERIFICATION_EMAIL},agentmail:{configured:!!agentMailAddress(this.env),address:agentMailAddress(this.env)}}};
+        case 'bounty.check':return this.bountyConnections.check(String(value.platform) as BountyPlatform);
+        case 'bounty.email.check':{
+          if(value.provider!=='agentmail')throw Error('400: Verify Cloudflare delivery with a forwarding confirmation');
+          const now=Date.now();await readAgentMail(this.env,{createdAt:now,expiresAt:now+10000,sender:''});return {connected:true};
+        }
+        case "scope.names":{
+          const ready=(await this.bountyConnections.list()).filter(c=>c.status==='ready').map(c=>c.platform);if(!ready.length)throw Error('409: Connect a platform in Dashboard → Bug bounty first');
+          const result=await this.scopeCatalog.names();return {...result,programs:result.programs.filter(p=>ready.includes(p.platform as BountyPlatform))};
+        }
+        case "scope.search":{
+          const ready=(await this.bountyConnections.list()).filter(c=>c.status==='ready').map(c=>c.platform);if(!ready.length)throw Error('409: Connect a platform in Dashboard → Bug bounty first');
+          if(value.platform)await this.bountyConnections.require(String(value.platform));
+          return this.scopeCatalog.search(String(value.query??""),typeof value.platform==="string"&&value.platform?value.platform:undefined,ready);
+        }
+        case "scope.preview":await this.bountyConnections.require(String(value.programId).split(':')[0]!);return await this.scopeCatalog.preview(String(value.programId));
         case "scope.import":{
           const id=identifier(value.id),target=this.onboarding.target(id);if(target.revision!==revision||target.archived)throw new Error("409: Target changed or archived; reload");
+          await this.bountyConnections.require(String(value.programId).split(':')[0]!);
           const program=await this.scopeCatalog.import(String(value.programId),target.url);this.assertAdmissionOpen();
+          await this.bountyConnections.require(program.platform);
           return this.onboarding.saveTargetAccess(id,revision!,target.access??{headers:[]},actor,program);
         }
         case "scope.detach":return this.onboarding.saveTargetAccess(identifier(value.id),Number(value.revision),this.onboarding.target(identifier(value.id)).access??{headers:[]},actor,null);
@@ -504,9 +521,9 @@ export class Coordinator extends DurableObject<NativeEnv> {
           }
           if(provider==='agentmail'&&action!=='access.email.address')await this.pollAgentMail(key,owner);
           const current=this.onboarding.target(target.id);if(current.revision!==target.revision||current.archived)throw Error('409: Target changed; reload');
-          const delivery=action==='access.email.status'?this.loginChallenges.peek(key,owner):undefined;
+          const pending=this.loginChallenges.pending(key,owner),delivery=action==='access.email.status'?this.loginChallenges.peek(key,owner):undefined;
           // Setup confirmation is visible only to the authenticated owner, never an agent tool.
-          return {configured:true,provider,available,address,...(action==='access.email.setup'?{ready:true}:{}),...(delivery?{received:true,from:delivery.from,code:delivery.code,links:delivery.links.filter(url=>{const h=new URL(url).hostname;return h==='mail.google.com'||h==='accounts.google.com'||h==='outlook.live.com'||h==='account.microsoft.com';})}:{received:false})};
+          return {configured:true,provider,available,address,status:delivery?'received':pending?'waiting':action==='access.email.status'?'expired':'idle',...(pending?{expiresAt:pending.expiresAt}:{}),...(action==='access.email.setup'?{ready:true}:{}),...(delivery?{received:true,from:delivery.from,code:delivery.code,excerpt:delivery.excerpt,links:delivery.links.filter(url=>{const h=new URL(url).hostname;return h==='mail.google.com'||h==='accounts.google.com'||h==='outlook.live.com'||h==='account.microsoft.com';})}:{received:false})};
         }
         case "access.clearlogin":{
           const target=this.onboarding.target(identifier(value.id));if(target.revision!==revision)throw new Error("409: Target changed; reload");
@@ -683,7 +700,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return this.verificationReceived(this.loginChallenges.receive(delivery));
   }
   private async verificationReceived(accepted:boolean){if(accepted){await this.scheduleVerificationExpiry();for(const waiters of this.emailWaiters.values())for(const wake of waiters)wake();}return {accepted};}
-  private async scheduleVerificationExpiry(){await this.start();await this.scheduler.set(601,'expireVerification',undefined,{idempotent:true});}
+  private async scheduleVerificationExpiry(){const expiresAt=this.loginChallenges.nextExpiry();if(expiresAt===undefined)return;await this.start();await this.scheduler.set(new Date(expiresAt+1000),'expireVerification',{expiresAt},{idempotent:true});}
   private async pollAgentMail(key:string,owner:string){
     const pending=this.loginChallenges.pending(key,owner);if(!pending||pending.provider!=='agentmail'||pending.message)return;
     const flightKey=canonical([key,owner,pending.operationId]),existing=this.agentMailChecks.get(flightKey);if(existing)return existing;
@@ -718,7 +735,10 @@ export class Coordinator extends DurableObject<NativeEnv> {
   }
   async consumeLoginEmail(id:string,messageId:string){const scope=await this.emailScope(id);this.loginChallenges.consume(scope.key,scope.owner,messageId);}
   private async programAccess(target:SavedTarget){
+    const verification=target.access?.login?.verification;
+    if(verification?.kind==='email'&&!(verification.provider==='agentmail'?agentMailAddress(this.env):this.env.PENTCLOUD_VERIFICATION_EMAIL))throw Error('409: Configure the selected email receiver in Dashboard → Bug bounty first');
     const id=target.access?.program?.id;if(!id)return undefined;const config=platformBinding(id);if(!config)return undefined;
+    await this.bountyConnections.require(config.platform);
     const token=await platformToken(this.env,config.binding);this.targetSecretRedactions.push(token);
     return checkProgramAccess(id,{token,...(config.platform==='hackerone'?{username:this.env.PENTCLOUD_HACKERONE_USERNAME}:{})});
   }
