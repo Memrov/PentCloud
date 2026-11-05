@@ -5,6 +5,7 @@ import {OnboardingStore,type OnboardingIO} from "../../src/native/onboarding";
 import { canonical } from "../../src/native/domain";
 import {materialSelection} from "../../src/native/materials";
 import {recordedWorkPage} from "../../src/native/recorded-work";
+import {assertPreparationPromotion} from "../../src/native/preparation";
 import type {
   AttemptInput,
   AttemptRecord,
@@ -20,7 +21,9 @@ type Bindings = {
 export class FakeAttempt extends DurableObject<Bindings> {
   async recordedWork(runId:string,offset=0){return recordedWorkPage({run_id:runId,messages:[{type:"assistant",content:[{type:"text",text:"Raw observation differs from handoff"}]}],remoteCalls:[{name:"ffuf",state:"completed"}]},offset);}
   async prepareConversation(input:AttemptInput){
-    await this.ctx.storage.put("preparation",input);
+    // The real NativeAttempt normalizes a queued record to immutable input.
+    const {status:_status,revision:_revision,fingerprint:_fingerprint,materialUploadIds:_uploads,conversation:_conversation,...prepared}=input as AttemptRecord;
+    await this.ctx.storage.put("preparation",prepared);
     await this.ctx.storage.put("preparations",((await this.ctx.storage.get<number>("preparations"))??0)+1);
   }
   async conversationInfo(){return {prepared:!!await this.ctx.storage.get("preparation"),preparations:(await this.ctx.storage.get<number>("preparations"))??0,cancelled:!!await this.ctx.storage.get("cancelled"),starts:(await this.ctx.storage.get<number>("starts"))??0};}
@@ -28,6 +31,8 @@ export class FakeAttempt extends DurableObject<Bindings> {
   private running: Promise<AttemptResult> | undefined;
   private resolve?: (value: AttemptResult) => void;
   async run(input: AttemptInput): Promise<AttemptResult> {
+    const preparation=await this.ctx.storage.get<AttemptInput>("preparation");
+    if(preparation)assertPreparationPromotion(preparation,input);
     const prior = await this.ctx.storage.get<AttemptInput>("input");
     if (prior && JSON.stringify(prior) !== JSON.stringify(input))
       throw new Error("immutable input changed");
@@ -833,7 +838,7 @@ export class ProbeCoordinator extends Coordinator {
     const bytes=new TextEncoder().encode("# Project notes\nOwned project configuration\n"),sha=[...new Uint8Array(await crypto.subtle.digest("SHA-256",bytes))].map(n=>n.toString(16).padStart(2,"0")).join("");
     const file=await this.stageUpload({runId:run.id,id:"preparation-file",name:"project.md",sha256:sha,body:new Blob([bytes]).stream(),uploadedBy:"fixture"});
     this.write("job:"+job.id,{...job,materialUploadIds:[file.id],tool:"native_discovery",execution:{kind:"discovery",url:run.target!.url,profile:"whatweb-polite-v1"}});
-    this.write("run:"+run.id,{...run,initialUploadIds:[file.id],phase:"discovery"});await this.recoverNow();
+    this.write("run:"+run.id,{...run,target:{...run.target!,access:{headers:[],headerBinding:"PENTCLOUD_TARGET_TEST_HEADERS",login:{url:run.target!.url,usernameBinding:"PENTCLOUD_TARGET_TEST_USERNAME",passwordBinding:"PENTCLOUD_TARGET_TEST_PASSWORD"}}},initialUploadIds:[file.id],phase:"discovery"});await this.recoverNow();
     const store=(this as unknown as {onboarding:OnboardingStore}).onboarding,io=(store as unknown as {io:OnboardingIO}).io;
     io.boundGoKey=()=>"fixture-key";io.probe=async()=>{};io.fetcher=async()=>Response.json({data:[{id:"deepseek-v4-pro",name:"Fixture",type:"chat",capabilities:{tools:{supported:true}},api:{"chat-completions":{base_url:"https://opencode.ai/inference/go/openai/v1"}}}]});
     await store.catalog("go");const choice={model:"opencode-go:deepseek-v4-pro",credentialId:"bound-go",credentialVersion:0};

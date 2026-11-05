@@ -797,6 +797,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
         createdAt,
       } = job;
       const input: AttemptInput = {
+        ...(job.targetConfig ? {targetConfig:job.targetConfig} : {}),
         ...(job.findingsVersion ? {findingsVersion:job.findingsVersion} : {}),
         ...(execution ? {execution} : {}),
         ...(modelConfig ? {modelConfig} : {}),

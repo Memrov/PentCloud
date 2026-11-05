@@ -61,6 +61,8 @@ await fixture(async () => {
   assert.equal(value.unknownHeld.starts,0,"an unknown scanner outcome cannot be acknowledged away");
   assert.equal(value.held.starts,0,"drained failure waits for explicit coverage acknowledgement");
   assert.equal(value.after.starts,1,"the prepared primary is admitted once after acknowledgement");
+  const admitted=value.snapshot.records.find(row=>row.key.startsWith("launch:")&&row.value.role==="primary").value;
+  assert.equal(admitted.targetConfig.access.headerBinding,"PENTCLOUD_TARGET_TEST_HEADERS","admission preserves the pinned native target bindings");
   const beforeRun=value.before.snapshot.records.find(row=>row.key==="run:run-0").value;
   const afterRun=value.snapshot.records.find(row=>row.key==="run:run-0").value;
   assert.equal(beforeRun.phase,"primary");assert.equal(afterRun.phase,"primary");
