@@ -37,6 +37,7 @@ import { OnboardingStore, assertAudience, type SetupDraft, type SavedTarget } fr
 import {ScopeCatalog} from "./scope-catalog";
 import {targetAccessBrief,readTargetSecret,type ScopedTarget} from "../../../../shared/target-access";
 import {LoginChallenges,type VerificationDelivery} from './login-challenge';
+import {agentMailAddress,readAgentMail} from './agentmail-verification';
 import {verificationAddress} from './target-verification';
 import {platformBinding,platformToken,checkProgramAccess} from './bounty-platform';
 import {type BrowserAuthState} from "./browser-target-access";
@@ -491,16 +492,21 @@ export class Coordinator extends DurableObject<NativeEnv> {
         }
         case 'access.email.address':case 'access.email.setup':case 'access.email.status':{
           const target=this.onboarding.target(identifier(value.id));if(target.revision!==revision||target.archived)throw Error('409: Target changed; reload');
-          if(!this.env.PENTCLOUD_VERIFICATION_EMAIL)return {configured:false};
-          const address=await verificationAddress(this.env.PENTCLOUD_VERIFICATION_EMAIL,target.id),key='setup:'+target.id,owner=canonical([target.id,target.revision,address]);
+          const saved=target.access?.login?.verification,provider=action==='access.email.address'?(value.provider??(saved?.kind==='email'?saved.provider:undefined)??'cloudflare'):(saved?.kind==='email'?saved.provider??'cloudflare':'cloudflare');
+          if(provider!=='cloudflare'&&provider!=='agentmail')throw Error('400: Invalid email verification provider');
+          const available={cloudflare:!!this.env.PENTCLOUD_VERIFICATION_EMAIL,agentmail:!!agentMailAddress(this.env)};
+          if(!available[provider])return {configured:false,provider,available};
+          const address=provider==='agentmail'?agentMailAddress(this.env)!:await verificationAddress(this.env.PENTCLOUD_VERIFICATION_EMAIL!,target.id),key='setup:'+target.id,owner=canonical([target.id,target.revision,provider,address]);
           if(action==='access.email.setup'){
             if(target.access?.login?.verification?.kind!=='email')throw Error('409: Save email verification settings first');
-            this.loginChallenges.begin({key,owner,recipient:address,sender:'',targetURL:target.url,purpose:'setup'},crypto.randomUUID());
+            this.loginChallenges.begin({key,owner,recipient:address,sender:'',targetURL:target.url,purpose:'setup',provider},crypto.randomUUID());
             await this.scheduleVerificationExpiry();
           }
+          if(provider==='agentmail'&&action!=='access.email.address')await this.pollAgentMail(key,owner);
+          const current=this.onboarding.target(target.id);if(current.revision!==target.revision||current.archived)throw Error('409: Target changed; reload');
           const delivery=action==='access.email.status'?this.loginChallenges.peek(key,owner):undefined;
           // Setup confirmation is visible only to the authenticated owner, never an agent tool.
-          return {configured:true,address,...(delivery?{received:true,from:delivery.from,code:delivery.code,links:delivery.links.filter(url=>{const h=new URL(url).hostname;return h==='mail.google.com'||h==='accounts.google.com'||h==='outlook.live.com'||h==='account.microsoft.com';})}:{received:false})};
+          return {configured:true,provider,available,address,...(action==='access.email.setup'?{ready:true}:{}),...(delivery?{received:true,from:delivery.from,code:delivery.code,links:delivery.links.filter(url=>{const h=new URL(url).hostname;return h==='mail.google.com'||h==='accounts.google.com'||h==='outlook.live.com'||h==='account.microsoft.com';})}:{received:false})};
         }
         case "access.clearlogin":{
           const target=this.onboarding.target(identifier(value.id));if(target.revision!==revision)throw new Error("409: Target changed; reload");
@@ -671,23 +677,39 @@ export class Coordinator extends DurableObject<NativeEnv> {
   }
   private readonly browserAuth=new RunBrowserAuth({get:key=>this.get(key),put:(key,value)=>this.put(key,value),remove:key=>this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key)});
   private readonly emailWaiters=new Map<string,Set<()=>void>>();
+  private readonly agentMailChecks=new Map<string,Promise<void>>();
   private readonly loginChallenges=new LoginChallenges({get:key=>this.get(key),put:(key,value)=>this.put(key,value),remove:key=>this.ctx.storage.sql.exec('DELETE FROM native_records WHERE key=?',key),list:prefix=>this.ctx.storage.sql.exec<{key:string;value:string}>('SELECT key,value FROM native_records WHERE substr(key,1,?)=?',prefix.length,prefix).toArray().map(row=>({key:row.key,value:JSON.parse(row.value)}))});
   async receiveVerificationEmail(delivery:VerificationDelivery){
     const accepted=this.loginChallenges.receive(delivery);if(accepted){await this.scheduleVerificationExpiry();for(const waiters of this.emailWaiters.values())for(const wake of waiters)wake();}return {accepted};
   }
   private async scheduleVerificationExpiry(){await this.start();await this.scheduler.set(601,'expireVerification',undefined,{idempotent:true});}
+  private async pollAgentMail(key:string,owner:string){
+    const pending=this.loginChallenges.pending(key,owner);if(!pending||pending.provider!=='agentmail'||pending.message)return;
+    const flightKey=canonical([key,owner,pending.operationId]),existing=this.agentMailChecks.get(flightKey);if(existing)return existing;
+    const check=(async()=>{const deliveries=await readAgentMail(this.env,pending);const current=this.loginChallenges.pending(key,owner);if(!current||current.operationId!==pending.operationId||current.createdAt!==pending.createdAt)return;
+      for(const delivery of deliveries.reverse())await this.receiveVerificationEmail(delivery);
+    })();this.agentMailChecks.set(flightKey,check);try{await check;}finally{if(this.agentMailChecks.get(flightKey)===check)this.agentMailChecks.delete(flightKey);}
+  }
   private async emailScope(id:string){
     await this.assertActive(id);const run=this.run(this.job(id).runId),target=run.target,verification=target?.access?.login?.verification;
-    if(!target||verification?.kind!=='email'||!this.env.PENTCLOUD_VERIFICATION_EMAIL)throw Error('409: Configure email verification on this target');
-    const recipient=await verificationAddress(this.env.PENTCLOUD_VERIFICATION_EMAIL,target.id);await this.assertActive(id);
-    return {key:run.id,owner:canonical([run.id,target.id,target.url,target.access?.login]),recipient,sender:verification.sender,targetURL:target.url,purpose:'login' as const};
+    if(!target||verification?.kind!=='email')throw Error('409: Configure email verification on this target');
+    const provider=verification.provider??'cloudflare';let recipient:string,account:string|undefined;
+    if(provider==='agentmail'){
+      recipient=agentMailAddress(this.env)??'';if(!recipient)throw Error('409: Configure the AgentMail inbox and key binding in Cloudflare');
+      account=(await readTargetSecret(this.env,target.access!.login!.usernameBinding)).trim().toLowerCase();this.targetSecretRedactions.push(account);
+      if(!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(account))throw Error('409: AgentMail needs an email address in the target username secret; use Cloudflare receiving for other usernames');
+    }else{if(!this.env.PENTCLOUD_VERIFICATION_EMAIL)throw Error('409: Configure Cloudflare email receiving');recipient=await verificationAddress(this.env.PENTCLOUD_VERIFICATION_EMAIL,target.id);}
+    await this.assertActive(id);
+    return {key:run.id,owner:await digest([run.id,target.id,target.url,target.access?.login,account]),recipient,sender:verification.sender,targetURL:target.url,purpose:'login' as const,provider,...(account?{account}:{})};
   }
   async beginLoginEmail(id:string,operationId:string){const scope=await this.emailScope(id);this.loginChallenges.begin(scope,operationId);await this.scheduleVerificationExpiry();}
   async loginEmail(id:string){
     const scope=await this.emailScope(id);let message=this.loginChallenges.peek(scope.key,scope.owner);
-    if(!message){
+    const deadline=Date.now()+25000;
+    while(!message&&Date.now()<deadline){
+      if(scope.provider==='agentmail'){await this.pollAgentMail(scope.key,scope.owner);await this.assertActive(id);message=this.loginChallenges.peek(scope.key,scope.owner);if(message)break;}
       let wake!:()=>void;const ready=new Promise<void>(resolve=>{wake=resolve;}),waiters=this.emailWaiters.get(scope.key)??new Set<()=>void>();waiters.add(wake);this.emailWaiters.set(scope.key,waiters);
-      const timer=setTimeout(wake,25000);try{await ready;}finally{clearTimeout(timer);waiters.delete(wake);if(!waiters.size)this.emailWaiters.delete(scope.key);}
+      const timer=setTimeout(wake,Math.min(deadline-Date.now(),scope.provider==='agentmail'?5000:25000));try{await ready;}finally{clearTimeout(timer);waiters.delete(wake);if(!waiters.size)this.emailWaiters.delete(scope.key);}
       await this.assertActive(id);message=this.loginChallenges.peek(scope.key,scope.owner);
     }
     return message;

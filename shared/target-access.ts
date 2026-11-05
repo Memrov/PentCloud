@@ -4,7 +4,8 @@ export interface ProgramScope {
  id:string;name:string;platform:string;url:string;catalogCommit:string;sourceCommit:string;sha256:string;publishedAt:string;importedAt:number;
  allow:ScopeRule[];deny:ScopeRule[];instructions:string[];unsupportedAssets:number;
 }
-export type LoginVerification={kind:"totp";binding:string}|{kind:"email";sender:string};
+export type VerificationProvider='cloudflare'|'agentmail';
+export type LoginVerification={kind:"totp";binding:string}|{kind:"email";sender:string;provider?:VerificationProvider};
 export interface TargetLogin {url:string;usernameBinding:string;passwordBinding:string;verification?:LoginVerification}
 export interface TargetHeader {name:string;value:string}
 export interface TargetAPICredential {url:string;binding:string;header:string;scheme:"bearer"|"header"}
@@ -98,7 +99,8 @@ export function validateTargetAccess(url:string,raw:unknown):TargetAccess {
    else if(v.kind==="email"&&typeof v.sender==="string"&&v.sender.length<=254&&!/[\s\r\n<>]/.test(v.sender)){
     const sender=v.sender.toLowerCase(),domain=sender.includes("@")?sender.split("@")[1]!:sender;
     if(sender.split("@").length>2||!domain.includes(".")||publicURL("https://"+domain+"/").hostname!==domain)throw new Error("400: Invalid email verification sender");
-    next.login.verification={kind:"email",sender};
+    if(v.provider!==undefined&&!['cloudflare','agentmail'].includes(v.provider))throw new Error("400: Invalid email verification provider");
+    next.login.verification={kind:"email",sender,...(v.provider?{provider:v.provider}:{})};
    }else throw new Error("400: Invalid login verification settings");
   }
  }

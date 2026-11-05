@@ -18,6 +18,12 @@ const provenance={catalogCommit:"a".repeat(40),sourceCommit:"b".repeat(40),sha25
 function target(url="https://example.com/api/"){return {url,access:{program:compileProgramScope(program,provenance,url),headers:[{name:"X-Bug-Bounty",value:"researcher"}]}};}
 
 describe("target network scope",()=>{
+ it('retains explicit email provider selection while keeping old Cloudflare settings compatible',()=>{
+  const login={url:'https://example.com/api/login',usernameBinding:'PENTCLOUD_TARGET_USER',passwordBinding:'PENTCLOUD_TARGET_PASS'};
+  expect(validateTargetAccess('https://example.com/api/',{headers:[],login:{...login,verification:{kind:'email',sender:'example.com',provider:'agentmail'}}}).login?.verification).toEqual({kind:'email',sender:'example.com',provider:'agentmail'});
+  expect(validateTargetAccess('https://example.com/api/',{headers:[],login:{...login,verification:{kind:'email',sender:'example.com'}}}).login?.verification).toEqual({kind:'email',sender:'example.com'});
+  expect(()=>validateTargetAccess('https://example.com/api/',{headers:[],login:{...login,verification:{kind:'email',sender:'example.com',provider:'other'}}})).toThrow(/provider/);
+ });
  it("matches effective default ports and preserves explicit scheme-less port restrictions",()=>{
   const scoped={...program,targets:{in_scope:[{type:'URL',value:'example.com'}],out_of_scope:[{type:'URL',value:'example.com:80/admin'}]}};
   const t={url:'http://example.com/',access:{headers:[],program:compileProgramScope(scoped,provenance,'http://example.com/')}};

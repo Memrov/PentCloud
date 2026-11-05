@@ -24,3 +24,13 @@ it('replaces forwarding setup with login and refuses simultaneous runs for one m
  expect(store.peek('setup:target-one',owner)).toBeUndefined();expect(store.peek(scope.key,owner)?.code).toBe(message.code);
  expect(()=>store.begin({...scope,key:'run-two',owner:'other'},'login-two')).toThrow(/pending/i);
 });
+it('isolates providers and accounts in a shared inbox and exposes only a live pending owner',()=>{
+ const {store,advance}=fixture();const shared={...scope,provider:'agentmail' as const,account:'one@owned.example'};
+ store.begin(shared,'fill');store.begin({...shared,key:'two',owner:'two',account:'two@owned.example'},'fill');
+ expect(store.receive({...message,provider:'agentmail',account:'two@owned.example'})).toBe(true);
+ expect(store.peek(scope.key,owner)).toBeUndefined();expect(store.peek('two','two')?.code).toBe(message.code);
+ expect(store.receive({...message,id:'other'})).toBe(false);
+ expect(store.pending(scope.key,'wrong')).toBeUndefined();expect(store.pending(scope.key,owner)?.createdAt).toBe(100000);
+ expect(()=>store.begin({...shared,key:'three',owner:'three'},'fill')).toThrow(/pending/);
+ advance(600000);expect(store.pending(scope.key,owner)).toBeUndefined();
+});
