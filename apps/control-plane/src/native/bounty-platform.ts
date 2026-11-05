@@ -23,7 +23,7 @@ export async function checkProgramAccess(programId:string,credentials:{token:str
  let raw:Record<string,any>;try{raw=JSON.parse(await boundedText(response,512*1024));}catch{throw Error('502: Invalid program response');}
  let name:string,policy:string;
  if(config.platform==='hackerone'){
-  const a=raw.data?.attributes;if(a?.handle!==id)throw Error('502: Program identity mismatch');if(a.submission_state!=='open')throw Error('409: Program is not accepting assessments');name=a.name;policy=a.policy;
+  const record=raw.data??raw,a=record.attributes;if(a?.handle!==id||record.type&&record.type!=='program')throw Error('502: Program identity mismatch');if(a.submission_state!=='open')throw Error('409: Program is not accepting assessments');name=a.name;policy=a.policy;
  }else{
   if(raw.id?.toLowerCase()!==id.toLowerCase())throw Error('502: Program identity mismatch');
   if(['closed','paused','disabled','inactive'].includes(String(raw.status?.value).toLowerCase()))throw Error('409: Program is not accepting assessments');

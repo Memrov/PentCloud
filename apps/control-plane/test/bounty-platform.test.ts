@@ -1,5 +1,9 @@
 import {expect,it} from 'vitest';
 import {checkProgramAccess} from '../src/native/bounty-platform';
+it('accepts the native HackerOne single-resource response without a data envelope',async()=>{
+ const result=await checkProgramAccess('hackerone:example',{token:'platform-only',username:'researcher'},async()=>Response.json({id:'15966',type:'program',attributes:{handle:'example',name:'Example',submission_state:'open',policy:'Own test accounts only.'}}));
+ expect(result.name).toBe('Example');expect(result.policy).toBe('Own test accounts only.');
+});
 it('checks the selected HackerOne program with its own credential, not a target request',async()=>{
  let request:Request|undefined;
  const result=await checkProgramAccess('hackerone:example',{token:'platform-only',username:'researcher'},async(input,init)=>{request=new Request(input,init);return Response.json({data:{attributes:{handle:'example',name:'Example',submission_state:'open',policy:'Only owned test accounts.'}}});});
