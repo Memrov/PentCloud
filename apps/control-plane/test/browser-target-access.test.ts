@@ -1,4 +1,4 @@
-import {it,expect} from "vitest";
+import {it,expect,vi} from "vitest";
 import {validateBrowserState,assertBrowserCommand,fillLogin,fillVerification} from "../src/native/browser-target-access";
 const target={url:"https://example.com/",access:{headers:[],login:{url:"https://example.com/login",usernameBinding:"PENTCLOUD_TARGET_USER",passwordBinding:"PENTCLOUD_TARGET_PASS"}}};
 it("retains native browser clicks, typing and viewport control",()=>{
@@ -31,4 +31,10 @@ it('fills a trusted verification code without returning it, fenced across async 
  const result=await fillVerification(target,page as never,{pageURL:url,codeSelector:'#code'},async()=> '384217');
  expect(filled).toBe('384217');expect(JSON.stringify(result)).not.toContain(filled);
  filled='';await expect(fillVerification(target,page as never,{pageURL:url,codeSelector:'#code'},async()=>{url='https://outside.test/';return '384217';})).rejects.toThrow();expect(filled).toBe('');
+});
+it('masks a filled verification code with the native password input before screenshots',async()=>{
+ class Field {type='text';disabled=false;readOnly=false;private current='';set value(v:string){this.current=v;}get value(){return this.current;}dispatchEvent(){}}
+ const field=new Field(),url='https://example.com/verify';
+ vi.stubGlobal('HTMLInputElement',Field);vi.stubGlobal('document',{querySelector:()=>field});vi.stubGlobal('location',{href:url});
+ try{await fillVerification(target,{url:()=>url,evaluate:async(fn:Function,args:unknown)=>fn(args)} as never,{pageURL:url,codeSelector:'#code'},async()=> '384217');expect(field.value).toBe('384217');expect(field.type).toBe('password');}finally{vi.unstubAllGlobals();}
 });

@@ -1,10 +1,25 @@
 import PostalMime from 'postal-mime';
 import type {VerificationDelivery} from './login-challenge';
 type Input={to:string;headers:Headers;raw:string|ReadableStream<Uint8Array>};
+/** Headers joins duplicates with commas. Only the first, prepended result is trusted.
+ * Quoted strings and RFC comments cannot supply authentication method results. */
+function authenticated(value:string){
+ if(value.length>16384)return false;let comment=0,quoted=false,escaped=false,first='';
+ for(const char of value){
+  if(escaped){escaped=false;continue;}
+  if(char==='\\'&&(comment||quoted)){escaped=true;continue;}
+  if(comment){if(char==='(')comment++;else if(char===')')comment--;continue;}
+  if(quoted){if(char==='"')quoted=false;continue;}
+  if(char==='('){comment++;first+=' ';continue;}
+  if(char===')')return false;
+  if(char==='"'){quoted=true;first+=' ';continue;}
+  if(char===',')break;first+=char;
+ }
+ return !comment&&!quoted&&!escaped&&/^mx\.cloudflare\.net\s*;/i.test(first)&&/(?:^|;)\s*dmarc=pass(?:\s|;|$)/i.test(first);
+}
 /** Only Cloudflare-authenticated, bounded verification data is retained. */
 export async function readVerificationEmail(input:Input):Promise<VerificationDelivery|undefined>{
- const result=input.headers.get('Authentication-Results')??'',first=result.split(/,\s*(?=[^;,\s]+;)/)[0]??'';
- if(!/^mx\.cloudflare\.net\s*;/i.test(first)||!/(?:^|;)\s*dmarc=pass(?:\s|;|$)/i.test(first))return;
+ if(!authenticated(input.headers.get('Authentication-Results')??''))return;
  let bytes:Uint8Array;
  if(typeof input.raw==='string'){bytes=new TextEncoder().encode(input.raw);if(bytes.length>256*1024)return;}
  else{

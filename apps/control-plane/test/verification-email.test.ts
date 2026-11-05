@@ -11,3 +11,11 @@ it('ignores spoofed authentication results and ambiguous or oversized messages',
  expect(await readVerificationEmail({to:'codes+abc@auth.example',headers,raw:raw('Your code is 384217 or code 948235')})).toBeUndefined();
  expect(await readVerificationEmail({to:'codes+abc@auth.example',headers,raw:'x'.repeat(256*1024+1)})).toBeUndefined();
 });
+it('trusts only the first authentication header, ignoring comment and version spoofing',async()=>{
+ for(const suffix of ['attacker.test 1; dmarc=pass','attacker.test ; dmarc=pass','mx.cloudflare.net; dmarc=pass']){
+  const h=new Headers({'Authentication-Results':'mx.cloudflare.net; dmarc=fail'});h.append('Authentication-Results',suffix);
+  expect(await readVerificationEmail({to:'codes+abc@auth.example',headers:h,raw:raw('Your code is 384217')})).toBeUndefined();
+ }
+ expect(await readVerificationEmail({to:'codes+abc@auth.example',headers:new Headers({'Authentication-Results':'mx.cloudflare.net; dkim=fail (ignored; dmarc=pass); dmarc=fail'}),raw:raw('Your code is 384217')})).toBeUndefined();
+ expect((await readVerificationEmail({to:'codes+abc@auth.example',headers:new Headers({'Authentication-Results':'mx.cloudflare.net; dkim=pass (valid, signed); dmarc=pass header.from=owned.example, attacker.test 1; dmarc=fail'}),raw:raw('Your code is 384217')}))?.code).toBe('384217');
+});

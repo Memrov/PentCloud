@@ -12,7 +12,9 @@ export async function fillVerification(target:ScopedTarget,page:Page,input:Verif
  if(page.url()!==input.pageURL)throw Error('409: Verification page changed; inspect again');
  await page.evaluate(({url,selector,code})=>{
   if(location.href!==url)throw Error('Verification page changed');
-  const field=document.querySelector(selector);if(!(field instanceof HTMLInputElement)||field.disabled||field.readOnly||field.type==='hidden'||field.type==='password')throw Error('Choose an editable verification code input');
+  const field=document.querySelector(selector);if(!(field instanceof HTMLInputElement)||field.disabled||field.readOnly||field.type==='hidden')throw Error('Choose an editable verification code input');
+  // Native masking protects screenshots as well as redacted text/tool results.
+  field.type='password';
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,code);
   field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));
  },{url:input.pageURL,selector:input.codeSelector,code});
