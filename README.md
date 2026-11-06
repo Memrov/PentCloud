@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/Memrov/PentCloud/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/Memrov/PentCloud/actions/workflows/ci.yml?query=branch%3Amain)
 [![CodeQL](https://github.com/Memrov/PentCloud/actions/workflows/codeql.yml/badge.svg?branch=main&event=push)](https://github.com/Memrov/PentCloud/actions/workflows/codeql.yml?query=branch%3Amain)
+[![Snyk monitored](https://snyk.io/test/github/Memrov/PentCloud/badge.svg)](https://snyk.io/test/github/Memrov/PentCloud)
 [![License: MIT](https://img.shields.io/github/license/Memrov/PentCloud)](LICENSE)
 [![Security policy](https://img.shields.io/badge/security-policy-blue)](SECURITY.md)
 

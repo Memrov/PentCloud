@@ -33,6 +33,13 @@ remain the operator's responsibility.
   checks dependency changes on pull requests and rejects newly introduced high
   or critical vulnerabilities. It does not establish that all existing or
   undisclosed vulnerabilities are absent.
+- [Snyk](https://snyk.io/test/github/Memrov/PentCloud) provides dependency checks
+  through the existing GitHub integration in the `memrov` Snyk organization.
+  The badge currently says **monitored**; it is not a vulnerability count.
+  Inspect the `security/snyk (memrov)` PR status and its linked report: a passing
+  status may say **No manifest changes detected**, which is not a fresh scan of
+  every dependency. Coverage depends on the imported manifests and enabled
+  products. It does not establish coverage of separately deployed scanner images.
 - [OpenSSF Scorecard](https://github.com/Memrov/PentCloud/actions/workflows/scorecard.yml)
   is configured to inspect public repository practices on default-branch pushes
   and weekly. The workflow requests public results from OpenSSF and retains its
@@ -47,6 +54,22 @@ remain the operator's responsibility.
 Use a result for the exact commit you intend to deploy. Default-branch workflow
 badges can describe an older run while a newer run is pending; a scheduled badge
 does not independently prove that a scheduler is still running.
+
+For a local dependency scan after installing the development dependencies, use
+the [Snyk CLI authentication instructions](https://docs.snyk.io/developer-tools/snyk-cli/authenticate-to-use-the-cli)
+and run:
+
+```sh
+snyk auth
+snyk test --all-projects --dev --org=memrov --remote-repo-url=https://github.com/Memrov/PentCloud
+```
+
+Organization membership is required. The explicit public repository URL helps
+Snyk classify the scan correctly. Check the account's actual plan and usage;
+open-source program benefits require eligibility and do not follow from a badge.
+The GitHub app handles imported projects without a Snyk credential in Actions.
+Keep local CLI credentials outside the repository and review the imported
+projects before creating additional `snyk monitor` snapshots.
 
 ## Inspect dependencies and releases
 
