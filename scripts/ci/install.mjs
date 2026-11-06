@@ -26,12 +26,13 @@ export async function waitForProbeReady({request,now=Date.now,sleep=ms=>new Prom
     await sleep(Math.min(2000,deadline-now()));
   }
 }
-export async function waitForAccessReady({origin,headers,fetcher=fetch,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=120000,onStatus=()=>{}}){
+export async function waitForAccessReady({origin,headers,path='/v1/runs?view=all',expectedStatus=200,fetcher=fetch,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=120000,onStatus=()=>{}}){
+  assert(path.startsWith('/v1/')&&!path.startsWith('//')&&[200,404].includes(expectedStatus),'CI_ACCESS_CHECK_INVALID');
   const deadline=now()+timeoutMs;
   for(;;){
-    const response=await fetcher(origin+'/v1/runs?view=all',{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});
+    const response=await fetcher(origin+path,{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});
     onStatus(response.status);
-    if(response.status===200)return response;
+    if(response.status===expectedStatus)return response;
     await response.body?.cancel();
     assert([302,303,401,403].includes(response.status),'CI_ACCESS_UNEXPECTED_STATUS');
     assert(now()<deadline,'CI_ACCESS_READINESS_TIMEOUT');
@@ -109,7 +110,7 @@ export async function main(){
   const probe=async body=>{
     const response=await requestProbe(body);
     const result=await response.json().catch(()=>null);
-    const checkpoints=['loader-create','loader-fetch','markdown-convert','markdown-result','browser-launch','browser-navigate','browser-content','pack-ready','pack-command','pack-stop'];
+    const checkpoints=['loader-create','loader-fetch','markdown-convert','markdown-result','browser-launch','browser-access','browser-navigate','browser-content','pack-ready','pack-command','pack-stop'];
     console.log(JSON.stringify({check:'native-'+body.action,...(body.pack?{pack:body.pack}:{}),status:response.status,...(checkpoints.includes(result?.checkpoint)?{checkpoint:result.checkpoint}:{})}));
     assert.equal(response.status,200,'Native service probe failed: '+body.action+(body.pack?' '+body.pack:''));
     assert(result&&!result.error,'Native probe reported failure');return result;
@@ -123,19 +124,17 @@ export async function main(){
     assert.deepEqual(await probeReady.json(),{ready:'passed'},'CI_PROBE_READINESS_INVALID');
     stage='access-probe';
     await withCIProbeAccess({api,journal,persist,appId:installer.state.resources.access.id,origin:installer.state.appUrl},async({headers})=>{
-      stage='access-readiness';
-      const ready=await waitForAccessReady({origin:installer.state.appUrl,headers,onStatus:status=>console.log(JSON.stringify({check:stage,status}))});
-      await ready.body?.cancel();
       for(const path of ['/v1/runs?view=all','/v1/onboarding','/v1/lifecycle']){
         stage='access-api-'+path.split('/').at(-1).split('?')[0];
-        const r=await fetch(installer.state.appUrl+path,{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});
-        console.log(JSON.stringify({check:stage,status:r.status}));
+        const r=await waitForAccessReady({origin:installer.state.appUrl,headers,path,onStatus:status=>console.log(JSON.stringify({check:stage,status}))});
         assert.equal(r.status,200,'Authenticated application check failed');
+        await r.body?.cancel();
       }
       proof.checks.push('Access-authenticated API and Durable Objects');
       stage='access-no-kali';
-      const missing=await fetch(installer.state.appUrl+'/v1/toolbox/status',{headers,redirect:'manual'});
+      const missing=await waitForAccessReady({origin:installer.state.appUrl,headers,path:'/v1/toolbox/status',expectedStatus:404,onStatus:status=>console.log(JSON.stringify({check:stage,status}))});
       assert.equal(missing.status,404,'Package installation still exposes a Kali runtime');
+      await missing.body?.cancel();
       for(const action of ['loader','markdown']){stage='native-'+action;await probe({action});proof.checks.push(action);}
       stage='native-browser';
       await probe({action:'browser',headers});proof.checks.push('Browser Run protected application');

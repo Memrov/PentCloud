@@ -33,6 +33,17 @@ test('Access readiness waits for policy propagation but fails bounded persistent
   assert(calls<=4);
   await assert.rejects(waitForAccessReady({origin:'https://install.heflare.app',headers,fetcher:async()=>new Response(null,{status:500})}),/CI_ACCESS_UNEXPECTED_STATUS/);
 });
+
+test('Access readiness checks each exact endpoint and accepts an authenticated absent Kali route',async()=>{
+  const {waitForAccessReady}=await import('./ci/install.mjs');
+  const attempts=new Map();let time=0;
+  const fetcher=async url=>{const path=new URL(url).pathname,n=attempts.get(path)??0;attempts.set(path,n+1);return new Response(null,{status:n===0?401:path==='/v1/toolbox/status'?404:200});};
+  for(const path of ['/v1/runs','/v1/onboarding','/v1/lifecycle','/v1/toolbox/status']){
+    const expectedStatus=path==='/v1/toolbox/status'?404:200;
+    const response=await waitForAccessReady({origin:'https://install.heflare.app',headers:{},path,expectedStatus,fetcher,now:()=>time,sleep:async ms=>{time+=ms;}});
+    assert.equal(response.status,expectedStatus);assert.equal(attempts.get(path),2);
+  }
+});
 test('installation failures never print assertion values or provider messages',()=>{
   const privateValue='unexpected-private-operator@example.invalid';
   const child=spawnSync(process.execPath,[join(root,'scripts/ci/install.mjs')],{encoding:'utf8',env:{...process.env,GITHUB_ACTIONS:'false',PENTCLOUD_INSTALL_CONFIG:JSON.stringify({accountId:privateValue,zoneId:'b'.repeat(32),hostname:'install.heflare.app',team:'https://private-team.cloudflareaccess.com',emails:[privateValue]})}});

@@ -37,6 +37,15 @@ export default {
         const browser=await launch(env.BROWSER);
         try{
           const context=await browser.newContext({extraHTTPHeaders:input.headers});
+          checkpoint='browser-access';
+          const deadline=Date.now()+60000;
+          for(;;){
+            const access=await context.request.get(env.APP_ORIGIN+'/v1/runs',{maxRedirects:0,timeout:15000});
+            const status=access.status();await access.dispose();
+            if(status===200)break;
+            check([302,303,401,403].includes(status)&&Date.now()<deadline,'Browser Access did not become ready');
+            await new Promise(resolve=>setTimeout(resolve,2000));
+          }
           const page=await context.newPage();
           await context.route('**/*',route=>new URL(route.request().url()).origin===env.APP_ORIGIN?route.continue():route.abort());
           checkpoint='browser-navigate';
