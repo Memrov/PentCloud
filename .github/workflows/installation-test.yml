@@ -1,0 +1,49 @@
+name: Installation test
+on:
+  push:
+    branches: [main, codex/artifacts-install-ci]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pentcloud-installation-test
+  cancel-in-progress: false
+jobs:
+  install:
+    name: Native Artifacts installation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    environment: installation-test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.1
+      - name: Verify isolated account credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PENTCLOUD_TEST_ZONE_ID: ${{ vars.PENTCLOUD_TEST_ZONE_ID }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          const account=process.env.CLOUDFLARE_ACCOUNT_ID,zone=process.env.PENTCLOUD_TEST_ZONE_ID;
+          assert.match(account??'',/^[a-f0-9]{32}$/);
+          assert.match(zone??'',/^[a-f0-9]{32}$/);
+          assert(process.env.CLOUDFLARE_API_TOKEN,'Missing environment deployment secret');
+          const request=async(path,method='GET',body)=>{
+            const r=await fetch('https://api.cloudflare.com/client/v4'+path,{method,headers:{Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+            const data=await r.json();assert(r.ok&&data.success!==false,'Cloudflare preflight failed: '+path+' HTTP '+r.status+' codes '+(data.errors??[]).map(x=>x.code).join(','));
+            return data.result;
+          };
+          const z=await request('/zones/'+zone);
+          assert.equal(z.name,'heflare.app','Only the separate testing zone is permitted');
+          assert.equal(z.account.id,account,'Test domain/account mismatch');
+          await request('/accounts/'+account+'/workers/scripts');
+          const ns=await request('/accounts/'+account+'/artifacts/namespaces');
+          if(!ns.some(x=>x.namespace==='pentcloud-ci-source'))await request('/accounts/'+account+'/artifacts/namespaces','POST',{namespace:'pentcloud-ci-source'});
+          console.log('Test-account credentials and native Artifacts namespace verified.');
+          JS
+
