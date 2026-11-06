@@ -85,7 +85,26 @@ acceptance for your account.
 
 ## Reporting a vulnerability
 
-Use GitHub's private vulnerability reporting when available. If it is unavailable,
-open an issue asking for a private contact channel without including sensitive
-details. Never publish real credentials, private targets, transcripts or exploit
-evidence in an issue.
+[Report a vulnerability privately through GitHub](https://github.com/Memrov/PentCloud/security/advisories/new).
+Private vulnerability reporting is enabled for this repository. If GitHub's
+reporting service is unavailable, open an issue requesting a private contact
+channel without disclosing the vulnerability.
+
+Include the affected commit, installation/version information, expected and
+observed behavior, impact, and a minimal reproduction against a system you own
+or are authorized to test. Use synthetic data and redact credentials, personal
+information, private targets and transcripts. Do not include a working secret.
+Please keep exploit details private while maintainers investigate and coordinate
+disclosure. Security reports for the scanner adapters belong in
+[PentCloud-tools](https://github.com/Memrov/PentCloud-tools/security/advisories/new);
+catalog importer/publication issues belong in
+[PentCloud-scopes](https://github.com/Memrov/PentCloud-scopes/security/advisories/new).
+
+## Supported code
+
+The current default branch is a development preview. There is no stable release
+or separately maintained backport line. Record and pin the application commit
+used in your installation, review changes before upgrading, and include that
+commit in reports. A supported branch, passing workflow or published dependency
+inventory does not establish that an installation is secure. See
+[verification boundaries](docs/trust.md).

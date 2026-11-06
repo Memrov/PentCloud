@@ -1,5 +1,10 @@
 # PentCloud
 
+[![CI](https://github.com/Memrov/PentCloud/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/Memrov/PentCloud/actions/workflows/ci.yml?query=branch%3Amain)
+[![CodeQL](https://github.com/Memrov/PentCloud/actions/workflows/codeql.yml/badge.svg?branch=main&event=push)](https://github.com/Memrov/PentCloud/actions/workflows/codeql.yml?query=branch%3Amain)
+[![License: MIT](https://img.shields.io/github/license/Memrov/PentCloud)](LICENSE)
+[![Security policy](https://img.shields.io/badge/security-policy-blue)](SECURITY.md)
+
 **Your on-demand AI pentest team.**
 
 I created PentCloud so nontechnical people can do real penetration testing on their
@@ -189,6 +194,18 @@ Cloudflare recommends a custom domain for business-critical production installat
 
 ## Explore the project
 
+PentCloud has three public repositories with separate responsibilities:
+
+| Repository | What to verify |
+| --- | --- |
+| [PentCloud](https://github.com/Memrov/PentCloud) | Application, orchestration, authentication and evidence handling |
+| [PentCloud-tools](https://github.com/Memrov/PentCloud-tools) | Versioned scanner adapters/runtimes, upstream tool pins, checksums and licenses |
+| [PentCloud-scopes](https://github.com/Memrov/PentCloud-scopes) | Public bounty catalog, upstream source commit, validation and publication history |
+
+See [verification and supply-chain boundaries](docs/trust.md) for what the badges,
+dependency inventories and release evidence establish. Workflow success alone
+does not establish that no vulnerabilities exist. [Report a vulnerability privately](https://github.com/Memrov/PentCloud/security/advisories/new).
+
 | Start here | Purpose |
 | --- | --- |
 | [Architecture and diagrams](docs/architecture.md) | User journey, agent sessions, evidence, recovery and trust boundaries |
@@ -199,6 +216,7 @@ Cloudflare recommends a custom domain for business-critical production installat
 | [Operations](docs/operations.md) | Files, lifecycle, cancellation and scanner uncertainty |
 | [Troubleshooting](docs/operations/debugging.md) | Setup errors, logs and recovery |
 | [Development and testing](docs/operations/testing.md) | Fast iteration and required checks |
+| [Verify the project](docs/trust.md) | Public checks, repository relationships, dependencies and release assurances |
 | [Visual asset guide](media/README.md) | Editable D2 figures, exports, claims and Storylane tour |
 
 ## Development

@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a reproducible application or documentation problem using synthetic data.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: Use private vulnerability reporting for security flaws. Never include credentials, installation state, private targets or transcripts here.
+  - type: input
+    id: revision
+    attributes:
+      label: Application commit and environment
+      description: Include the commit and relevant toolchain/platform versions without account identifiers.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Give minimal steps using synthetic data and systems you own or are authorized to test.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Checks already performed
+      description: Share relevant test results or short redacted errors. Do not attach raw deployment logs or credentials.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Public report safety
+      options:
+        - label: This report uses synthetic or safely redacted data and contains no credentials or private evidence.
+          required: true
