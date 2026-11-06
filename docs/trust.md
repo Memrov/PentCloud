@@ -71,9 +71,11 @@ The GitHub app handles imported projects without a Snyk credential in Actions.
 Keep local CLI credentials outside the repository and review the imported
 projects before creating additional `snyk monitor` snapshots.
 
-The current GitHub import contains the root npm manifest and `go.mod`. It does
-not separately monitor the app and gateway npm workspaces. Run the CLI from the
-repository root with `--all-projects` to include those workspaces. Compare
+The GitHub import includes the root npm manifest, `go.mod`, and the explicitly
+imported app and gateway npm workspaces, with daily testing configured. Npm
+development dependency scanning is enabled. SCM scanning approximates nested
+manifests without adjacent lockfiles instead of using the workspace root lockfile.
+Run the CLI from the repository root with `--all-projects` as well. Compare
 reported versions with `package-lock.json` and `npm ls` before triage: CLI 1.1308.4
 reported older Undici versions despite the committed overrides and installed
 patched versions. A scan of one manifest or a reduced dependency tree is not a
