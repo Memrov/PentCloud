@@ -40,7 +40,10 @@ export async function waitForAccessReady({origin,headers,path='/v1/runs?view=all
   }
 }
 export async function waitForWorkflowProof({api,path,before,identity,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=300000}){
-  const matches=value=>value?.params?.source?.type==='artifacts.repo'&&value.params.source.namespace===identity.namespace&&value.params.source.repoName===identity.repo&&value.params.payload?.ref===identity.ref&&value.params.payload.after===identity.commit&&value.trigger?.source==='event';
+  const matches=value=>{
+    const params=value?.params,source=params?.source;
+    return params?.type==='cf.artifacts.repo.pushed'&&(source?.type===undefined||source.type==='artifacts.repo')&&source?.namespace===identity.namespace&&source.repoName===identity.repo&&params.payload?.ref===identity.ref&&params.payload.after===identity.commit&&value.trigger?.source==='event';
+  };
   const deadline=now()+timeoutMs;let own;
   for(;;){
     if(!own){

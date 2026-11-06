@@ -183,7 +183,7 @@ export class RouterControl extends DurableObject<RuntimeFixtureEnv> {
   }
   async reconcile(repoName: string, ref: string, commit: string) {
     this.record("reconcile", repoName, ref, commit);
-    return { accepted: true };
+    return repoName==="run-fixture"&&ref==="refs/heads/attempts/job-1"?{ accepted: true }:{ ignored: true };
   }
   override async fetch(request: Request) {
     this.record("fetch", request.url, request.headers.get("Upgrade"));

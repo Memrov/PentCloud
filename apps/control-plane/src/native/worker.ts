@@ -495,7 +495,8 @@ export class ResultValidation extends WorkflowEntrypoint<NativeEnv> {
     const source = data.source,
       payload = data.payload;
     if (
-      source.type !== "artifacts.repo" ||
+      data.type !== "cf.artifacts.repo.pushed" ||
+      (source.type !== undefined && source.type !== "artifacts.repo") ||
       source.namespace !== this.env.ARTIFACTS_NAMESPACE ||
       typeof source.repoName !== "string" ||
       !/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(source.repoName) ||
