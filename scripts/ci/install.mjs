@@ -8,9 +8,24 @@ import {PackageInstaller,PACK_CLASSES} from '../lib/package-install.mjs';
 import {privateJson,withStateLock,readJson} from '../lib/private-install.mjs';
 import {privateProcess} from '../lib/private-process.mjs';
 import {environment,client,validateAccount,stateLedger,withGit} from './artifacts.mjs';
-import {cleanupPath,cleanupOwner,createCleanupJournal,saveCleanupJournal,deployProbe,withCIProbeAccess,cleanupOwnedResources} from './cleanup.mjs';
+import {cleanupPath,cleanupOwner,createCleanupJournal,saveCleanupJournal,deployProbe,probeHostname,withCIProbeAccess,cleanupOwnedResources} from './cleanup.mjs';
 
 let stage='environment';
+export async function waitForProbeReady({request,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=120000,onStatus=()=>{}}){
+  const deadline=now()+timeoutMs;
+  for(;;){
+    let response;
+    try{response=await request();}catch{onStatus('network-pending');}
+    if(response){
+      onStatus(response.status);
+      if(response.status===200)return response;
+      await response.body?.cancel();
+      assert([401,403,404,502,503,525,526,530].includes(response.status),'CI_PROBE_UNEXPECTED_STATUS');
+    }
+    assert(now()<deadline,'CI_PROBE_READINESS_TIMEOUT');
+    await sleep(Math.min(2000,deadline-now()));
+  }
+}
 export async function waitForAccessReady({origin,headers,fetcher=fetch,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=120000,onStatus=()=>{}}){
   const deadline=now()+timeoutMs;
   for(;;){
@@ -79,26 +94,33 @@ export async function main(){
   stage='probe-prepare';
   const journalPath=cleanupPath(),journal=await createCleanupJournal(journalPath,cleanupOwner(e.accountId)),persist=()=>saveCleanupJournal(journalPath,journal);
   const probeName=journal.probe.name,probeConfig=join(process.env.RUNNER_TEMP,'pentcloud-probe.json'),secret=randomBytes(32).toString('base64url');
-  const workerDomain=await api.request(base+'/workers/subdomain');
-  const probeOrigin='https://'+probeName+'.'+workerDomain.subdomain+'.workers.dev';
+  const probeOrigin='https://'+probeHostname(journal);
   await privateJson(probeConfig,{
     name:probeName,account_id:e.accountId,main:join(root,'scripts/ci/probe-worker.mjs'),
-    compatibility_date:'2026-10-30',compatibility_flags:['nodejs_compat'],workers_dev:true,preview_urls:false,observability:{enabled:false},
+    compatibility_date:'2026-10-30',compatibility_flags:['nodejs_compat'],workers_dev:false,preview_urls:false,observability:{enabled:false},
+    routes:[{pattern:probeHostname(journal),zone_id:e.zoneId,custom_domain:true}],
     browser:{binding:'BROWSER'},ai:{binding:'AI'},worker_loaders:[{binding:'LOADER'}],
     artifacts:[{binding:'ARTIFACTS',namespace:installer.names.namespace}],
     services:[{binding:'TOOL_PACKS',service:installer.names.gateway,entrypoint:'ToolPackGateway'}],
     vars:{APP_ORIGIN:installer.state.appUrl,CI_PROBE_EXPIRES_AT:String(Date.now()+60*60*1000)},
   });
   const proof={checks:[]};
+  const requestProbe=(body,timeout=300000)=>fetch(probeOrigin,{method:'POST',headers:{Authorization:'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'manual',signal:AbortSignal.timeout(timeout)});
   const probe=async body=>{
-    const response=await fetch(probeOrigin,{method:'POST',headers:{Authorization:'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'manual',signal:AbortSignal.timeout(300000)});
+    const response=await requestProbe(body);
+    const result=await response.json().catch(()=>null);
+    const checkpoints=['loader-create','loader-fetch','markdown-convert','markdown-result','browser-launch','browser-navigate','browser-content','pack-ready','pack-command','pack-stop'];
+    console.log(JSON.stringify({check:'native-'+body.action,...(body.pack?{pack:body.pack}:{}),status:response.status,...(checkpoints.includes(result?.checkpoint)?{checkpoint:result.checkpoint}:{})}));
     assert.equal(response.status,200,'Native service probe failed: '+body.action+(body.pack?' '+body.pack:''));
-    const result=await response.json();assert(!result.error,'Native probe reported failure');return result;
+    assert(result&&!result.error,'Native probe reported failure');return result;
   };
   try{
     stage='probe-deploy';
-    await deployProbe({api,journal,persist,deploy:()=>run('wrangler',['deploy','--config',probeConfig])});
+    await deployProbe({api,journal,persist,zoneId:e.zoneId,deploy:()=>run('wrangler',['deploy','--config',probeConfig])});
     await installer.workerSecret(probeName,'CI_PROBE_TOKEN',secret);
+    stage='probe-readiness';
+    const probeReady=await waitForProbeReady({request:()=>requestProbe({action:'ready'},10000),onStatus:status=>console.log(JSON.stringify({check:stage,status}))});
+    assert.deepEqual(await probeReady.json(),{ready:'passed'},'CI_PROBE_READINESS_INVALID');
     stage='access-probe';
     await withCIProbeAccess({api,journal,persist,appId:installer.state.resources.access.id,origin:installer.state.appUrl},async({headers})=>{
       stage='access-readiness';

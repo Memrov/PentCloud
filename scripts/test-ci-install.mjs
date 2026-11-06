@@ -7,6 +7,19 @@ import {spawnSync} from 'node:child_process';
 import {withNativeTestHarness} from './lib/native-test-harness.mjs';
 
 const root=resolve(import.meta.dirname,'..');
+test('probe readiness retries only bounded propagation failures and cancels discarded bodies',async()=>{
+  const {waitForProbeReady}=await import('./ci/install.mjs');
+  let time=0,calls=0,cancelled=0;const statuses=[null,401,403,404,502,503,525,526,530,200],observed=[];
+  const result=await waitForProbeReady({now:()=>time,sleep:async ms=>{time+=ms;},onStatus:status=>observed.push(status),request:async()=>{
+    calls++;const status=statuses.shift();if(status===null)throw Error('PRIVATE_NETWORK_BODY');
+    return new Response(new ReadableStream({cancel(){cancelled++;}}),{status});
+  }});
+  assert.equal(result.status,200);assert.equal(calls,10);assert.equal(cancelled,8);assert.deepEqual(observed,['network-pending',401,403,404,502,503,525,526,530,200]);
+  await result.body.cancel();time=0;calls=0;
+  await assert.rejects(waitForProbeReady({timeoutMs:5000,now:()=>time,sleep:async ms=>{time+=ms;},request:async()=>{calls++;return new Response(null,{status:503});}}),/CI_PROBE_READINESS_TIMEOUT/);
+  assert(calls<=4);
+  calls=0;await assert.rejects(waitForProbeReady({request:async()=>{calls++;return new Response(null,{status:500});}}),/CI_PROBE_UNEXPECTED_STATUS/);assert.equal(calls,1);
+});
 test('Access readiness waits for policy propagation but fails bounded persistent denial',async()=>{
   const {waitForAccessReady}=await import('./ci/install.mjs');
   let time=0,calls=0;const statuses=[401,403,200],headers={'CF-Access-Client-Id':'private-id','CF-Access-Client-Secret':'private-secret'};
@@ -45,6 +58,19 @@ export default {fetch(request){const url=new URL(request.url),missing=url.search
   }finally{await rm(directory,{recursive:true,force:true});}
 });
 
+test('native Loader probe executes with a real workerd Loader binding',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-loader-probe-test-'));
+  try{
+    await writeFile(join(directory,'worker.mjs'),`import probe from ${JSON.stringify(join(root,'scripts/ci/probe-worker.mjs'))};
+export default {fetch(request,env){return probe.fetch(request,{...env,CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)})}};`);
+    await writeFile(join(directory,'wrangler.json'),JSON.stringify({name:'ci-loader-probe-fixture',main:'worker.mjs',compatibility_date:'2026-10-30',compatibility_flags:['nodejs_compat'],worker_loaders:[{binding:'LOADER'}]}));
+    await withNativeTestHarness({root:directory,workers:[{configPath:'wrangler.json'}]},async server=>{
+      const result=await server.fetch('https://probe.test/',{method:'POST',headers:{Authorization:'Bearer fixture-token','Content-Type':'application/json'},body:JSON.stringify({action:'loader'})});
+      assert.equal(result.status,200);assert.deepEqual(await result.json(),{loader:'passed'});
+    });
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
 test('always cleanup succeeds without credentials or dependencies when no journal exists',async()=>{
   const directory=await mkdtemp(join(tmpdir(),'pentcloud-absent-cleanup-'));
   try{
@@ -55,6 +81,7 @@ test('always cleanup succeeds without credentials or dependencies when no journa
 
 const owner={repository:'Memrov/PentCloud',accountId:'a'.repeat(32),runId:'12345',attempt:'2'};
 const nonce='0123456789ab';
+const zoneId='c'.repeat(32);
 async function journalFixture(fn){
   const cleanup=await import('./ci/cleanup.mjs');
   const directory=await mkdtemp(join(tmpdir(),'pentcloud-cleanup-test-')),path=join(directory,'cleanup.json');
@@ -62,8 +89,21 @@ async function journalFixture(fn){
   finally{await rm(directory,{recursive:true,force:true});}
 }
 function provider(){
-  const scripts=new Map(),tokens=[],policies=[],deletes=[];
-  const api={async request(path,{method='GET',body}={}){
+  const scripts=new Map(),tokens=[],policies=[],domains=[],dns=[],deletes=[];
+  const api={async request(path,{method='GET',body,envelope=false}={}){
+    const url=new URL(path,'https://fixture.invalid');
+    if(url.pathname==='/zones/'+zoneId)return {id:zoneId,name:'heflare.app',status:'active',account:{id:owner.accountId}};
+    if(url.pathname==='/zones/'+zoneId+'/dns_records'){
+      const result=dns.filter(value=>value.name===url.searchParams.get('name'));
+      return envelope?{result,result_info:{total_pages:1}}:result;
+    }
+    if(url.pathname.endsWith('/workers/domains'))return domains.map(value=>({...value}));
+    const domain=url.pathname.match(/\/workers\/domains\/([^/]+)$/);
+    if(domain){
+      const index=domains.findIndex(value=>value.id===domain[1]);
+      if(method==='DELETE'){if(index>=0)domains.splice(index,1);deletes.push(path);return null;}
+      return index<0?null:{...domains[index]};
+    }
     if(path.endsWith('/workers/scripts'))return [...scripts.keys()].map(id=>({id}));
     const worker=path.match(/\/workers\/scripts\/([^/]+)(?:\/settings)?$/);
     if(worker){if(method==='DELETE'){scripts.delete(worker[1]);deletes.push(path);return null;}return scripts.has(worker[1])?{name:worker[1]}:null;}
@@ -74,24 +114,116 @@ function provider(){
     if(method==='DELETE'){const id=path.split('/').at(-1),index=list.findIndex(value=>value.id===id);if(index>=0)list.splice(index,1);deletes.push(path);return null;}
     throw Error('Unexpected fixture request');
   }};
-  return {api,scripts,tokens,policies,deletes};
+  api.list=path=>api.request(path);
+  return {api,scripts,tokens,policies,domains,dns,deletes};
+}
+const probeDomain=(journal,overrides={})=>({id:'domain-owned',hostname:'pentcloud-ci-12345-2-0123456789ab-probe.heflare.app',service:journal.probe.name,zone_id:zoneId,zone_name:'heflare.app',environment:'production',...overrides});
+async function paginateDomains(fixture){
+  const {CloudflareApi}=await import('./lib/private-install.mjs'),pages=[];
+  const paginated=new CloudflareApi('fixture-token',async value=>{
+    const url=new URL(value);assert(url.pathname.endsWith('/workers/domains'));
+    const page=Number(url.searchParams.get('page'));pages.push(page);
+    return Response.json({success:true,result:fixture.domains.slice(page-1,page),result_info:{total_pages:fixture.domains.length}});
+  });
+  fixture.api.list=path=>paginated.list(path);return pages;
 }
 
 test('cleanup reconciles an attempted probe deployment after Wrangler loses its response',async()=>journalFixture(async({cleanup,path,journal,persist})=>{
   const fixture=provider();fixture.scripts.set('unrelated-worker',true);
-  await assert.rejects(cleanup.deployProbe({api:fixture.api,journal,persist,deploy:async()=>{fixture.scripts.set(journal.probe.name,true);throw Error('PRIVATE_DEPLOY_BODY');}}));
+  await assert.rejects(cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>{fixture.scripts.set(journal.probe.name,true);fixture.domains.push(probeDomain(journal));throw Error('PRIVATE_DEPLOY_BODY');}}));
   const restored=await cleanup.readCleanupJournal(path,owner);
   await cleanup.cleanupOwnedResources({api:fixture.api,journal:restored,persist:()=>cleanup.saveCleanupJournal(path,restored)});
   assert.deepEqual([...fixture.scripts.keys()],['unrelated-worker']);
-  assert(restored.probe.removed);
+  assert.equal(fixture.domains.length,0);assert(restored.probe.removed&&restored.domain.removed);
+  assert(fixture.deletes[0].endsWith('/workers/domains/domain-owned'));
 }));
 
 test('probe name collision is never claimed or deleted',async()=>journalFixture(async({cleanup,journal,persist})=>{
   const fixture=provider();fixture.scripts.set(journal.probe.name,true);
-  await assert.rejects(cleanup.deployProbe({api:fixture.api,journal,persist,deploy:async()=>assert.fail('colliding deploy')}));
+  await assert.rejects(cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>assert.fail('colliding deploy')}));
   await cleanup.cleanupOwnedResources({api:fixture.api,journal,persist});
   assert(fixture.scripts.has(journal.probe.name));assert.equal(fixture.deletes.length,0);
 }));
+
+test('probe deployment checkpoints its exact custom domain and removes it before its Worker',async()=>journalFixture(async({cleanup,path,journal,persist})=>{
+  const fixture=provider();assert.equal(cleanup.probeHostname(journal),'pentcloud-ci-12345-2-0123456789ab-probe.heflare.app');
+  await cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>{
+    const saved=await cleanup.readCleanupJournal(path,owner);
+    assert(saved.probe.attempted&&saved.domain.attempted);assert.equal(saved.domain.zoneId,zoneId);
+    fixture.scripts.set(journal.probe.name,true);fixture.domains.push(probeDomain(journal));
+  }});
+  assert.equal(journal.domain.id,'domain-owned');
+  await cleanup.cleanupOwnedResources({api:fixture.api,journal,persist});
+  assert.equal(fixture.domains.length,0);assert.equal(fixture.scripts.size,0);
+  assert.deepEqual(fixture.deletes,[`/accounts/${owner.accountId}/workers/domains/domain-owned`,`/accounts/${owner.accountId}/workers/scripts/${journal.probe.name}`]);
+}));
+
+test('existing custom-domain and DNS hostnames are never claimed or overwritten',async()=>{
+  for(const kind of ['domain','dns'])await journalFixture(async({cleanup,journal,persist})=>{
+    const fixture=provider();
+    if(kind==='domain')fixture.domains.push(probeDomain(journal,{service:'foreign-worker'}));
+    else fixture.dns.push({id:'foreign-dns',name:'pentcloud-ci-12345-2-0123456789ab-probe.heflare.app'});
+    await assert.rejects(cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>assert.fail('colliding domain deploy')}));
+    assert.equal(journal.probe.attempted,false);assert.equal(journal.domain.attempted,false);
+    await cleanup.cleanupOwnedResources({api:fixture.api,journal,persist});assert.equal(fixture.deletes.length,0);
+  });
+});
+
+test('custom-domain preflight verifies the selected testing zone and its account',async()=>journalFixture(async({cleanup,journal,persist})=>{
+  const fixture=provider(),request=fixture.api.request.bind(fixture.api);
+  for(const foreign of [{name:'production.example'},{account:{id:'d'.repeat(32)}},{status:'pending'}]){
+    fixture.api.request=async(path,options)=>path==='/zones/'+zoneId?{...await request(path,options),...foreign}:request(path,options);
+    await assert.rejects(cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>assert.fail('foreign zone deploy')}));
+    assert.equal(journal.probe.attempted,false);assert.equal(fixture.deletes.length,0);
+  }
+}));
+
+test('custom-domain cleanup refuses changed hostnames, associations and identities',async()=>{
+  for(const change of [{service:'foreign-worker'},{hostname:'foreign.heflare.app'},{zone_id:'d'.repeat(32)},{id:'replacement-domain'}])await journalFixture(async({cleanup,journal,persist})=>{
+    const fixture=provider();
+    await cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>{fixture.scripts.set(journal.probe.name,true);fixture.domains.push(probeDomain(journal));}});
+    Object.assign(fixture.domains[0],change);
+    await assert.rejects(cleanup.cleanupOwnedResources({api:fixture.api,journal,persist}));
+    assert.equal(fixture.deletes.length,0);assert(fixture.scripts.has(journal.probe.name));
+  });
+});
+
+test('custom-domain deletion reconciles a lost response before removing its Worker',async()=>journalFixture(async({cleanup,path,journal,persist})=>{
+  const fixture=provider();
+  await cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>{fixture.scripts.set(journal.probe.name,true);fixture.domains.push(probeDomain(journal));}});
+  const request=fixture.api.request.bind(fixture.api);
+  fixture.api.request=async(path,options)=>{const result=await request(path,options);if(options?.method==='DELETE'&&path.endsWith('/workers/domains/domain-owned'))throw Error('PRIVATE_DELETE_BODY');return result;};
+  await assert.rejects(cleanup.cleanupOwnedResources({api:fixture.api,journal,persist}));
+  assert.equal(fixture.domains.length,0);assert(fixture.scripts.has(journal.probe.name));
+  const restored=await cleanup.readCleanupJournal(path,owner);
+  await cleanup.cleanupOwnedResources({api:fixture.api,journal:restored,persist:()=>cleanup.saveCleanupJournal(path,restored)});
+  assert(restored.domain.removed&&restored.probe.removed);assert.equal(fixture.scripts.size,0);
+}));
+
+test('custom-domain deletion requires its freshly read receipt to prove the exact association',async()=>journalFixture(async({cleanup,journal,persist})=>{
+  const fixture=provider();
+  await cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>{fixture.scripts.set(journal.probe.name,true);fixture.domains.push(probeDomain(journal));}});
+  const request=fixture.api.request.bind(fixture.api);
+  fixture.api.request=(path,options)=>!options?.method&&path.endsWith('/workers/domains/domain-owned')?Promise.resolve({id:'foreign-id',hostname:'foreign.heflare.app',service:'foreign-worker'}):request(path,options);
+  await assert.rejects(cleanup.cleanupOwnedResources({api:fixture.api,journal,persist}));
+  assert.equal(fixture.deletes.length,0);assert(fixture.scripts.has(journal.probe.name));assert.equal(fixture.domains.length,1);
+}));
+
+test('custom-domain collision checks and lost-response cleanup inspect all inventory pages',async()=>{
+  await journalFixture(async({cleanup,journal,persist})=>{
+    const fixture=provider();fixture.domains.push(probeDomain(journal,{id:'unrelated-domain',hostname:'unrelated.heflare.app',service:'foreign-worker'}),probeDomain(journal,{service:'foreign-worker'}));
+    const pages=await paginateDomains(fixture);
+    await assert.rejects(cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>assert.fail('later-page collision')}));
+    assert(pages.includes(2));assert.equal(journal.probe.attempted,false);assert.equal(fixture.deletes.length,0);
+  });
+  await journalFixture(async({cleanup,journal,persist})=>{
+    const fixture=provider();fixture.domains.push(probeDomain(journal,{id:'unrelated-domain',hostname:'unrelated.heflare.app',service:'foreign-worker'}));
+    const pages=await paginateDomains(fixture);
+    await assert.rejects(cleanup.deployProbe({api:fixture.api,journal,persist,zoneId,deploy:async()=>{fixture.scripts.set(journal.probe.name,true);fixture.domains.push(probeDomain(journal));throw Error('lost deploy');}}));
+    await cleanup.cleanupOwnedResources({api:fixture.api,journal,persist});
+    assert(pages.includes(2));assert.deepEqual(fixture.domains.map(value=>value.id),['unrelated-domain']);assert.equal(fixture.scripts.size,0);
+  });
+});
 
 test('Access cleanup survives a lost create response and journals no credentials',async()=>journalFixture(async({cleanup,path,journal,persist})=>{
   const fixture=provider();fixture.tokens.push({id:'unrelated-token',name:'unrelated'});fixture.policies.push({id:'unrelated-policy',name:'unrelated'});

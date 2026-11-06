@@ -12,6 +12,8 @@ The job deploys the private ToolPackGateway and the app with its own Durable Obj
 
 The service checks cover protected API access, Durable Objects, Artifacts Git write/native binding read, an event reaching the results Workflow, Dynamic Worker execution, document conversion, Browser Run, and readiness/retirement of all eleven packages. A bounded HTTP package request uses only the testing hostname. No assessment or OpenCode inference starts automatically. This does not establish every scanner profile's coverage or acceptance of a real assessment result.
 
+Optional Email Service onboarding/delivery and the owner's interactive sign-in flow need separate verification; they are not configured by this CI profile.
+
 ## Secrets and privacy
 
 The GitHub environment installation-test contains:
@@ -25,7 +27,7 @@ Account logs, authentication sessions, provider response bodies, traces, private
 
 Ownership manifests and image provenance remain in a private native Artifacts state repository, separate from application source and runtime evidence. State is checkpointed before mutations and after receipts, so a runner failure cannot silently discard a resource claim. Do not delete the state repository or manually adopt conflicting resource names.
 
-Temporary exact-token Access policies/service tokens and the disposable service probe have task-specific ownership and cleanup. The probe capability expires. An always cleanup step also reconciles interrupted jobs from a local nonsecret ownership journal. A hard runner loss still requires inspection of the recorded task-owned resources; never sweep unrelated policies, Workers or Containers.
+Temporary exact-token Access policies/service tokens and the disposable service probe have task-specific ownership and cleanup. The probe uses a unique hostname under heflare.app, so an existing workers.dev Access wildcard cannot intercept it. It accepts only a random bearer capability and expires after one hour. Its custom domain is removed before its Worker. An always cleanup step also reconciles interrupted jobs from a local nonsecret ownership journal. A hard runner loss still requires inspection of the recorded task-owned resources; never sweep unrelated policies, Workers or Containers.
 
 The dedicated test installation, source/evidence repositories and immutable package images are intentionally retained for repeated update tests. Runtime checks retire their owned package instances. No unreviewed destructive reset or generalized teardown is exposed by this workflow.
 

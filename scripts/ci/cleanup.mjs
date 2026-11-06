@@ -16,7 +16,7 @@ export function cleanupOwner(accountId,env=process.env){
   return owner;
 }
 function validate(journal,expected=journal?.owner){
-  ensure(journal?.schemaVersion===1&&Object.keys(journal).every(key=>['schemaVersion','owner','nonce','probe','access'].includes(key)),'CI_CLEANUP_JOURNAL_INVALID');
+  ensure(journal?.schemaVersion===1&&Object.keys(journal).every(key=>['schemaVersion','owner','nonce','probe','domain','access'].includes(key)),'CI_CLEANUP_JOURNAL_INVALID');
   const owner=cleanupOwner(journal.owner?.accountId,{GITHUB_REPOSITORY:journal.owner?.repository,GITHUB_RUN_ID:journal.owner?.runId,GITHUB_RUN_ATTEMPT:journal.owner?.attempt});
   ensure(Object.keys(journal.owner).length===4&&Object.keys(owner).every(key=>owner[key]===expected?.[key]),'CI_CLEANUP_OWNER_MISMATCH');
   ensure(typeof journal.nonce==='string'&&/^[a-f0-9]{12}$/.test(journal.nonce),'CI_CLEANUP_JOURNAL_INVALID');
@@ -26,6 +26,10 @@ function validate(journal,expected=journal?.owner){
     ensure(Object.keys(record).every(key=>keys.includes(key)),'CI_CLEANUP_JOURNAL_INVALID');
     for(const [key,value] of Object.entries(record))if(key.endsWith('Id'))ensure(value===null||identifier(value),'CI_CLEANUP_JOURNAL_INVALID');else if(key!=='name')ensure(typeof value==='boolean','CI_CLEANUP_JOURNAL_INVALID');
   }
+  const domain=journal.domain;
+  ensure(domain&&Object.keys(domain).length===4&&Object.keys(domain).every(key=>['zoneId','id','attempted','removed'].includes(key)),'CI_CLEANUP_JOURNAL_INVALID');
+  ensure((domain.zoneId===null||/^[a-f0-9]{32}$/.test(domain.zoneId??''))&&(domain.id===null||identifier(domain.id))&&typeof domain.attempted==='boolean'&&typeof domain.removed==='boolean','CI_CLEANUP_JOURNAL_INVALID');
+  ensure((!domain.attempted||journal.probe.attempted&&domain.zoneId!==null)&&(!domain.id||domain.attempted)&&(!domain.removed||domain.attempted)&&(!journal.probe.removed||!domain.attempted||domain.removed),'CI_CLEANUP_JOURNAL_INVALID');
   ensure(journal.probe.name.length<=63,'CI_CLEANUP_NAME_INVALID');
   return journal;
 }
@@ -38,17 +42,52 @@ export async function saveCleanupJournal(path,journal){await privateJson(path,va
 export async function createCleanupJournal(path,owner,nonce=randomBytes(6).toString('hex')){
   ensure(!await readCleanupJournal(path,owner),'CI_CLEANUP_PENDING');
   const prefix=`pentcloud-ci-${owner.runId}-${owner.attempt}-${nonce}`;
-  const journal={schemaVersion:1,owner,nonce,probe:{name:prefix+'-probe',attempted:false,removed:false},access:{name:prefix+'-access',appId:null,tokenId:null,policyId:null,tokenAttempted:false,policyAttempted:false,tokenRemoved:false,policyRemoved:false}};
+  const journal={schemaVersion:1,owner,nonce,probe:{name:prefix+'-probe',attempted:false,removed:false},domain:{zoneId:null,id:null,attempted:false,removed:false},access:{name:prefix+'-access',appId:null,tokenId:null,policyId:null,tokenAttempted:false,policyAttempted:false,tokenRemoved:false,policyRemoved:false}};
   await saveCleanupJournal(path,journal);return journal;
 }
 const base=journal=>'/accounts/'+journal.owner.accountId;
 const inventory=(api,path)=>api.list?api.list(path):api.request(path);
-export async function deployProbe({api,journal,persist,deploy}){
+export function probeHostname(journal){validate(journal);return journal.probe.name+'.heflare.app';}
+async function probeDomains(api,journal){
+  const rows=await inventory(api,`${base(journal)}/workers/domains`);
+  ensure(Array.isArray(rows),'CI_PROBE_DOMAIN_LIST_INVALID');return rows;
+}
+function ownedProbeDomain(journal,rows){
+  const hostname=probeHostname(journal),known=journal.domain.id,matches=rows.filter(value=>value.hostname===hostname),byId=known?rows.find(value=>value.id===known):undefined;
+  ensure(matches.length<=1&&(!byId||byId.hostname===hostname)&&(!known||!matches.length||matches[0].id===known),'CI_PROBE_DOMAIN_OWNERSHIP_CHANGED');
+  const domain=known?byId:matches[0];
+  if(domain)ensure(identifier(domain.id)&&domain.service===journal.probe.name&&domain.zone_id===journal.domain.zoneId&&(domain.environment??'production')==='production','CI_PROBE_DOMAIN_OWNERSHIP_CHANGED');
+  return domain;
+}
+export async function deployProbe({api,journal,persist,deploy,zoneId}){
   validate(journal);
+  ensure(/^[a-f0-9]{32}$/.test(zoneId??''),'CI_PROBE_ZONE_INVALID');
+  ensure(!journal.probe.attempted&&!journal.domain.attempted,'CI_PROBE_DEPLOY_PENDING');
+  const zone=await api.request('/zones/'+zoneId);
+  ensure(zone?.id===zoneId&&zone.name==='heflare.app'&&zone.status==='active'&&zone.account?.id===journal.owner.accountId,'CI_PROBE_ZONE_MISMATCH');
   const found=await api.request(`${base(journal)}/workers/scripts/${journal.probe.name}/settings`,{missing:true});
   ensure(found===null,'CI_PROBE_NAME_COLLISION');
+  const hostname=probeHostname(journal);
+  ensure(!(await probeDomains(api,journal)).some(value=>value.hostname===hostname),'CI_PROBE_DOMAIN_COLLISION');
+  const dns=await api.request('/zones/'+zoneId+'/dns_records?name='+encodeURIComponent(hostname)+'&per_page=100',{envelope:true});
+  ensure(Array.isArray(dns?.result)&&dns.result.length===0,'CI_PROBE_DNS_COLLISION');
   // The intent is durable before Wrangler can create anything, including on a lost response.
-  journal.probe.attempted=true;await persist();await deploy();
+  journal.probe.attempted=true;journal.domain.zoneId=zoneId;journal.domain.attempted=true;
+  await persist();await deploy();
+  const domain=ownedProbeDomain(journal,await probeDomains(api,journal));
+  ensure(domain,'CI_PROBE_DOMAIN_MISSING');journal.domain.id=domain.id;await persist();
+}
+async function removeProbeDomain({api,journal,persist}){
+  if(!journal.domain.attempted||journal.domain.removed)return;
+  const path=`${base(journal)}/workers/domains`;
+  const domain=ownedProbeDomain(journal,await probeDomains(api,journal));
+  if(domain){
+    journal.domain.id=domain.id;await persist();
+    const current=await api.request(path+'/'+domain.id,{missing:true});
+    if(current){ensure(ownedProbeDomain(journal,[current]),'CI_PROBE_DOMAIN_OWNERSHIP_CHANGED');await api.request(path+'/'+domain.id,{method:'DELETE',missing:true});}
+  }
+  ensure(!ownedProbeDomain(journal,await probeDomains(api,journal)),'CI_PROBE_DOMAIN_CLEANUP_PENDING');
+  journal.domain.removed=true;await persist();
 }
 async function removeAccess({api,journal,persist},kind){
   const token=kind==='token',access=journal.access;
@@ -71,6 +110,8 @@ export async function cleanupOwnedResources({api,journal,persist,includeProbe=tr
   // Keep attempting independent cleanup even if a provider request loses its response.
   for(const kind of ['policy','token'])try{await removeAccess({api,journal,persist},kind);}catch{pending=true;}
   if(includeProbe&&journal.probe.attempted&&!journal.probe.removed)try{
+    // A changed domain association blocks Worker deletion as well as domain deletion.
+    await removeProbeDomain({api,journal,persist});
     const path=`${base(journal)}/workers/scripts/${journal.probe.name}`;
     await api.request(path,{method:'DELETE',missing:true});
     ensure(await api.request(path+'/settings',{missing:true})===null,'CI_PROBE_CLEANUP_PENDING');
