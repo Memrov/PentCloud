@@ -61,7 +61,7 @@ export async function waitForWorkflowProof({api,path,before,identity,now=Date.no
       assert(matches(result),'CI_WORKFLOW_IDENTITY_CHANGED');
       assert(!['errored','terminated'].includes(result.status),'CI_WORKFLOW_EXECUTION_FAILED');
       if(result.status==='complete'){
-        assert(Array.isArray(result.steps)&&result.steps.some(step=>step.type==='step'&&step.name==='validate committed result'&&step.success===true),'CI_WORKFLOW_STEP_MISSING');
+        assert(Array.isArray(result.steps)&&result.steps.some(step=>step.type==='step'&&['validate committed result','validate committed result-1'].includes(step.name)&&step.success===true),'CI_WORKFLOW_STEP_MISSING');
         return {kind:'wiring',instanceId:own};
       }
     }
