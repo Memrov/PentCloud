@@ -82,7 +82,7 @@ export class PackageInstaller extends Installer {
       workflows:[{binding:'RESULTS',name:this.names.workflow,class_name:'ResultValidation'}],
       triggers:{events:[{type:'cf.artifacts.repo.pushed',filter:{namespace:this.names.namespace},targets:[{type:'workflow',workflow_name:this.names.workflow}]}]},
       vars:{CONTROL_BASE_URL:this.state.appUrl,ACCESS_TEAM_DOMAIN:this.config.accessTeamDomain,ACCESS_AUD:this.state.resources.access.aud,ARTIFACTS_NAMESPACE:this.names.namespace},
-      ...(publicApp?{routes:[{pattern:this.profile.domain.hostname,custom_domain:true,zone_id:this.profile.domain.zoneId}]}:{}),
+      ...(publicApp||this.state.resources.domain?.status==='ready'?{routes:[{pattern:this.profile.domain.hostname,custom_domain:true,zone_id:this.profile.domain.zoneId}]}:{}),
     });
     const mail=emailBindings(this.config.email);Object.assign(app,mail,{vars:{...app.vars,...mail.vars}});
     Object.assign(gateway,{

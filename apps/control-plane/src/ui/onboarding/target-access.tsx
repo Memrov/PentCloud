@@ -68,7 +68,7 @@ export function TargetAccessEditor({target,disabled,perform,onChanged}:{target:S
    </div>}
   </div>}
   {target.kind==="api"&&<><Checkbox label="API authentication" checked={api} onCheckedChange={setAPI} disabled={disabled}/>{api&&<div className="grid gap-3">{row("api","API key")}<Select label="API credential format" value={apiScheme} items={{bearer:'Bearer token',header:'API key header'}} disabled={disabled} onValueChange={v=>{setAPIScheme(v as "bearer"|"header");if(v==="bearer")setAPIHeader("Authorization");}}/>{apiScheme==="header"&&<Input label="API authorization header" value={apiHeader} onValueChange={setAPIHeader} disabled={disabled}/>}<Text>Test authentication with the protected API check during run setup.</Text></div>}</>}
-  <Banner variant="secondary" description={<Text>Browser and managed HTTP controls apply to this target. Kali has direct Internet access; scope is not enforced there.</Text>}/>
+  <Banner variant="secondary" description={<Text>Browser and managed HTTP controls apply to this target. Scanner runtimes have direct Internet access; scope is not enforced there.</Text>}/>
   <div><Button type="button" variant="secondary" disabled={disabled||!refs||login&&(!loginURL.trim()||verification==="email"&&!sender.trim())} onClick={()=>void save()}>Save target settings</Button></div>
  </div></Collapsible.DefaultPanel></Collapsible>;
 }

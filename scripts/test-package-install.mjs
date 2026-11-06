@@ -4,6 +4,7 @@ import {mkdtemp, mkdir, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {spawnSync} from 'node:child_process';
 import {PackageInstaller, packageProfile, PACK_CLASSES} from './lib/package-install.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
@@ -67,4 +68,21 @@ test('image provenance changes when a binary lock or build identity changes',asy
   assert.notEqual(identity,recipeIdentity('http',lock,'e'.repeat(40),'v0.9.0'));
   assert.notEqual(identity,recipeIdentity('http',lock,'d'.repeat(40),'v0.10.0'));
   assert.throws(()=>releaseDigest({digest:'mutable:latest',platform:'linux/amd64',compressedBytes:100}),/immutable/);
+});
+
+test('source and image entry points never print private configuration parse failures',()=>{
+  for(const name of ['prepare-source','images']){
+    const result=spawnSync(process.execPath,[join(root,'scripts/ci',name+'.mjs')],{encoding:'utf8',env:{...process.env,PENTCLOUD_INSTALL_CONFIG:'PRIVACYMARK-sensitive-account-value'},timeout:5000});
+    assert.equal(result.status,1);
+    assert(!(result.stdout+result.stderr).includes('PRIVACY'));
+  }
+});
+
+test('private-first deployment preserves a domain already owned by an update',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'pentcloud-pack-domain-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+  const i=new PackageInstaller({config,profile,stateDirectory:dir,root,api:{},run:async()=>Buffer.alloc(0)});
+  i.state={resources:{access:{aud:'fixture-aud'}},appUrl:'https://install.example.com'};
+  assert.equal((await i.render(false)).app.routes,undefined);
+  i.state.resources.domain={status:'ready',id:'owned-domain'};
+  assert.deepEqual((await i.render(false)).app.routes,[{pattern:'install.example.com',custom_domain:true,zone_id:profile.domain.zoneId}]);
 });
