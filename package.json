@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "workspaces": [
     "apps/*",
-    "infra/aws-toolbox/control"
+    "infra/aws-toolbox/control",
+    "infra/tool-packs"
   ],
   "scripts": {
     "build:prompts": "bash scripts/build-prompt-renderer.sh",

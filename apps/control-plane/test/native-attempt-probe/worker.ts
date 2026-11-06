@@ -639,6 +639,15 @@ export class ProbeAttempt extends NativeAttempt {
       try{await guarded.fs.rename(`${this.directory}/.pentagi/evidence/${id}`,`${this.directory}/moved-evidence`);}catch{checks.renameFenced=true;}
       checks.checkpoint=await this.ctx.storage.get("fixture:evidenceReceipts");
       checks.starts=(await this.ctx.storage.get("fixture:modelRequests"))??0;return checks;
+    }else if(kind==="evidence-pack-large"){
+      const output="🧪".repeat(600000),record={stdout:output,stderr:"retained complete stderr",exitCode:0};
+      await internal.captureToolEvidence("pentcloud_tool",{},"large-result",record);
+      const files=await this.ctx.storage.get<Array<{path:string;size:number}>>("evidenceFiles");
+      const index=files!.find(f=>f.path.endsWith("-result.json"))!;
+      const manifest=JSON.parse(await this.workspace.fs.readFile(this.directory+"/"+index.path,"utf8"));
+      const chunks:Uint8Array[]=[];for(const path of manifest.parts)chunks.push(new Uint8Array(await new Response(await this.workspace.fs.readFile(this.directory+"/"+path)).arrayBuffer()));
+      const bytes=new Uint8Array(chunks.reduce((n,b)=>n+b.length,0));let offset=0;for(const b of chunks){bytes.set(b,offset);offset+=b.length;}
+      const restored=JSON.parse(new TextDecoder().decode(bytes));checks.restored=restored.result.stdout===output&&restored.result.stderr===record.stderr;checks.files=files;checks.parts=manifest.parts;checks.checkpoint=await this.ctx.storage.get("fixture:evidenceReceipts");return checks;
     }else if(kind==="evidence-checkpoints"){
       const commits:string[]=[],push=this.workspace.git.push.bind(this.workspace.git);let lose=true;
       this.workspace.git.push=async options=>{const result=await push(options);commits.push(await this.workspace.git.revParse({dir:this.directory,ref:"HEAD"}));if(lose){lose=false;throw new Error("Injected lost push reply");}return result;};

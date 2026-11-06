@@ -1,6 +1,7 @@
 import type {EvidenceCheckpoint,EvidenceFile} from "./evidence";
 import type { AgentSettings, RoleSettings } from "../settings/catalog";
 import type { RuntimeProvenance, RuntimeRecovery } from "./runtime-diagnostics";
+import type { ToolPackService } from "../../../../shared/tool-packs";
 import type { ToolboxService } from "../../../../shared/toolbox-rpc";
 import type { MaterialSelection } from "./materials";
 import type {TargetDefinition} from "./target-definitions";
@@ -151,4 +152,4 @@ export interface CoordinatorAPI {
   getContext(id: string): Promise<Record<string, unknown>>;
 }
 /** Bindings and required secret names are generated from Wrangler. */
-export type NativeEnv = Omit<Cloudflare.Env, "TOOLBOX"|"OPENCODE_BYOK_PROVIDERS"> & { TOOLBOX: ToolboxService; ARTIFACTS_NAMESPACE?: string; LEGACY_STATE_COMMIT?: string; OPENCODE_BYOK_PROVIDERS?:string; PENTCLOUD_VERIFICATION_EMAIL?:string; PENTCLOUD_AGENTMAIL_INBOX?:string; AGENTMAIL_API_KEY?:string|{get():Promise<string>}; PENTCLOUD_HACKERONE_USERNAME?:string; PENTCLOUD_HACKERONE_API_TOKEN?:string|{get():Promise<string>}; PENTCLOUD_INTIGRITI_API_TOKEN?:string|{get():Promise<string>} };
+export type NativeEnv = Omit<Cloudflare.Env, "TOOLBOX"|"OPENCODE_BYOK_PROVIDERS"> & { TOOL_PACKS?: ToolPackService; TOOLBOX: ToolboxService; ARTIFACTS_NAMESPACE?: string; LEGACY_STATE_COMMIT?: string; OPENCODE_BYOK_PROVIDERS?:string; PENTCLOUD_VERIFICATION_EMAIL?:string; PENTCLOUD_AGENTMAIL_INBOX?:string; AGENTMAIL_API_KEY?:string|{get():Promise<string>}; PENTCLOUD_HACKERONE_USERNAME?:string; PENTCLOUD_HACKERONE_API_TOKEN?:string|{get():Promise<string>}; PENTCLOUD_INTIGRITI_API_TOKEN?:string|{get():Promise<string>} };

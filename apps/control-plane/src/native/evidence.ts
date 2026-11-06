@@ -86,3 +86,12 @@ export async function assertEvidencePreserved(repo:Pick<EvidenceRepo,"readFile">
  if(!manifest||manifest.size>65536||await evidenceBytesHash(new Uint8Array(await manifest.arrayBuffer()))!==receipt.manifestDigest)throw new Error("400: Captured evidence manifest was modified");
  for(const file of files){const blob=await repo.readFile({ref:commit,path:file.path});if(!blob||blob.size!==file.size||await evidenceBytesHash(new Uint8Array(await blob.arrayBuffer()))!==file.sha256)throw new Error("400: Captured evidence bytes were modified");}
 }
+
+/** Split the serialized result before JSON escaping or UTF-8 expansion can exceed one evidence file. */
+export function toolResultFiles(record:unknown):Array<{name:string;bytes:Uint8Array}>{
+ const bytes=new TextEncoder().encode(JSON.stringify(record)+"\n");
+ if(bytes.byteLength<=EVIDENCE_FILE_LIMIT)return [{name:"result.json",bytes}];
+ const files:Array<{name:string;bytes:Uint8Array}>=[];
+ for(let offset=0;offset<bytes.byteLength;offset+=EVIDENCE_FILE_LIMIT)files.push({name:`result-${files.length+1}.json.part`,bytes:bytes.slice(offset,offset+EVIDENCE_FILE_LIMIT)});
+ return [...files,{name:"result.json",bytes:new TextEncoder().encode(JSON.stringify({format:"concatenated-json",encoding:"utf-8",size:bytes.byteLength,parts:files.map(f=>f.name)})+"\n")}];
+}

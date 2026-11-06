@@ -1,8 +1,10 @@
+import {assertPackAccess,packFileNames,toolPacks,type ToolPack,type ToolPackRequest,type ToolPackScope} from "../../../../shared/tool-packs";
+import {replayPackCall,packResultPreview,journalPackCall} from "./tool-pack-operation";
 import {readFindings,findingsInstructions} from "./findings";
 import {recordedWorkPage,type RecordedWorkPage} from "./recorded-work";
 import {readModelSecret,plainModelSecretValues} from "./model-secrets";
 import {liveSessionResponse} from "./session-events";
-import {evidenceRoot,evidenceManifestPath,evidenceBytesHash,boundedEvidenceBytes,stockOutputPaths,EVIDENCE_FILE_LIMIT,EVIDENCE_TOTAL_LIMIT,type EvidenceFile,type EvidenceManifest,type EvidenceCheckpoint} from "./evidence";
+import {evidenceRoot,evidenceManifestPath,evidenceBytesHash,boundedEvidenceBytes,toolResultFiles,stockOutputPaths,EVIDENCE_FILE_LIMIT,EVIDENCE_TOTAL_LIMIT,type EvidenceFile,type EvidenceManifest,type EvidenceCheckpoint} from "./evidence";
 import {toolboxFileRoot,toolboxStockRoot,type ToolboxFileScope,type ToolboxStockOutput} from "../../../../shared/toolbox-files";
 import {journalAPIRequest} from "./api-operation";
 import {discoveryOutcome} from "./discovery";
@@ -108,6 +110,7 @@ interface Proposal {
   runtimeVersion?: RuntimeVersion | undefined;
 }
 interface AttemptState {
+  toolPacks?: boolean;
   preparation?:true;
   promotionPending?:true;
   evidence?:EvidenceCheckpoint;
@@ -352,12 +355,17 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       inputSchema:jsonSchema<{job_id:string;path:string}>({type:"object",properties:{job_id:{type:"string"},path:{type:"string"}},required:["job_id","path"],additionalProperties:false}),
       execute:async({job_id,path})=>{const response=await this.coordinator().readEvidence(state.input.id,job_id,path),bytes=await boundedEvidenceBytes(response);await this.active();try{return {path,job_id,text:new TextDecoder("utf-8",{fatal:true}).decode(bytes)};}catch{return {path,job_id,binary:true,size:bytes.length,message:"Use the existing Files download for binary evidence"};}},
     }))];
-    const kali=["coder","maintenance","pentester"].includes(state.input.role)?[
+    const kali=!state.toolPacks&&["coder","maintenance","pentester"].includes(state.input.role)?[
       openCodeTool("pentcloud_kali_import",aiTool({description:"Copy a Computer Workspace file to Kali inputs with exact byte/hash verification. Use the returned absolute path in stock scanner arguments. Selected materials are imported automatically before inference.",inputSchema:jsonSchema<{path:string}>({type:"object",properties:{path:{type:"string",maxLength:512}},required:["path"],additionalProperties:false}),execute:({path})=>this.importKali(path)})),
       openCodeTool("pentcloud_kali_files",aiTool({description:"List this attempt's Kali files, or known scan-owned stock output files using scan_id. Returns paths, sizes and hashes. This is not a scanner retry.",inputSchema:jsonSchema<{scan_id?:string}>({type:"object",properties:{scan_id:{type:"string",maxLength:101}},additionalProperties:false}),execute:async({scan_id})=>this.env.TOOLBOX.listFiles(await this.fileScope(),await this.stockEvidence(scan_id))})),
       openCodeTool("pentcloud_kali_export",aiTool({description:"Collect a Kali output into immutable Git evidence and existing Files downloads. Supply a path from kali_files and scan_id for stock scanner directories. Bounded to 2 MiB/file; never reruns a scan.",inputSchema:jsonSchema<{path:string;scan_id?:string}>({type:"object",properties:{path:{type:"string",maxLength:768},scan_id:{type:"string",maxLength:101}},required:["path"],additionalProperties:false}),execute:({path,scan_id},context)=>this.exportKali(path,scan_id,context.toolCallId)})),
     ]:[];
     return Promise.all([
+      ...(state.toolPacks&&["coder","maintenance","pentester"].includes(state.input.role)?[openCodeTool("pentcloud_tool",aiTool({
+        description:"Run an installed, bounded Cloudflare tool pack. No downloads, arbitrary shell, flags or template paths. Request forms: recon {tool:httpx|dnsx|katana|subfinder,target}; http {tool:curl|ffuf|openssl,target}; nuclei {tool:nuclei,target,profile:exposures}; sqlmap {tool:sqlmap,target,parameter,database?:sqlite|mysql|postgresql|mssql}; service {tool:nmap|naabu|masscan,target:IPv4,ports:[integers]}; web-context {tool:whatweb|waybackurls,target}; pcap {tool:tshark,view:summary|dns|http|tcp} with files.input; file-analysis {tool:binwalk,view:signatures|entropy} with files.input; password {tool:hashcat,view:identify|sha256-dictionary} with files.input and files.dictionary for dictionary testing; reference {tool:searchsploit,query} or {action:read-source,path}; metasploit {action:list} then {action:call,name,arguments} using the official tool schema. File values are existing workspace paths, never file bytes. Full results are saved as evidence. Profiles have limited coverage; disclose unsupported or failed checks.",
+        inputSchema:jsonSchema<ToolPackRequest>({type:"object",properties:{pack:{type:"string",enum:[...toolPacks]},request:{type:"object"},files:{type:"object",maxProperties:2,additionalProperties:{type:"string",maxLength:512}}},required:["pack","request"],additionalProperties:false}),
+        execute:(input,call)=>this.packCall(input,call.toolCallId),
+      }))]:[]),
       ...(state.input.role==="reporter"?[openCodeTool("pentcloud_run_work",aiTool({
         description:"Inspect actual recorded work before writing the report. With no job_id, list every attempt in this run, including failures and incomplete work. With job_id, read its native conversation, tool calls/results, remote receipts and terminal record. Read-only; no agent/scanner is restarted. Responses are JSON text fragments: follow nextOffset to read every part. Accepted Git files and pentcloud_read_evidence provide the source files and binary evidence.",
         inputSchema:jsonSchema<{job_id?:string;offset?:number}>({type:"object",properties:{job_id:{type:"string",maxLength:101},offset:{type:"integer",minimum:0}},additionalProperties:false}),
@@ -430,7 +438,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       const pinnedCatalog = await this.ctx.storage.get<{ tools: RemoteTool[] }>(
         "remoteCatalog",
       );
-      const scanners = ["coder", "maintenance", "pentester"].includes(
+      const scanners = !state.toolPacks && ["coder", "maintenance", "pentester"].includes(
         state.input.role,
       )
         ? (state.result
@@ -683,6 +691,13 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
   }
   private async executeDiscovery(state:AttemptState):Promise<AttemptResult> {
     const execution=state.input.execution!;
+    if(state.toolPacks){
+      const raw=await this.packCall({pack:"web-context",request:{tool:"whatweb",target:execution.url}},"initial-discovery") as Record<string,unknown>;
+      const httpStatus=raw.httpStatus;
+      const result={structuredContent:{status:raw.exitCode===0&&!raw.timedOut&&!raw.truncated?"completed":"failed",http_status:httpStatus,raw},content:[]};
+      const outcome=discoveryOutcome(result);
+      return this.publish({tool:"native_discovery",arguments:{profile:execution.profile,target:execution.url,success:outcome.success,scanStatus:outcome.status,result:this.safe(result)},status:outcome.success?"completed":"failed",finishedAt:Date.now()});
+    }
     let receipt=await this.ctx.storage.get<RemoteCall>("remote:initial-discovery");
     if(!receipt){
       await this.remoteCall("whatweb_whatweb_scan",{target:execution.url,aggression:execution.profile==="whatweb-stealthy-v2"?"stealthy":"polite",timeout:60},"initial-discovery",this.abortController.signal);
@@ -698,6 +713,64 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       : receipt.result;
     const outcome=discoveryOutcome(result),failed=!outcome.success;
     return this.publish({tool:"native_discovery",arguments:{profile:execution.profile,target:execution.url,success:!failed,scanStatus:outcome.status,result:this.safe(result)},status:failed?"failed":"completed",finishedAt:Date.now()});
+  }
+  private packScope(state:AttemptState):ToolPackScope {
+    return {runId:state.input.runId,attemptId:state.input.id,role:state.input.role,...(state.input.execution?{discovery:true}:{})};
+  }
+  private async notePack(state:AttemptState,pack:ToolPack){
+    assertPackAccess(this.packScope(state),pack);
+    await this.ctx.storage.transaction(async tx=>{
+      const used=await tx.get<ToolPack[]>("packs:used")??[];
+      if(!used.includes(pack))await tx.put("packs:used",[...used,pack]);
+    });
+  }
+  private async prefetchPacks(state:AttemptState){
+    if(!state.toolPacks||!state.input.execution&&!["coder","maintenance","pentester"].includes(state.input.role))return;
+    const pack=state.input.execution?"web-context":"http";
+    this.inFlightTools++;
+    try{
+      await this.notePack(state,pack);await this.active();
+      if(!this.env.TOOL_PACKS)throw Error("Tool pack service binding is unavailable");
+      await this.env.TOOL_PACKS.ready(this.packScope(state),pack);
+      await this.active();
+    }finally{this.inFlightTools--;}
+  }
+  private async packCall(input:ToolPackRequest,id:string){
+    const state=await this.active();
+    if(!state.toolPacks||!this.env.TOOL_PACKS||state.finalizing||state.proposal||this.publishing)throw Error("Tool packs are unavailable for this attempt");
+    assertPackAccess(this.packScope(state),input?.pack,input?.request);
+    const requestDigest=await fingerprint(input),replay=await replayPackCall(this.ctx.storage,"remote:pack-"+id,requestDigest);
+    if(replay)return replay.result;
+    const names=packFileNames(input),files:Record<string,Uint8Array>={},metadata:Record<string,unknown>={};let total=0;
+    this.inFlightTools++;
+    try{
+      for(const name of names){
+        const path=await resolveWorkspacePath(this.workspace,input.files![name]!,false,{role:state.input.role,id:state.input.id,root:this.directory,active:async()=>{await this.active();}});
+        const bytes=await boundedEvidenceBytes(new Response(await this.workspace.fs.readFile(path)));
+        total+=bytes.byteLength;if(total>EVIDENCE_FILE_LIMIT)throw Error("Tool inputs exceed 2 MiB total");
+        files[name]=bytes;metadata[name]={path:input.files![name],size:bytes.byteLength,sha256:await evidenceBytesHash(bytes)};
+      }
+      await this.notePack(state,input.pack);
+      const request={pack:input.pack,request:this.safe(input.request) as Record<string,unknown>,files:metadata,requestDigest};
+      const result=await journalPackCall(this.ctx.storage,"remote:pack-"+id,request,async()=>{
+        const value=this.safe(await this.env.TOOL_PACKS!.run(this.packScope(state),input,files));
+        await this.captureToolEvidence("pentcloud_tool",request,id,value);
+        const evidence=(await this.ctx.storage.get<EvidenceFile[]>("evidenceFiles")??[]).filter(f=>f.tool==="pentcloud_tool"&&f.receiptId===id).map(f=>f.path);
+        return packResultPreview(value,input.pack,evidence);
+      });
+      await this.active();return result;
+    }finally{this.inFlightTools--;}
+  }
+  private async retirePacks():Promise<boolean>{
+    const used=await this.ctx.storage.get<ToolPack[]>("packs:used");if(!used?.length)return true;
+    const state=await this.ctx.storage.get<AttemptState>("attempt");
+    if(!state||!this.env.TOOL_PACKS)return false;
+    try{
+      const result=await this.env.TOOL_PACKS.stop(this.packScope(state),used);
+      if(!result.stopped)return false;
+      for(const [key,call] of await this.unresolvedRemote())if(call.name==="pentcloud_tool")await this.ctx.storage.put(key,{...call,state:"reconciled",result:{interrupted:true,outcomeUnknown:true,runtimeStopped:true},resolution:{inspectionTool:"native-pack-retirement",scanId:key.slice(7),evidenceDigest:await fingerprint({scope:this.packScope(state),used,stopped:true}),observedAt:Date.now(),outcome:"owned-runtime-stopped-output-unavailable",source:"known-operation-inspection"}} satisfies RemoteCall);
+      await this.ctx.storage.delete("packs:used");await this.ctx.storage.delete("packs:cleanup-error");return true;
+    }catch(error){await this.ctx.storage.put("packs:cleanup-error",this.error(error));return false;}
   }
   private async apiRequest(raw:APIRequest,id:string,signal?:AbortSignal) {
     const state=await this.active(),access=await this.coordinator().apiCredential(state.input.id);
@@ -832,7 +905,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         {
           now: new Date(input.createdAt),
           cwd: this.directory,
-          dockerImage: "stock Kali MCP; native Worker Workspace",
+          dockerImage: this.env.TOOL_PACKS ? "Cloudflare tool packs; native Worker Workspace" : "stock Kali MCP; native Worker Workspace",
           lang: "English",
           enabledTools: enabledTools(input),
           ...(input.context.materials ? {userFiles: JSON.stringify((input.context.materials as MaterialSelection).files.map(file=>({name:file.name,path:file.textPath,sourcePath:file.sourcePath,sha256:file.sha256}))) } : {}),
@@ -843,6 +916,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         ...(preparation?{preparation:true as const}:{}),
         ...(promotion?{promotionPending:true as const}:{}),
         input: structuredClone(input),
+        toolPacks: !!this.env.TOOL_PACKS,
         fingerprint: digest,
         prompt: launch.prompt,
         promptDigest: launch.promptDigest,
@@ -918,7 +992,9 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       if(this.stopped||await this.ctx.storage.get("cancelled"))throw new Error("409: Conversation stopped");
       const existing=await this.ctx.storage.get<AttemptState>("attempt");
       if(existing&&!existing.preparation){assertPreparationPromotion(input,existing.input);return;}
-      let state=await this.initialize(input,true);state=await this.prepareWorkspace(state);
+      let state=await this.initialize(input,true);const packWarmup=this.prefetchPacks(state);packWarmup.catch(()=>undefined);
+      state=await this.prepareWorkspace(state);
+      await packWarmup;
       await verifyMaterialInput(this.workspace.fs,this.directory,state.input.context);
       await this.conversationActive();await this.lifecycle.start();
       const model=this.selectedModel(input);await this.harness.session().setModel({providerID:model.provider,id:model.modelId});
@@ -979,7 +1055,9 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       let state = await this.active();
       await this.startup("execute.enter", state);
       if(!state.input.execution)await this.selectedModelKey(state.input);
+      const packWarmup=this.prefetchPacks(state);packWarmup.catch(()=>undefined);
       state=await this.prepareWorkspace(state);
+      await packWarmup;
       await verifyMaterialInput(this.workspace.fs,this.directory,state.input.context);
       if (state.proposal) return await this.publish(state.proposal);
       await this.preflightToolbox(state);
@@ -990,6 +1068,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       await this.lifecycle.start();
       await this.startup("lifecycle.start.after", state);
       const context = await this.coordinator().getContext(state.input.id);
+      if(state.toolPacks)context.toolBackend={name:"Cloudflare tool packs",tool:"pentcloud_tool",profile:"bounded",instructions:"Use pentcloud_tool for installed Linux scanners. Read its request forms. Kali tools are not part of this dev backend. Use Computer files/JavaScript and Browser Run for their existing capabilities. Disclose profile limits and retain evidence."};
       if(state.input.context.materials)context.materials=state.input.context.materials;
       if(kaliInputs.length)context.kaliInputs=kaliInputs;
       await this.startup("harness.submit.before", state);
@@ -1470,6 +1549,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     }
   }
   private async importKaliMaterials(state:AttemptState){
+    if(state.toolPacks)return [];
     if(!["coder","maintenance","pentester"].includes(state.input.role))return [];
     const selection=state.input.context.materials as MaterialSelection|undefined,result=[];
     for(const file of selection?.files??[])result.push({name:file.name,...await this.importKali(file.sourcePath,file.name)});
@@ -1516,9 +1596,12 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         }
       }
       const record={tool,arguments:this.safe(args),result:{...value,...(content.length?{content:content.map(part=>part&&typeof part==="object"&&part.type==="image"?{type:"image",mimeType:part.mimeType,evidence:"Collected as a file"}:part)}:{})}};
-      const bytes=new TextEncoder().encode(JSON.stringify(record)+"\n");
-      if(bytes.byteLength<=EVIDENCE_FILE_LIMIT)await this.evidenceFile(tool,id,'result.json',bytes,'tool-result');
-      else await this.evidenceFile(tool,id,'unavailable.json',new TextEncoder().encode(JSON.stringify({tool,reason:'Tool result exceeds 2 MiB; not collected'})),'collection-note');
+      const storedParts:string[]=[];
+      for(const file of toolResultFiles(record)){
+        // evidenceFile prefixes names with their content hash; use its actual repository paths.
+        const bytes=file.name==="result.json"&&storedParts.length?new TextEncoder().encode(JSON.stringify({...JSON.parse(new TextDecoder().decode(file.bytes)),parts:storedParts})+"\n"):file.bytes;
+        const saved=await this.evidenceFile(tool,id,file.name,bytes,'tool-result');storedParts.push(saved.path);
+      }
       await this.checkpointEvidence();
       let data:Record<string,unknown>|undefined;try{data=remoteResultObject(result);}catch{}
       const family=tool.split('_')[0]!;
@@ -1666,7 +1749,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     }
   }
   private async needsToolbox(state: AttemptState) {
-    return !!state.input.execution || ["coder", "maintenance", "pentester"].includes(state.input.role) || !!(await this.ctx.storage.get("mcpSession")) || (await this.unresolvedRemote()).some(([,r])=>r.name!=="pentcloud_api_request");
+    return !state.toolPacks&&(!!state.input.execution || ["coder", "maintenance", "pentester"].includes(state.input.role)) || !!(await this.ctx.storage.get("mcpSession")) || (await this.unresolvedRemote()).some(([,r])=>!["pentcloud_api_request","pentcloud_tool"].includes(r.name));
   }
   private async preflightToolbox(state: AttemptState) {
     if (state.result || state.status === "settled" || this.stopped || await this.ctx.storage.get<boolean>("cancelled")) return;
@@ -1717,13 +1800,9 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         !!state?.result ||
         this.stopped ||
         (await this.ctx.storage.get<boolean>("cancelled"));
-      if (
-        !stopped ||
-        this.inFlightTools ||
-        this.publishing ||
-        (await this.unresolvedRemote()).length
-      )
-        return false;
+      if (!stopped || this.inFlightTools || this.publishing) return false;
+      if(!(await this.retirePacks()))return false;
+      if((await this.unresolvedRemote()).length)return false;
       // Browser Run also reclaims idle sessions; close promptly at terminal state.
       await this.cloudBrowser.close();
       if (
@@ -2639,7 +2718,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     const state = await this.ctx.storage.get<AttemptState>("attempt");
     if (state && state.input.runId !== runId) throw new Error("409: attempt does not belong to this run");
     const unresolvedRemote = (await this.unresolvedRemote()).length;
-    const sessionCleanupPending = !!this.toolbox || !!(await this.ctx.storage.get<ToolboxSession>("mcpSession"));
+    const sessionCleanupPending = !!this.toolbox || !!(await this.ctx.storage.get<ToolboxSession>("mcpSession")) || !!(await this.ctx.storage.get<ToolPack[]>("packs:used"))?.length;
     const evidencePending=!!(state?.evidencePending||state?.evidence&&state.evidenceRegistered!==state.evidence.commit||await this.ctx.storage.get("evidenceCollectionPending"));
     const active = !tombstone && !!state && (state.status === "publishing" || (!state.result && state.status !== "settled"));
     return {drained: !active && !evidencePending && !this.preparingConversation && !this.admittingConversation && !this.running && !this.publishing && !this.checkpointing && !this.inFlightTools && !this.pollingRemote && !this.preparingToolbox && !this.retiringToolbox && !unresolvedRemote && !sessionCleanupPending,
@@ -2711,11 +2790,11 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       try { await touchToolbox(this.env.TOOLBOX, generation); } catch { /* Readiness/model/tool gates retain generation and uncertainty fences. */ }
     }
     await this.refreshKnownRemote();
-    const unresolvedRemote = (await this.unresolvedRemote()).length;
     if (state?.result || cancelled) await this.retireToolboxIfStopped();
+    const unresolvedRemote = (await this.unresolvedRemote()).length;
     const sessionCleanupPending =
       !!(state?.result || cancelled) &&
-      !!(await this.ctx.storage.get<ToolboxSession>("mcpSession"));
+      (!!(await this.ctx.storage.get<ToolboxSession>("mcpSession")) || !!(await this.ctx.storage.get<ToolPack[]>("packs:used"))?.length);
     const startup = await this.ctx.storage.get<{stage:string;at:number}>("startup");
     const recovery = await this.ctx.storage.get<RuntimeRecovery>("platform:recovery");
     return {

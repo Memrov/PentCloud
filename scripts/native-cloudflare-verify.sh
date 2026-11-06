@@ -37,11 +37,13 @@ if [[ "$worker" != gateway ]]; then
   npm run build:prompts
   npm run types --workspace @pentagi-artifacts/control-plane
   npm run typecheck --workspace @pentagi-artifacts/control-plane
+  npm run typecheck --workspace @pentcloud/tool-packs
   "$native_go" run ./scripts/native-specialists -check
   npm run test:unit
   npm run test:workers
   node --test scripts/test-native-worker-source-maps.mjs
   if (( full )); then
+    npm run build --workspace @pentcloud/tool-packs
     "$native_go" test ./... -count=1
     "$native_go" vet ./...
     node --test scripts/test-native-test-harness.mjs scripts/test-native-canary-defaults.mjs
