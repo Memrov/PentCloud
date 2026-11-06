@@ -362,7 +362,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     ]:[];
     return Promise.all([
       ...(state.toolPacks&&["coder","maintenance","pentester"].includes(state.input.role)?[openCodeTool("pentcloud_tool",aiTool({
-        description:"Run an installed, bounded Cloudflare tool pack. No downloads, arbitrary shell, flags or template paths. Request forms: recon {tool:httpx|dnsx|katana|subfinder,target}; http {tool:curl|ffuf|openssl,target}; nuclei {tool:nuclei,target,profile:exposures}; sqlmap {tool:sqlmap,target,parameter,database?:sqlite|mysql|postgresql|mssql}; service {tool:nmap|naabu|masscan,target:IPv4,ports:[integers]}; web-context {tool:whatweb|waybackurls,target}; pcap {tool:tshark,view:summary|dns|http|tcp} with files.input; file-analysis {tool:binwalk,view:signatures|entropy} with files.input; password {tool:hashcat,view:identify|sha256-dictionary} with files.input and files.dictionary for dictionary testing; reference {tool:searchsploit,query} or {action:read-source,path}; metasploit {action:list} then {action:call,name,arguments} using the official tool schema. File values are existing workspace paths, never file bytes. Full results are saved as evidence. Profiles have limited coverage; disclose unsupported or failed checks.",
+        description:"Run an installed, bounded Cloudflare tool pack. No downloads, arbitrary shell, flags or template paths. Request forms: recon {tool:httpx|dnsx|katana|subfinder,target}; http {tool:curl|ffuf|openssl,target}; nuclei {tool:nuclei,target,profile:exposures}; sqlmap {tool:sqlmap,target,parameter,database?:sqlite|mysql|postgresql|mssql}; service {tool:nmap|naabu|masscan,target:IPv4,ports:[integers]}; web-context {tool:whatweb|waybackurls,target}; pcap {tool:tshark,view:summary|dns|http|tcp} with files.input; file-analysis {tool:binwalk,view:signatures|entropy} with files.input; password {tool:hashcat,view:identify|sha256-dictionary} with files.input and files.dictionary for dictionary testing; reference {tool:searchsploit,query} or {action:read-source,path}; metasploit {action:list} then {action:call,name,arguments} using the official tool schema. File values are existing repository paths or absolute /workspace/scratch/ paths, never inline bytes. For binary files use computer_exec backend native-javascript: import fs from 'node:fs/promises'; export default async()=>{await fs.writeFile('/workspace/scratch/input.bin',new Uint8Array([0,128,255]));return '/workspace/scratch/input.bin';}; pass the returned absolute path. JavaScript is scratch-only. Full results are saved as evidence. Profiles have limited coverage; disclose unsupported or failed checks.",
         inputSchema:jsonSchema<ToolPackRequest>({type:"object",properties:{pack:{type:"string",enum:[...toolPacks]},request:{type:"object"},files:{type:"object",maxProperties:2,additionalProperties:{type:"string",maxLength:512}}},required:["pack","request"],additionalProperties:false}),
         execute:(input,call)=>this.packCall(input,call.toolCallId),
       }))]:[]),
@@ -745,11 +745,15 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     this.inFlightTools++;
     try{
       for(const name of names){
-        const path=await resolveWorkspacePath(this.workspace,input.files![name]!,false,{role:state.input.role,id:state.input.id,root:this.directory,active:async()=>{await this.active();}});
+        const requested=input.files![name]!,root=requested.startsWith("/workspace/scratch/")?"/workspace/scratch":this.directory;
+        const path=await resolveWorkspacePath(this.workspace,requested,false,{role:state.input.role,id:state.input.id,root,active:async()=>{await this.active();}});
         const bytes=await boundedEvidenceBytes(new Response(await this.workspace.fs.readFile(path)));
         total+=bytes.byteLength;if(total>EVIDENCE_FILE_LIMIT)throw Error("Tool inputs exceed 2 MiB total");
-        files[name]=bytes;metadata[name]={path:input.files![name],size:bytes.byteLength,sha256:await evidenceBytesHash(bytes)};
+        files[name]=bytes;
+        const captured=root==="/workspace/scratch"?await this.evidenceFile("pentcloud_tool",id,`input-${name}.bin`,bytes,"tool-input"):undefined;
+        metadata[name]={path:requested,size:bytes.byteLength,sha256:await evidenceBytesHash(bytes),...(captured?{evidence:captured.path}:{})};
       }
+      if(Object.values(metadata).some(value=>!!(value as {evidence?:string}).evidence))await this.checkpointEvidence();
       await this.notePack(state,input.pack);
       const request={pack:input.pack,request:this.safe(input.request) as Record<string,unknown>,files:metadata,requestDigest};
       const result=await journalPackCall(this.ctx.storage,"remote:pack-"+id,request,async()=>{

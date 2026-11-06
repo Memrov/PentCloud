@@ -478,6 +478,7 @@ export class ProbeAttempt extends NativeAttempt {
     });
     type Internals = {
       initialize(input:AttemptInput):Promise<unknown>;
+      packCall(input:import("../../../../shared/tool-packs").ToolPackRequest,id:string):Promise<unknown>;
       safe(value:unknown):unknown;
       apiRequest(input:unknown,id:string):Promise<unknown>;
       cloudflareTools(): Promise<import("../../src/native/cloudflare-tools").CloudflareTool[]>;
@@ -639,6 +640,16 @@ export class ProbeAttempt extends NativeAttempt {
       try{await guarded.fs.rename(`${this.directory}/.pentagi/evidence/${id}`,`${this.directory}/moved-evidence`);}catch{checks.renameFenced=true;}
       checks.checkpoint=await this.ctx.storage.get("fixture:evidenceReceipts");
       checks.starts=(await this.ctx.storage.get("fixture:modelRequests"))??0;return checks;
+    }else if(kind==="evidence-pack-scratch"){
+      const bytes=new Uint8Array([0,128,192,255,10]),state=(await this.ctx.storage.get<Record<string,unknown>>("attempt"))!;
+      await this.ctx.storage.put("attempt",{...state,toolPacks:true});await this.workspace.fs.mkdir("/workspace/scratch",{recursive:true});await this.workspace.fs.writeFile("/workspace/scratch/fixture.bin",bytes);let calls=0;
+      this.env.TOOL_PACKS={ready:async()=>({}),stop:async()=>({stopped:true}),run:async(_scope,_input,files)=>{calls++;checks.checkpointBeforeDispatch=((await this.ctx.storage.get<unknown[]>("fixture:evidenceReceipts"))??[]).length>0;checks.inputHash=await evidenceBytesHash(files.input!);return {exitCode:0,stdout:"exact binary input",stderr:""};}};
+      const request={pack:"pcap" as const,request:{tool:"tshark"},files:{input:"/workspace/scratch/fixture.bin"}};
+      await internal.packCall(request,"scratch");await this.workspace.fs.rm("/workspace/scratch/fixture.bin");await internal.packCall(request,"scratch");
+      checks.calls=calls;checks.expectedHash=await evidenceBytesHash(bytes);const files=await this.ctx.storage.get<Array<{path:string;source:string;sha256:string}>>("evidenceFiles");checks.captured=files!.find(f=>f.source==="tool-input");
+      try{await internal.packCall({...request,files:{input:"/workspace/scratch/../private"}},"escape");}catch{checks.escapeDenied=true;}
+      await this.workspace.fs.symlink("/private","/workspace/scratch/link");try{await internal.packCall({...request,files:{input:"/workspace/scratch/link"}},"symlink");}catch{checks.symlinkDenied=true;}
+      return checks;
     }else if(kind==="evidence-pack-large"){
       const output="🧪".repeat(600000),record={stdout:output,stderr:"retained complete stderr",exitCode:0};
       await internal.captureToolEvidence("pentcloud_tool",{},"large-result",record);
