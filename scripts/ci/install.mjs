@@ -90,13 +90,17 @@ export async function main(){
     stage='access-probe';
     await withCIProbeAccess({api,journal,persist,appId:installer.state.resources.access.id,origin:installer.state.appUrl},async({headers})=>{
       for(const path of ['/v1/runs?view=all','/v1/onboarding','/v1/lifecycle']){
+        stage='access-api-'+path.split('/').at(-1).split('?')[0];
         const r=await fetch(installer.state.appUrl+path,{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});
+        console.log(JSON.stringify({check:stage,status:r.status}));
         assert.equal(r.status,200,'Authenticated application check failed');
       }
       proof.checks.push('Access-authenticated API and Durable Objects');
+      stage='access-no-kali';
       const missing=await fetch(installer.state.appUrl+'/v1/toolbox/status',{headers,redirect:'manual'});
       assert.equal(missing.status,404,'Package installation still exposes a Kali runtime');
-      for(const action of ['loader','markdown']){await probe({action});proof.checks.push(action);}
+      for(const action of ['loader','markdown']){stage='native-'+action;await probe({action});proof.checks.push(action);}
+      stage='native-browser';
       await probe({action:'browser',headers});proof.checks.push('Browser Run protected application');
     });
     assert(journal.access.policyRemoved&&journal.access.tokenRemoved,'CI_ACCESS_CLEANUP_PENDING');
