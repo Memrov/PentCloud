@@ -1521,6 +1521,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       const current=await this.workspace.git.show({dir:this.directory,ref:commit});
       if(current.parent.length!==1||current.parent[0]!==pending.parentCommit||await this.workspace.fs.readFile(`${this.directory}/${manifestPath}`,"utf8")!==pending.text)throw new Error("Checkpoint recovery changed its input");
     }else{
+      await this.workspace.fs.mkdir(`${this.directory}/${evidenceRoot(state.input.id)}`,{recursive:true});
       await this.workspace.fs.writeFile(`${this.directory}/${manifestPath}`,pending.text);
       await this.workspace.git.add({dir:this.directory,paths:[...pinned.files.map(f=>f.path),manifestPath]});
       await this.checkpointState();commit=(await this.workspace.git.commit({dir:this.directory,message:`pentcloud-evidence: ${state.input.id} ${pinned.sequence}`})).oid;
@@ -1573,7 +1574,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     if(!match)throw new Error("Unknown scan ID for this attempt");
     return {family:match.name.split('_')[0]!,scanId};
   }
-  private async exportKali(path:string,scanId?:string,receiptId='agent-export',stockFile?:ToolboxStockOutput){
+  private async exportKali(path:string,scanId?:string,receiptId='agent-export',stockFile?:ToolboxStockOutput,checkpoint=true){
     const scope=await this.fileScope(),stock=stockFile??await this.stockEvidence(scanId,path);
     const root=stock?toolboxStockRoot(stock):toolboxFileRoot(scope);
     path=path.startsWith(root+"/")?path.slice(root.length+1):path;
@@ -1582,7 +1583,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     const original=await boundedEvidenceBytes(response);if(await evidenceBytesHash(original)!==expected)throw new Error("Kali output hash changed");
     let bytes=original;try{const text=new TextDecoder('utf-8',{fatal:true}).decode(original);bytes=new TextEncoder().encode(String(this.safe(text)));}catch{}
     const file=await this.evidenceFile('kali_export',receiptId,path.split('/').at(-1)??'output',bytes,'kali-file',path,expected);
-    await this.checkpointEvidence();return file;
+    if(checkpoint)await this.checkpointEvidence();return file;
   }
   private async captureToolEvidence(tool:string,args:Record<string,unknown>,id:string,result:unknown){
     this.inFlightTools++;
@@ -1606,23 +1607,24 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         const bytes=file.name==="result.json"&&storedParts.length?new TextEncoder().encode(JSON.stringify({...JSON.parse(new TextDecoder().decode(file.bytes)),parts:storedParts})+"\n"):file.bytes;
         const saved=await this.evidenceFile(tool,id,file.name,bytes,'tool-result');storedParts.push(saved.path);
       }
-      await this.checkpointEvidence();
       let data:Record<string,unknown>|undefined;try{data=remoteResultObject(result);}catch{}
       const family=tool.split('_')[0]!;
-      for(const path of stockOutputPaths(family,result))await this.exportKali(path,undefined,id,{family,file:path.slice(`/opt/kali-mcp/output/${family}/`.length)});
+      for(const path of stockOutputPaths(family,result))await this.exportKali(path,undefined,id,{family,file:path.slice(`/opt/kali-mcp/output/${family}/`.length)},false);
       const scanId=data?.scan_id??data?.fetch_id;
       if(typeof scanId==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{15,100}$/.test(scanId)&&data?.status&&!['running','started','pending','queued','in_progress'].includes(String(data.status))){
         const scope=await this.fileScope(),stock={family:tool.split('_')[0]!,scanId};
         const listing=await this.env.TOOLBOX.listFiles(scope,stock);
-        for(const file of listing.files)await this.exportKali(file.path,scanId,id);
+        for(const file of listing.files)await this.exportKali(file.path,scanId,id,undefined,false);
         if(listing.truncated||listing.unavailable.length)throw new Error("Some operation files were unavailable or exceeded collection bounds");
       }
+      // Only a complete recollection can resolve a prior collection warning.
+      await this.ctx.storage.transaction(async tx=>{const issues=await tx.get<Array<{tool:string;receiptId:string;reason:string}>>("evidenceIssues")??[];await tx.put("evidenceIssues",issues.filter(x=>x.tool!==tool||x.receiptId!==id));});
     }catch{
-      // A completed scanner must not look failed because its evidence upload lost an acknowledgment.
-      const issues=await this.ctx.storage.get<Array<{tool:string;receiptId:string;reason:string}>>("evidenceIssues")??[];
-      if(!issues.some(x=>x.tool===tool&&x.receiptId===id)&&issues.length<64)await this.ctx.storage.put("evidenceIssues",[...issues,{tool,receiptId:id,reason:"Evidence collection incomplete; the tool outcome is retained in its native receipt. Do not rerun the scanner to recreate a file."}]);
-      await this.ctx.storage.put("evidenceCollectionPending",true);
+      // Missing bytes remain disclosed even if their manifest later publishes.
+      await this.ctx.storage.transaction(async tx=>{const issues=await tx.get<Array<{tool:string;receiptId:string;reason:string}>>("evidenceIssues")??[];if(!issues.some(x=>x.tool===tool&&x.receiptId===id)&&issues.length<64)await tx.put("evidenceIssues",[...issues,{tool,receiptId:id,reason:"Evidence collection incomplete; the tool outcome is retained in its native receipt. Do not rerun the scanner to recreate a file."}]);});
     }
+    // Publication recovery is data-only; a lost acknowledgment is not lost bytes.
+    try{await this.checkpointEvidence();}catch{await this.ctx.storage.put("evidenceCollectionPending",true);}
   }
 
   private async file(args: Record<string, unknown>) {

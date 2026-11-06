@@ -666,6 +666,7 @@ export class ProbeAttempt extends NativeAttempt {
       const first=await this.workspace.git.revParse({dir:this.directory,ref:"HEAD"});
       checks.before=(await this.ctx.storage.get<{result?:unknown}>("attempt"))?.result??null;
       const recovered=await internal.checkpointEvidence();
+      checks.unavailable=JSON.parse(await this.workspace.fs.readFile(`${this.directory}/${recovered!.manifestPath}`,"utf8")).unavailable??[];
       checks.sameCommitRetried=commits[0]===commits[1]&&commits[0]===first;
       checks.recovered=recovered;
       const evidenceFiles=await this.ctx.storage.get<Array<{path:string;sha256:string}>>("evidenceFiles");
@@ -676,6 +677,11 @@ export class ProbeAttempt extends NativeAttempt {
       checks.terminalParent=commit.parent[0];checks.registrations=await this.ctx.storage.get("fixture:evidenceReceipts");
       await this.cancel();const before=commits.length;await internal.captureToolEvidence("late-tool",{},"late-call",{late:true});checks.noLatePublication=commits.length===before;
       checks.starts=(await this.ctx.storage.get("fixture:modelRequests"))??0;return checks;
+    }else if(kind==="evidence-incomplete-image"){
+      await internal.captureToolEvidence("fixture-image",{},"incomplete",{content:[{type:"image",mimeType:"image/png",data:"invalid base64!"}]});
+      const recovered=await internal.checkpointEvidence();
+      checks.unavailable=JSON.parse(await this.workspace.fs.readFile(`${this.directory}/${recovered!.manifestPath}`,"utf8")).unavailable??[];
+      return checks;
     }else if(kind==="native-pinned-model"){
       const result=await this.run(input);
       await this.harness.dispose();

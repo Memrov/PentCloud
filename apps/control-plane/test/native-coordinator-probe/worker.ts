@@ -445,6 +445,17 @@ export class ProbeCoordinator extends Coordinator {
     await this.seed(mode==="interrupted"?2:1,"coder",false);
     const readRecord=<T>(key:string):T=>JSON.parse(this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM native_records WHERE key=?",key).one().value);
     const initial=readRecord<RunRecord>("run:run-0");
+    if(mode==="advanced-head"){
+      // Accepted publication advances the ref without updating this cached index.
+      const dir="/accepted/run-0";
+      await this.workspace.git.branch({dir,name:"accepted-attempt",checkout:true});
+      await this.workspace.fs.writeFile(`${dir}/accepted-proof.txt`,"Retain accepted evidence\n");
+      await this.workspace.git.add({dir,paths:["accepted-proof.txt"]});
+      const accepted=await this.workspace.git.commit({dir,message:"accepted discovery"});
+      await this.workspace.git.checkout({dir,ref:"main"});
+      await this.workspace.git.updateRef({dir,ref:"refs/heads/main",value:accepted.oid,force:true});
+      this.write("run:run-0",{...initial,headCommit:accepted.oid});
+    }
     if(mode==="active") {
       await this.recoverNow();
       const before=readRecord<{input:AttemptInput}>("active");
@@ -460,6 +471,7 @@ export class ProbeCoordinator extends Coordinator {
     let error:string|undefined;
     try {await this.recoverNow();}catch(e){error=String(e);}
     if(mode==="interrupted") {await this.recoverNow();return {error,snapshot:await this.snapshot()};}
+    if(mode==="advanced-head" && !((await this.snapshot()).records.find(row=>row.key==="active")?.value))return {error:readRecord<AttemptRecord>("job:job-0").inputError,snapshot:await this.snapshot()};
     const prepared=readRecord<RunRecord>("run:run-0");
     const held=(await this.snapshot()).records.find(row=>row.key==="active")?.value;
     if(mode==="projection") {await this.projectionBlock(false);await this.recoverNow();}
@@ -490,7 +502,8 @@ export class ProbeCoordinator extends Coordinator {
       return {listing,disposition:download.headers.get("Content-Disposition")};
     }
     const file=await this.file("run-0",settled.headCommit,receipt.sourcePath,false);
-    return {initial,prepared,settled,launch,held,error,receipt,content:await file.text(),snapshot:await this.snapshot()};
+    const acceptedProof=mode==="advanced-head"?await this.workspace.fs.readFile("/accepted/run-0/accepted-proof.txt","utf8"):undefined;
+    return {initial,prepared,settled,launch,held,error,receipt,acceptedProof,content:await file.text(),snapshot:await this.snapshot()};
   }
   async recordedWorkScenario(){
     await this.seed(1,"coder",false);await this.recoverNow();

@@ -1511,8 +1511,10 @@ export class Coordinator extends DurableObject<NativeEnv> {
         if((await this.workspace.git.status({dir})).length || await this.workspace.fs.readFile(`${dir}/${intent.selection.manifestPath}`,"utf8")!==selectionManifest(intent.selection))throw new Error("409: material input recovery changed the committed manifest");
         intent.commit=branchHead;
       }else{
-        if(branchHead)await this.workspace.git.checkout({dir,ref:intent.branch});
-        else await this.workspace.git.branch({dir,name:intent.branch,startPoint:intent.baseCommit,checkout:true});
+        if(!branchHead)await this.workspace.git.branch({dir,name:intent.branch,startPoint:intent.baseCommit});
+        // branch(checkout:true) moves HEAD only. The cached accepted index can
+        // still precede main after publication; restore the pinned input tree.
+        await this.workspace.git.checkout({dir,ref:intent.branch,force:true});
         await this.materials.copyInto(run.id,intent.uploadIds,dir);
         await this.workspace.fs.mkdir(`${dir}/.pentagi/materials/selections`,{recursive:true});
         await this.workspace.fs.writeFile(`${dir}/${intent.selection.manifestPath}`,selectionManifest(intent.selection));
