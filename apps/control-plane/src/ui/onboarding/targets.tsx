@@ -83,8 +83,8 @@ export function TargetLibrary({onCreated,runs=[]}:{onCreated:(run:UIRun,job:UIJo
           <h2>{selected?"Edit target":"Add a target"}</h2>
           <ProgramPicker targetURL={draft.url} disabled={busy} perform={perform} onPick={(id,url)=>{setProgramId(id);if(url)setDraft({...draft,url});setNotice("Program selected. Saving verifies the address and imports its exclusions.");}}/>
           <Select label="Target type" aria-label="Target type" required renderValue={value=>value==="api"?"API":"Website"} value={draft.kind} disabled={busy} onValueChange={value=>setDraft({...draft,kind:value as "website"|"api"})}><Select.Option value="website">Website</Select.Option><Select.Option value="api">API</Select.Option></Select>
-          <Input label="Name" value={draft.name} onValueChange={name=>setDraft({...draft,name})} disabled={busy} placeholder="My project"/>
-          <Input label={draft.kind==="api"?"API base address":"Website address"} value={draft.url} onValueChange={url=>setDraft({...draft,url})} disabled={busy} placeholder={draft.kind==="api"?"https://api.example.com/v1/":"https://example.com"}/>
+          <Input label="Name" value={draft.name} onValueChange={name=>setDraft({...draft,name})} disabled={busy} placeholder="Name this target"/>
+          <Input label={draft.kind==="api"?"API base address":"Website address"} value={draft.url} onValueChange={url=>setDraft({...draft,url})} disabled={busy} placeholder={draft.kind==="api"?"Enter the full API base address":"Enter the full website address"}/>
           <InputArea label="What should PentCloud investigate?" rows={3} value={draft.objective} onValueChange={objective=>setDraft({...draft,objective})} disabled={busy} placeholder="Optional: important areas or concerns"/>
           <InputArea label="Exclusions" rows={2} value={draft.exclusions} onValueChange={exclusions=>setDraft({...draft,exclusions})} disabled={busy} placeholder="Optional guidance for the agents"/>
           <p>Saving a target does not contact it. Its API base path, scheme and port are preserved.</p>

@@ -4,6 +4,11 @@ export function hostedUIResponse(response: Response, requestURL: string): Respon
   headers.set("Referrer-Policy", "no-referrer");
   headers.set("X-Content-Type-Options", "nosniff");
   if (headers.get("Content-Type")?.includes("text/html")) {
+    // Keep the private application HTML intact at the edge, including where
+    // zone-wide analytics would otherwise inject a script blocked by the CSP.
+    const cacheControl = headers.get("Cache-Control");
+    if (!cacheControl?.split(",").some(value => value.trim().toLowerCase() === "no-transform"))
+      headers.set("Cache-Control", [cacheControl, "no-transform"].filter(Boolean).join(", "));
     const url = new URL(requestURL);
     const socketOrigin = `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}`;
     headers.set("Content-Security-Policy", [

@@ -8,16 +8,16 @@ export function DiscoveryProgress({jobs,settled,failed,refreshing,onRefresh,chil
 }) {
   const queued=jobs.some(job=>["created","provisioning"].includes(job.status))&&!jobs.some(job=>job.status==="running");
   const finishing=jobs.length>0&&jobs.every(job=>job.status==="completed")&&!settled;
-  const title=failed?"Discovery needs attention":settled?"Discovery complete":queued?"Waiting for the shared scanner":finishing?"Finishing discovery":"Preparing the scanner and checking your target";
+  const title=failed?"Discovery needs attention":settled?"Discovery complete":queued?"Waiting for discovery to start":finishing?"Finishing discovery":"Preparing discovery and checking your target";
   const description=failed
     ? "Discovery could not finish normally. Review the coverage gap below. Analysis stays locked until scanner work is safely settled."
     : settled
       ? inChat ? "The initial check is finished. Assessment continues in this conversation when admitted." : "The initial check is finished. Complete setup to open your chat."
       : queued
-        ? "Your target is confirmed. Discovery starts automatically when the shared scanner is available."
+        ? "Your target is confirmed. Discovery will start automatically."
         : finishing
           ? "Saving the discovery result and waiting for scanner work to settle."
-          : "The Kali scanner starts automatically for this run. Starting it can take a little time before the initial check finishes.";
+          : "The tools for this run are preparing automatically. The initial check will begin when they are ready.";
   return <section className="onboarding-card onboarding-progress" aria-label="Discovery progress">
     <div className="onboarding-row"><h2>Initial discovery</h2><Button variant="ghost" disabled={refreshing} onClick={onRefresh}>Refresh progress</Button></div>
     <Banner

@@ -105,6 +105,9 @@ export async function reviewTargetAccess(env,input){
     const target=store.targets()[0],names=await targetSecretBindings(target.id);
     await page.getByRole('checkbox',{name:'Required request headers',exact:true}).check();
     await page.getByRole('checkbox',{name:'Browser login',exact:true}).check();
+    check(await page.getByRole('textbox',{name:'Login page',exact:true}).inputValue()==='','A login address was invented');
+    check(!await page.getByRole('button',{name:'Save target settings',exact:true}).isEnabled(),'Empty login address can be saved');
+    await page.getByRole('textbox',{name:'Login page',exact:true}).fill(targetOrigin+'/login');
     step('secret-check-'+viewport.width);holdCheck=true;await page.getByRole('button',{name:'Check password',exact:true}).click();await Promise.race([checkEntered,new Promise((_,reject)=>setTimeout(()=>reject(Error('Secret check was never dispatched')),15000))]);
     check(await page.getByRole('button',{name:'Checking and starting…',exact:true}).count()===0,'A secret check looked like run startup');
     releaseCheck();await page.getByText('Missing or unreadable in Cloudflare',{exact:true}).waitFor();

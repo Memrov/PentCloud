@@ -19,10 +19,10 @@ export function ChatDiscovery({run,jobs,onRefresh}:{run:UIRun;jobs:UIJob[];onRef
   };
   const finishing=discovery.every(job=>job.status==="completed");
   const queued=discovery.every(job=>job.status==="created");
-  const status=failed?"Discovery needs attention":finishing?"Finishing discovery":queued?"Waiting for the shared scanner":"Scanner starting or running";
+  const status=failed?"Discovery needs attention":finishing?"Finishing discovery":queued?"Waiting for discovery to start":"Discovery is starting or running";
   return <div className="chat-discovery border-b border-kumo-line px-4 py-2 text-base"><Collapsible>
     <Collapsible.Trigger render={<Button variant="ghost"/>} aria-label="Discovery status and details">
-      {failed?<WarningCircleIcon size={16}/>:<Loader aria-label="Discovery in progress"/>}<span>{status}</span><span>Details</span>
+      {failed?<WarningCircleIcon size={16}/>:<Loader size="sm" aria-label="Discovery in progress"/>}<span>{status}</span><span>Details</span>
     </Collapsible.Trigger><Collapsible.DefaultPanel>
     <DiscoveryProgress inChat jobs={discovery} settled={run.discoveryDrained===true} failed={failed} refreshing={busy} onRefresh={()=>void perform()} />
     </Collapsible.DefaultPanel></Collapsible><div className="chat-discovery-actions">

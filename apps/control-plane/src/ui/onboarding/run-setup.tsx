@@ -23,7 +23,7 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
       initialized.current=true;formRevision.current=next.draft?.revision??0;dirtyRef.current=false;conflictRef.current=false;setDirty(false);setConflict(false);
       const d=next.draft,c=d?.profile?.default,bound=next.credentials.find(c=>c.id==="bound-go");
       setKey(c?.credentialId??bound?.id??"");setKeyVersion(c?.credentialVersion??bound?.version??0);
-      setDefaultModel(c?.model??(bound?"opencode-go:deepseek-v4-pro":""));
+      setDefaultModel(c?.model??"");
       setOverrides(Object.fromEntries(Object.entries(d?.profile?.overrides??{}).map(([role,c])=>[role,c?.model])));
       setOverrideKeys(Object.fromEntries(Object.entries(d?.profile?.overrides??{}).map(([role,c])=>[role,c?{id:c.credentialId,version:c.credentialVersion}:undefined])));
       setPublicAPI(d?.publicAPI??true);setAPIKey(d?.apiCredential?.id??"");setEndpoint(d?.endpoint??run.target?.url??"");
@@ -90,7 +90,7 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
     <div className="onboarding-grid">
       <section className="onboarding-card onboarding-form" aria-label="OpenCode models">
         <h2>OpenCode models</h2><p>Use an OpenCode Console or Go key with permission to request models. Your OpenCode plan, privacy settings and budgets apply.</p>
-        <Select label="OpenCode key" aria-label="OpenCode key" required value={key||null} disabled={busy} placeholder="Choose a Cloudflare secret" onValueChange={value=>{setKey(String(value??""));setKeyVersion(modelCredentials.find(c=>c.id===value)?.version??0);setOverrideKeys({});edit();}}>{modelCredentials.map(c=><Select.Option key={c.id} value={c.id}>{c.label}{c.missing?" · re-enter key":""}</Select.Option>)}</Select>
+        <Select label="OpenCode key" aria-label="OpenCode key" required value={key||null} disabled={busy} placeholder="Choose a Cloudflare secret" onValueChange={value=>{setKey(String(value??""));setKeyVersion(modelCredentials.find(c=>c.id===value)?.version??0);setOverrideKeys({});edit();}}>{modelCredentials.map(c=><Select.Option key={c.id} value={c.id}>{c.label}{c.missing?" · unavailable":""}</Select.Option>)}</Select>
         <p>OpenCode keys are managed by Cloudflare. PentCloud stores the binding reference and test proof, never the key value.</p>
         <Collapsible><Collapsible.DefaultTrigger>Configure OpenCode in Cloudflare</Collapsible.DefaultTrigger><Collapsible.DefaultPanel><p>In your app Worker, add an encrypted secret named <code>OPENCODE_GO_API_KEY</code> for Go or <code>OPENCODE_API_KEY</code> for Console. You can also bind an account Secrets Store secret using the same name. Deploy the change, then refresh setup.</p><ExternalLink href="https://dash.cloudflare.com/">Manage Cloudflare secrets</ExternalLink></Collapsible.DefaultPanel></Collapsible>
         <Button variant="ghost" disabled={busy} onClick={()=>void perform(async()=>{await refresh();})}>Refresh secret bindings</Button>

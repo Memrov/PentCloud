@@ -8,7 +8,7 @@ export async function reviewUI(env,input) {
   check(origin.protocol==='https:'&&origin.origin===input.origin,'Use an HTTPS origin');
   check(!input.runId||/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(input.runId),'Invalid run selection');
   check(Object.keys(input.headers).sort().join(',')==='CF-Access-Client-Id,CF-Access-Client-Secret','Use native Access headers');
-  const result={mode:'Cloudflare Playwright / native Browser binding',startedAt:new Date().toISOString(),cases:[],captures:[],events:[],traces:[],modifiedConditions:['Exact-origin network guardrail','HTTP mutations blocked','Trace DOM snapshots/network bodies omitted','Bounded readonly app health readiness probe'],unverified:['Paid live-run streaming','Safari and real devices','Full accessibility conformance']};
+  const result={mode:'Cloudflare Playwright / native Browser binding',startedAt:new Date().toISOString(),cases:[],captures:[],events:[],traces:[],modifiedConditions:['Exact-origin network guardrail','Only readonly app requests permitted','Trace DOM snapshots/network bodies omitted','Bounded readonly app health readiness probe','Native screenshot animation handling'],unverified:['Paid live-run streaming','Safari and real devices','Full accessibility conformance']};
   let browser,sessionId;result.phase='acquire';
   try {
     sessionId=env.QA_BROWSER_ID;check(/^[a-f0-9-]{36}$/.test(sessionId??''),'Task-owned browser is not configured');result.sessionId=sessionId;
@@ -26,10 +26,12 @@ export async function reviewUI(env,input) {
       page.on('pageerror',()=>record({kind:'uncaught-exception'}));
       page.on('requestfailed',r=>record({kind:'request-failed',url:safeURL(r.url()),reason:r.failure()?.errorText?.slice(0,100)}));
       page.on('response',r=>{if(r.status()>=400)record({kind:'http-error',url:safeURL(r.url()),status:r.status()});});
+      const readonlyPosts=new Set(['bounty.status','scope.names','scope.preview','source.list','access.email.address']);
       await context.route('**/*',route=>{
         const request=route.request();
         if(new URL(request.url()).origin!==origin.origin)return route.abort();
-        if(!['GET','HEAD','OPTIONS'].includes(request.method())){record({kind:'mutation-blocked',method:request.method(),url:safeURL(request.url())});return route.abort();}
+        const readonlyPost=request.method()==='POST'&&new URL(request.url()).pathname.startsWith('/v1/ui/onboarding/')&&readonlyPosts.has(new URL(request.url()).pathname.split('/').at(-1));
+        if(!['GET','HEAD','OPTIONS'].includes(request.method())&&!readonlyPost){record({kind:'mutation-blocked',method:request.method(),url:safeURL(request.url())});return route.abort();}
         return route.continue();
       });
       await context.addInitScript(()=>{
@@ -55,8 +57,9 @@ export async function reviewUI(env,input) {
       // Auth precedes tracing. Node sanitizes the archive again before saving.
       await context.tracing.start({screenshots:true,snapshots:false,sources:false});
       const capture=async name=>{
-        // Native sheets/disclosures must finish their finite animation before geometry and pixels are compared.
-        await page.waitForFunction(()=>document.getAnimations().every(a=>a.playState!=="running"||a.effect?.getComputedTiming().iterations===Infinity),null,{timeout:6000});
+        // Playwright finishes finite transitions and freezes looping animations
+        // for the capture; hidden or continuously updating UI cannot stall QA.
+        const png=Buffer.from(await page.screenshot({fullPage:false,animations:'disabled',mask:[page.locator('input[type="password"]')]})).toString('base64');
         const layout=await page.evaluate(()=>{
           const width=innerWidth,height=innerHeight;
           const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&r.right>0&&r.left<width&&r.bottom>0&&r.top<height&&s.visibility!=='hidden'&&s.display!=='none';};
@@ -65,13 +68,17 @@ export async function reviewUI(env,input) {
             smallControls:[...document.querySelectorAll('button,input,textarea,select')].filter(visible).filter(e=>parseFloat(getComputedStyle(e).fontSize)<14).length,
             conversation:{assistantProse:document.querySelectorAll('.message-assistant .prose-block').length,activities:document.querySelectorAll('.response-activity').length,scrollHeight:document.querySelector('.message-scroll')?.clientHeight}};
         });
-        result.captures.push({name,viewport,screenshot:`${name}-${viewport.width}.png`,url:safeURL(page.url()),layout,png:Buffer.from(await page.screenshot({fullPage:false,mask:[page.locator('input[type="password"]')]})).toString('base64')});
+        result.captures.push({name,viewport,screenshot:`${name}-${viewport.width}.png`,url:safeURL(page.url()),layout,png});
       };
       const test=async(name,run)=>{
         const item={name,viewport:viewport.width,result:'passed',startedAt:new Date().toISOString()};
         try{const note=await run();if(note){item.result='not-run';item.note=note;}}
         catch(error){item.result='failed';item.errorType=error.name;item.reason=String(error.message).split('\n')[0].slice(0,160);try{await capture(name+'-failed');}catch{}}
         item.finishedAt=new Date().toISOString();result.cases.push(item);return item.result;
+      };
+      const withinViewport=async(locator,label)=>{
+        const box=await locator.boundingBox();
+        check(box&&box.x>=0&&box.x+box.width<=viewport.width+1,`${label} exceeds the viewport`);
       };
       const go=async(path,selector)=>{
         const response=await page.goto(input.origin+path,{waitUntil:'domcontentloaded'});
@@ -84,6 +91,9 @@ export async function reviewUI(env,input) {
       await test('target-form',async()=>{
         if(targetsReady!=='passed')return 'Blocked by the initial target navigation failure';
         await page.getByRole('button',{name:'Add target',exact:true}).click();
+        for(const name of ['Name','Website address'])check(await page.getByRole('textbox',{name,exact:true}).inputValue()==='','New target includes seeded values');
+        const hints=await page.locator('input[placeholder]').evaluateAll(inputs=>inputs.map(input=>input.getAttribute('placeholder')));
+        check(!hints.some(value=>/example\.|github\.com\/owner|no-reply@/i.test(value??'')),'A canned address is shown in a form hint');
         await page.getByRole('textbox',{name:'Name',exact:true}).fill('QA draft — not saved');
         await page.getByRole('combobox',{name:'Target type',exact:true}).click();
         await page.getByRole('option',{name:'API',exact:true}).click();
@@ -115,7 +125,12 @@ export async function reviewUI(env,input) {
         await page.getByRole('tab',{name:'Findings',exact:true}).click();
         await page.locator('.findings-workspace[aria-busy="false"]').waitFor();await capture('findings');
         const select=page.getByRole('combobox',{name:'Target',exact:true});
-        if(await select.count()){await select.click();await capture('findings-target-menu');await page.keyboard.press('Escape');}
+        if(await select.count()){
+          await withinViewport(select,'Target selector');await select.click();await capture('findings-target-menu');
+          check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Target menu widens the page');
+          check(await page.getByRole('option').evaluateAll(options=>options.every(e=>e.scrollWidth<=e.clientWidth+1)),'Target options are clipped horizontally');
+          await page.keyboard.press('Escape');
+        }
       });
       await test('report',async()=>{
         const report=page.getByRole('button',{name:/^(Full report|Assessment files)$/});
@@ -128,19 +143,28 @@ export async function reviewUI(env,input) {
           result.reportOptions??=[];result.reportOptions.push({viewport:viewport.width,options});
           await page.keyboard.press('Escape');
         }
-        if(await page.locator('.assessment-document').count())await capture('report-document');
+        if(await page.locator('.assessment-document').count()){
+          await capture('report-document');await withinViewport(page.locator('.assessment-document'),'Report document');
+          check(await page.locator('.assessment-document').evaluate(e=>e.scrollWidth<=e.clientWidth+1),'Report content is clipped horizontally');
+        }
         else if(!result.unverified.includes('Report document body: no canonical document selected'))result.unverified.push('Report document body: no canonical document selected');
         await page.getByRole('button',{name:'Close report',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
       });
       await test('settings',async()=>{
         await page.getByRole('tab',{name:'Settings',exact:true}).click();
         await page.getByRole('heading',{name:'Agent configuration',exact:true}).waitFor();
-        if(viewport.width<721){await page.getByRole('combobox',{name:'Agent',exact:true}).click();await page.getByRole('option',{name:'Searcher',exact:true}).click();}else await page.locator('.settings-role-rail button').last().click();await capture('settings');
+        if(viewport.width<721){await page.getByRole('combobox',{name:'Agent',exact:true}).click();await page.getByRole('option',{name:'Searcher',exact:true}).click();}else await page.locator('.settings-role-rail button').last().click();
+        check(!(await page.locator('.settings-detail-footer').innerText()).includes('Last saved by'),'Settings expose the account audit identity');await capture('settings');
         const model=page.getByRole('combobox',{name:'Search connected models',exact:true});
         if(await model.isDisabled())return 'Settings locked by existing runtime state; dropdown not exercised';
         await model.click();await capture('model-menu');await page.keyboard.press('Escape');
       });
       await test('light-theme',async()=>{await page.getByRole('button',{name:'Toggle theme',exact:true}).last().click();await capture('settings-light');});
+      await test('bug-bounty',async()=>{
+        await page.getByRole('tab',{name:'Bug bounty',exact:true}).click();await page.getByRole('region',{name:'HackerOne',exact:true}).waitFor();
+        for(const name of ['Bugcrowd','YesWeHack']){const card=page.getByRole('region',{name,exact:true});await card.getByText('In development',{exact:true}).waitFor();check(await card.getByRole('button').count()===0,'Unvalidated platform offers an account connection');}
+        await capture('bug-bounty');
+      });
       await test('targets-recheck',async()=>{await go('/','.onboarding[aria-busy="false"]');await capture('targets-recheck');});
       if(input.runId){
         await test('chat',async()=>{await go('/?run='+encodeURIComponent(input.runId),'.chat-shell[aria-busy="false"] .message-column');await capture('chat');});

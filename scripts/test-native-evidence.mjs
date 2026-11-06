@@ -7,6 +7,7 @@ await withNativeTestHarness({root,workers:[{configPath:'test/native-attempt-prob
  assert.equal(response.status,200,JSON.stringify(value));
  assert.equal(value.before,null,'a checkpoint must not finalize an agent');
  assert.equal(value.sameCommitRetried,true,'lost push acknowledgment retries exactly the existing commit');
+ assert.deepEqual(value.unavailable,[],'recovered publication is not incomplete file collection');
  assert.equal(value.evidenceFiles.length,1);assert.match(value.raw,/retained evidence/);assert.ok(!value.raw.includes('local-probe-go'));
  assert.equal(value.terminalParent,value.recovered.commit);assert.equal(value.terminal.status,'completed');
  assert.ok(value.registrations.length>=1);assert.equal(value.noLatePublication,true);assert.equal(value.starts,0);
@@ -14,6 +15,13 @@ await withNativeTestHarness({root,workers:[{configPath:'test/native-attempt-prob
  assert.equal(bridge.file.sha256,bridge.expectedHash);assert.equal(bridge.actualHash,bridge.expectedHash);assert.ok(bridge.checkpoint.length>0);assert.equal(bridge.starts,0);assert.equal(bridge.renameFenced,true);
  console.log('native agent file tools, exact bytes and immutable evidence: passed');
  console.log('native evidence checkpoint, lost push reply, terminal publication and cancellation: passed');
+ const incompleteResponse=await server.fetch('https://attempt.test/evidence-incomplete-image'),incomplete=await incompleteResponse.json();assert.equal(incompleteResponse.status,200,JSON.stringify(incomplete));assert.equal(incomplete.unavailable.length,1,'genuinely missing image remains disclosed after checkpoint recovery');assert.equal(incomplete.unavailable[0].receiptId,'incomplete');
+ const scratchResponse=await server.fetch('https://attempt.test/evidence-pack-scratch'),scratch=await scratchResponse.json();
+ assert.equal(scratchResponse.status,200,JSON.stringify(scratch));assert.equal(scratch.calls,1);assert.equal(scratch.checkpointBeforeDispatch,true);assert.equal(scratch.inputHash,scratch.expectedHash);assert.equal(scratch.captured.sha256,scratch.expectedHash);assert.equal(scratch.escapeDenied,true);assert.equal(scratch.symlinkDenied,true);
+ console.log('native scratch binary transfer, immutable input and replay fences: passed');
+ const largeResponse=await server.fetch('https://attempt.test/evidence-pack-large'),large=await largeResponse.json();
+ assert.equal(largeResponse.status,200,JSON.stringify(large));assert.equal(large.restored,true);assert.ok(large.files.every(f=>f.size<=2*1024*1024));assert.ok(large.parts.every(p=>large.files.some(f=>f.path===p)));assert.ok(large.checkpoint.length);
+ console.log('native large-result evidence paths and exact Unicode bytes: passed');
  const stopped=await server.fetch('https://attempt.test/evidence-cancel-push');const cancel=await stopped.json();assert.equal(stopped.status,200,JSON.stringify(cancel));
  assert.ok(cancel.evidence?.commit);assert.equal(cancel.pushes,1);assert.equal(cancel.cancelFenced,true);assert.equal(cancel.registrations.length,1);
  for(const scenario of ['evidence-cancel-commit','evidence-failed-push']){
