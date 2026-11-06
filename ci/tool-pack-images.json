@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "repository": "Memrov/PentCloud-tools",
+  "commit": "ce1849dce533120307d13c0ab86df919c71787be",
+  "packs": [
+    {
+      "id": "http",
+      "className": "HttpRunner",
+      "digest": "sha256:a6aeb7812191e33c28c2868b8abae1c2545f7ab880f46916363068e7c972c33f"
+    },
+    {
+      "id": "recon",
+      "className": "ReconRunner",
+      "digest": "sha256:dcd93d70a14462df01b3a18aced3a048faa1897479d6725f3f3f2efc068c60a2"
+    },
+    {
+      "id": "nuclei",
+      "className": "NucleiRunner",
+      "digest": "sha256:048d360141d4527df58e477043e14b36c958a207e8c5978924c198507a295d28"
+    },
+    {
+      "id": "service",
+      "className": "ServiceRunner",
+      "digest": "sha256:d8e12b6640293ee47c1185b3c7170a99a98e985c82716d7902768a5a420aaff9"
+    },
+    {
+      "id": "sqlmap",
+      "className": "SqlmapRunner",
+      "digest": "sha256:5bd63815db08dc9e4efb9f560b8df55e7b46884fe76cb17ecbb675b19cbdda40"
+    },
+    {
+      "id": "web-context",
+      "className": "WebContextRunner",
+      "digest": "sha256:9e696684cbc453a8f8a481e7fbc965804eab64228781cedb873134a34c6bb690"
+    },
+    {
+      "id": "file-analysis",
+      "className": "FileRunner",
+      "digest": "sha256:06c35dc8c547e245d66618ac67a324174125ae27e66ad8f4843e0159e812753c"
+    },
+    {
+      "id": "password",
+      "className": "PasswordRunner",
+      "digest": "sha256:d7eacf98084056674dbd2fec824097460aeb5348e38cb958e81cb2cbc4fe99dc"
+    },
+    {
+      "id": "pcap",
+      "className": "PcapRunner",
+      "digest": "sha256:6a4767beb2671fb6e4010844123904eb3f2a751c9b87324937d06571c1e5f196"
+    },
+    {
+      "id": "reference",
+      "className": "ReferenceRunner",
+      "digest": "sha256:dffa0a2a1ce2210024837b15b5b78972b5628d714556bc5778a89c592029ef99"
+    },
+    {
+      "id": "metasploit",
+      "className": "MetasploitRunner",
+      "digest": "sha256:57add62d36ea18c6934838fc16906a4f0fbd72e472f35c998e0a6e3cb5bdd094"
+    }
+  ]
+}

@@ -125,6 +125,15 @@ describe("production router in actual Workers runtime", () => {
     expect((await authorized("/v1/toolbox/start",{method:"POST"})).status).toBe(202);
     expect(await recordedCalls()).toEqual([{method:"toolboxStatus",args:[]},{method:"toolboxReady",args:["lost"]},{method:"toolboxReady",args:[null]}]);
   });
+  it("reports an uninstalled toolbox without crashing or starting Kali in a package-only install",async()=>{
+    for(const [path,method] of [["/v1/toolbox/status","GET"],["/v1/ui/toolbox/start","POST"]] as const){
+      const response=await authorized(path,{method,headers:{"X-Fixture-Tool-Backend":"tool-packs"}});
+      expect(response.status).toBe(404);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(await response.json()).toEqual({state:"not-installed",runtime:"Cloudflare tool packs"});
+    }
+    expect(await recordedCalls()).toEqual([]);
+  });
   it("rejects old operator bearers, expired identity and cross-origin mutations before RPC", async()=>{
     expect((await app.default.fetch("https://operator.test/v1/runs",{headers:{Authorization:`Bearer ${bindings.CONTROL_TOKEN}`}})).status).toBe(401);
     expect((await app.default.fetch("https://operator.test/v1/runs",{headers:{"Cf-Access-Jwt-Assertion":await accessToken(undefined,undefined,undefined,1)}})).status).toBe(403);

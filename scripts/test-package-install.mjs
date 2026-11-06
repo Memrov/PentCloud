@@ -45,3 +45,14 @@ test('a failed durable checkpoint stops before a remote resource create',async t
   assert.equal(JSON.parse(await readFile(join(dir,'manifest.json'),'utf8')).resources.namespace.status,'pending');
 });
 
+test('CI identity checks reject production hosts and other repositories',async()=>{
+  const {environment,gitEnvironment}=await import('./ci/artifacts.mjs');
+  const env={CLOUDFLARE_ACCOUNT_ID:config.accountId,PENTCLOUD_TEST_ZONE_ID:'c'.repeat(32),PENTCLOUD_TEST_HOSTNAME:'install.heflare.app',PENTCLOUD_TEST_ACCESS_TEAM:config.accessTeamDomain,PENTCLOUD_TEST_ALLOWED_EMAILS:JSON.stringify(config.allowedEmails),GITHUB_SHA:'e'.repeat(40),GITHUB_REF_NAME:'main',GITHUB_REPOSITORY:'Memrov/PentCloud',CLOUDFLARE_API_TOKEN:'fixture'};
+  assert.equal(environment(env).hostname,'install.heflare.app');
+  assert.throws(()=>environment({...env,PENTCLOUD_TEST_HOSTNAME:'app.pentcloud.dev'}),/testing hostname/);
+  assert.throws(()=>environment({...env,GITHUB_REPOSITORY:'another/repository'}),/configured repository/);
+  const git=gitEnvironment('https://'+config.accountId+'.artifacts.cloudflare.net/git/state/installation.git','test-repo-secret');
+  assert.equal(git.GIT_TERMINAL_PROMPT,'0');
+  assert.equal(git.GIT_CONFIG_VALUE_2,'false');
+  assert(!('CLOUDFLARE_API_TOKEN' in git));
+});

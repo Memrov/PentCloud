@@ -4,6 +4,7 @@ import worker from "../../src/native/worker";
 // Test only: the real router and signed auth see a narrow lifecycle RPC fixture.
 export default {fetch(request:Request,env:RuntimeFixtureEnv){
   const coordinator=env.COORDINATOR.getByName("global");
+  if(request.headers.get("X-Fixture-Tool-Backend")==="tool-packs")return worker.fetch(request,{...env,TOOL_PACKS:{}} as unknown as Parameters<typeof worker.fetch>[1]);
   return worker.fetch(request,{...env,TOOLBOX:{
     async status(){await coordinator.noteRemote("toolboxStatus","[]");return {state:"stopped",inactivityTimeoutMs:1800000};},
     async ready(generation?:string){await coordinator.noteRemote("toolboxReady",JSON.stringify([generation??null]));return generation?{error:"generation_lost"}:{state:"booting",generation:"fixture-generation"};},

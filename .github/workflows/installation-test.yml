@@ -2,6 +2,15 @@ name: Installation test
 on:
   push:
     branches: [main, codex/artifacts-install-ci]
+    paths:
+      - 'apps/**'
+      - 'infra/tool-packs/**'
+      - 'shared/**'
+      - 'scripts/**'
+      - 'templates/private-install/**'
+      - 'ci/**'
+      - 'package*.json'
+      - '.github/workflows/installation-test.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,10 +19,13 @@ concurrency:
   cancel-in-progress: false
 jobs:
   install:
-    name: Native Artifacts installation
+    name: Native Artifacts package installation
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     environment: installation-test
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+      CREATE_CLOUDFLARE_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -21,29 +33,41 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26.12.1
-      - name: Verify isolated account credentials
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.26.5
+          cache: false
+      - name: Import and check out exact commit from native Artifacts
+        id: artifacts
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          PENTCLOUD_TEST_ZONE_ID: ${{ vars.PENTCLOUD_TEST_ZONE_ID }}
-        run: |
-          node --input-type=module <<'JS'
-          import assert from 'node:assert/strict';
-          const account=process.env.CLOUDFLARE_ACCOUNT_ID,zone=process.env.PENTCLOUD_TEST_ZONE_ID;
-          assert.match(account??'',/^[a-f0-9]{32}$/);
-          assert.match(zone??'',/^[a-f0-9]{32}$/);
-          assert(process.env.CLOUDFLARE_API_TOKEN,'Missing environment deployment secret');
-          const request=async(path,method='GET',body)=>{
-            const r=await fetch('https://api.cloudflare.com/client/v4'+path,{method,headers:{Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
-            const data=await r.json();assert(r.ok&&data.success!==false,'Cloudflare preflight failed: '+path+' HTTP '+r.status+' codes '+(data.errors??[]).map(x=>x.code).join(','));
-            return data.result;
-          };
-          const z=await request('/zones/'+zone);
-          assert.equal(z.name,'heflare.app','Only the separate testing zone is permitted');
-          assert.equal(z.account.id,account,'Test domain/account mismatch');
-          await request('/accounts/'+account+'/workers/scripts');
-          const ns=await request('/accounts/'+account+'/artifacts/namespaces');
-          if(!ns.some(x=>x.namespace==='pentcloud-ci-source'))await request('/accounts/'+account+'/artifacts/namespaces','POST',{namespace:'pentcloud-ci-source'});
-          console.log('Test-account credentials and native Artifacts namespace verified.');
-          JS
+          PENTCLOUD_INSTALL_CONFIG: ${{ secrets.PENTCLOUD_INSTALL_CONFIG }}
+        run: node scripts/ci/prepare-source.mjs
+      - name: Check out pinned tool image recipes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Memrov/PentCloud-tools
+          ref: ce1849dce533120307d13c0ab86df919c71787be
+          path: tool-source
+          persist-credentials: false
+      - name: Install locked application dependencies
+        working-directory: ${{ steps.artifacts.outputs.source }}
+        run: npm ci
+      - name: Verify package installation guards
+        working-directory: ${{ steps.artifacts.outputs.source }}
+        run: node --test scripts/test-package-install.mjs
+      - name: Build or reuse verified tool-pack images
+        working-directory: ${{ steps.artifacts.outputs.source }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PENTCLOUD_INSTALL_CONFIG: ${{ secrets.PENTCLOUD_INSTALL_CONFIG }}
+          PENTCLOUD_TOOLS_DIRECTORY: ${{ github.workspace }}/tool-source
+        run: node scripts/ci/images.mjs
+      - name: Install and test native services without Kali
+        working-directory: ${{ steps.artifacts.outputs.source }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PENTCLOUD_INSTALL_CONFIG: ${{ secrets.PENTCLOUD_INSTALL_CONFIG }}
+        run: node scripts/ci/install.mjs
+      # Deliberately no account-log, trace, auth-cache or installation-state upload.
 

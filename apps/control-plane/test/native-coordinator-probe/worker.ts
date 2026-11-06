@@ -277,6 +277,10 @@ export class ProbeCoordinator extends Coordinator {
     return {legacy,bundle,wrong,missing};
   }
   async directDeleteScenario(mode:string){
+    if(mode==="tool-packs"){
+      delete this.env.TOOLBOX;
+      this.env.TOOL_PACKS={ready:async()=>({}),run:async()=>({}),stop:async()=>({stopped:true})};
+    }
     await this.seed(1,"coder",false);
     const read=<T>(key:string)=>JSON.parse(this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM native_records WHERE key=?",key).one().value) as T;
     const job=read<AttemptRecord>("job:job-0"),run=read<RunRecord>("run:run-0");

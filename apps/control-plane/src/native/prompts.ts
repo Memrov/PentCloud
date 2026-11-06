@@ -5,8 +5,10 @@ import rendererBytes from "./assets/prompt-renderer.bin";
 import wasmExecSource from "./assets/wasm_exec.txt";
 import workerSource from "./prompt-renderer-worker.txt";
 import hashes from "./assets/SHA256SUMS.txt";
+import { toolPackInstructions } from "./tool-backend";
 
 export interface LaunchContext {
+  toolBackend?: "tool-packs" | "stock-kali";
   promptFormat?: "markdown" | "pentagi-template";
   now?: string | Date;
   cwd?: string;
@@ -93,5 +95,5 @@ export async function renderLaunch(
   const result = await render({ operation: "launch", role, args, source, context });
   if (result.prompt === undefined || !result.promptDigest)
     throw new Error("Incomplete Go launch response");
-  return { prompt: result.prompt, promptDigest: result.promptDigest };
+  return { prompt: result.prompt + (context.toolBackend==="tool-packs" ? "\n# Installed tool backend\n\n"+toolPackInstructions+"\n" : ""), promptDigest: result.promptDigest };
 }
