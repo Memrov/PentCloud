@@ -11,6 +11,18 @@ import {environment,client,validateAccount,stateLedger,withGit} from './artifact
 import {cleanupPath,cleanupOwner,createCleanupJournal,saveCleanupJournal,deployProbe,withCIProbeAccess,cleanupOwnedResources} from './cleanup.mjs';
 
 let stage='environment';
+export async function waitForAccessReady({origin,headers,fetcher=fetch,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=120000,onStatus=()=>{}}){
+  const deadline=now()+timeoutMs;
+  for(;;){
+    const response=await fetcher(origin+'/v1/runs?view=all',{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});
+    onStatus(response.status);
+    if(response.status===200)return response;
+    await response.body?.cancel();
+    assert([302,303,401,403].includes(response.status),'CI_ACCESS_UNEXPECTED_STATUS');
+    assert(now()<deadline,'CI_ACCESS_READINESS_TIMEOUT');
+    await sleep(Math.min(2000,deadline-now()));
+  }
+}
 export async function waitForWorkflowProof({api,path,before,identity,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=300000}){
   const matches=value=>value?.params?.source?.type==='artifacts.repo'&&value.params.source.namespace===identity.namespace&&value.params.source.repoName===identity.repo&&value.params.payload?.ref===identity.ref&&value.params.payload.after===identity.commit&&value.trigger?.source==='event';
   const deadline=now()+timeoutMs;let own;
@@ -89,6 +101,9 @@ export async function main(){
     await installer.workerSecret(probeName,'CI_PROBE_TOKEN',secret);
     stage='access-probe';
     await withCIProbeAccess({api,journal,persist,appId:installer.state.resources.access.id,origin:installer.state.appUrl},async({headers})=>{
+      stage='access-readiness';
+      const ready=await waitForAccessReady({origin:installer.state.appUrl,headers,onStatus:status=>console.log(JSON.stringify({check:stage,status}))});
+      await ready.body?.cancel();
       for(const path of ['/v1/runs?view=all','/v1/onboarding','/v1/lifecycle']){
         stage='access-api-'+path.split('/').at(-1).split('?')[0];
         const r=await fetch(installer.state.appUrl+path,{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});

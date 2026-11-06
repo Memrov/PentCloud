@@ -78,6 +78,16 @@ test('source and image entry points never print private configuration parse fail
   }
 });
 
+test('repeated interrupted image builds retain the first candidate digest',async()=>{
+  const {pendingRecipe}=await import('./ci/image-manifest.mjs');
+  const identity='a'.repeat(64),commit='b'.repeat(40),candidateDigest='sha256:'+'c'.repeat(64);
+  const observed={status:'pending',pack:'http',sourceCommit:commit,recipeIdentity:identity,candidateDigest};
+  const retried=pendingRecipe('http',commit,identity,observed);
+  assert.equal(pendingRecipe('http',commit,identity,retried).candidateDigest,candidateDigest);
+  assert.throws(()=>pendingRecipe('http','d'.repeat(40),identity,observed));
+  assert.throws(()=>pendingRecipe('http',commit,identity,{...observed,candidateDigest:'mutable:latest'}));
+});
+
 test('private-first deployment preserves a domain already owned by an update',async t=>{
   const dir=await mkdtemp(join(tmpdir(),'pentcloud-pack-domain-'));t.after(()=>rm(dir,{recursive:true,force:true}));
   const i=new PackageInstaller({config,profile,stateDirectory:dir,root,api:{},run:async()=>Buffer.alloc(0)});

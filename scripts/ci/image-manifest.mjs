@@ -16,4 +16,15 @@ export function releaseDigest(release){
   assert(Number.isSafeInteger(release.compressedBytes)&&release.compressedBytes>0,'Build returned no bounded image size');
   return release.digest;
 }
+export function pendingRecipe(pack,sourceCommit,identity,previous){
+  const pending={status:'pending',pack,sourceCommit,recipeIdentity:identity};
+  if(previous){
+    assert(previous.status==='pending'&&previous.pack===pack&&previous.sourceCommit===sourceCommit&&previous.recipeIdentity===identity,'Pending image ownership changed');
+    if(previous.candidateDigest!==undefined){
+      assert.match(previous.candidateDigest,/^sha256:[a-f0-9]{64}$/,'Pending image digest is invalid');
+      pending.candidateDigest=previous.candidateDigest;
+    }
+  }
+  return pending;
+}
 

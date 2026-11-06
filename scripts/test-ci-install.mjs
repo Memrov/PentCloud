@@ -7,6 +7,19 @@ import {spawnSync} from 'node:child_process';
 import {withNativeTestHarness} from './lib/native-test-harness.mjs';
 
 const root=resolve(import.meta.dirname,'..');
+test('Access readiness waits for policy propagation but fails bounded persistent denial',async()=>{
+  const {waitForAccessReady}=await import('./ci/install.mjs');
+  let time=0,calls=0;const statuses=[401,403,200],headers={'CF-Access-Client-Id':'private-id','CF-Access-Client-Secret':'private-secret'};
+  const result=await waitForAccessReady({origin:'https://install.heflare.app',headers,now:()=>time,sleep:async ms=>{time+=ms;},fetcher:async(url,options)=>{
+    assert.equal(url,'https://install.heflare.app/v1/runs?view=all');assert.equal(options.redirect,'manual');assert.equal(options.headers,headers);calls++;
+    return new Response(null,{status:statuses.shift()});
+  }});
+  assert.equal(result.status,200);assert.equal(calls,3);
+  time=0;calls=0;
+  await assert.rejects(waitForAccessReady({origin:'https://install.heflare.app',headers,timeoutMs:5000,now:()=>time,sleep:async ms=>{time+=ms;},fetcher:async()=>{calls++;return new Response(null,{status:401});}}),/CI_ACCESS_READINESS_TIMEOUT/);
+  assert(calls<=4);
+  await assert.rejects(waitForAccessReady({origin:'https://install.heflare.app',headers,fetcher:async()=>new Response(null,{status:500})}),/CI_ACCESS_UNEXPECTED_STATUS/);
+});
 test('installation failures never print assertion values or provider messages',()=>{
   const privateValue='unexpected-private-operator@example.invalid';
   const child=spawnSync(process.execPath,[join(root,'scripts/ci/install.mjs')],{encoding:'utf8',env:{...process.env,GITHUB_ACTIONS:'false',PENTCLOUD_INSTALL_CONFIG:JSON.stringify({accountId:privateValue,zoneId:'b'.repeat(32),hostname:'install.heflare.app',team:'https://private-team.cloudflareaccess.com',emails:[privateValue]})}});

@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {privateProcess} from '../lib/private-process.mjs';
 import {REGCTL_VERSION,REGCTL_HASHES} from '../lib/private-image.mjs';
 import {privateJson,readJson} from '../lib/private-install.mjs';
-import {matchingLock,recipeIdentity,releaseDigest} from './image-manifest.mjs';
+import {matchingLock,recipeIdentity,releaseDigest,pendingRecipe} from './image-manifest.mjs';
 import {environment,client,validateAccount,stateLedger} from './artifacts.mjs';
 
 async function main(){
@@ -58,7 +58,7 @@ try{
     if(reference)existing=await reg(['manifest','get',reference,'--format','raw-body']);
     if(existing)assert.equal(digest(existing),imageDigest,'Existing pack manifest changed');
     else{
-      records.recipes[identity]={status:'pending',pack:pack.id,sourceCommit:pins.commit,recipeIdentity:identity};await saveImages();
+      records.recipes[identity]=pendingRecipe(pack.id,pins.commit,identity,record);await saveImages();
       console.log(JSON.stringify({stage:'build-tool-pack',pack:pack.id}));
       const build=pack.id==='recon'?[join(tools,'scripts/build-image.mjs')]:[join(tools,'scripts/build-pack.mjs'),pack.id];
       await privateProcess(process.execPath,build,{cwd:tools,env:imageEnv,timeout:3600000});
