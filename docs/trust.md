@@ -71,6 +71,15 @@ The GitHub app handles imported projects without a Snyk credential in Actions.
 Keep local CLI credentials outside the repository and review the imported
 projects before creating additional `snyk monitor` snapshots.
 
+The current GitHub import contains the root npm manifest and `go.mod`. It does
+not separately monitor the app and gateway npm workspaces. Run the CLI from the
+repository root with `--all-projects` to include those workspaces. Compare
+reported versions with `package-lock.json` and `npm ls` before triage: CLI 1.1308.4
+reported older Undici versions despite the committed overrides and installed
+patched versions. A scan of one manifest or a reduced dependency tree is not a
+substitute for checking the full workspace graph. Snyk documents
+[SCM workspace limitations](https://docs.snyk.io/supported-languages/supported-languages-list/javascript#support-for-monorepos-and-workspaces).
+
 ## Inspect dependencies and releases
 
 GitHub exposes the [dependency graph](https://github.com/Memrov/PentCloud/network/dependencies)
