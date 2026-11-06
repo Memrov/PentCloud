@@ -56,3 +56,15 @@ test('CI identity checks reject production hosts and other repositories',async()
   assert.equal(git.GIT_CONFIG_VALUE_2,'false');
   assert(!('CLOUDFLARE_API_TOKEN' in git));
 });
+
+test('image provenance changes when a binary lock or build identity changes',async()=>{
+  const {matchingLock,recipeIdentity,releaseDigest}=await import('./ci/image-manifest.mjs');
+  const lock={packId:'http',baseImage:'example@sha256:'+ 'a'.repeat(64),tools:[{sha256:'b'.repeat(64)}]};
+  matchingLock('http',lock,structuredClone(lock));
+  assert.throws(()=>matchingLock('http',lock,{...lock,tools:[{sha256:'c'.repeat(64)}]}),/SDK lock/);
+  const identity=recipeIdentity('http',lock,'d'.repeat(40),'v0.9.0');
+  assert.equal(identity,recipeIdentity('http',{tools:lock.tools,baseImage:lock.baseImage,packId:'http'},'d'.repeat(40),'v0.9.0'));
+  assert.notEqual(identity,recipeIdentity('http',lock,'e'.repeat(40),'v0.9.0'));
+  assert.notEqual(identity,recipeIdentity('http',lock,'d'.repeat(40),'v0.10.0'));
+  assert.throws(()=>releaseDigest({digest:'mutable:latest',platform:'linux/amd64',compressedBytes:100}),/immutable/);
+});

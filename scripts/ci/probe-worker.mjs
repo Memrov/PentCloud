@@ -4,14 +4,14 @@ const packs=['recon','http','nuclei','sqlmap','service','web-context','pcap','fi
 const check=(ok,message)=>{if(!ok)throw Error(message);};
 export default {
   async fetch(request,env){
-    if(!env.CI_PROBE_TOKEN||request.headers.get('Authorization')!=='Bearer '+env.CI_PROBE_TOKEN)return new Response('Not found',{status:404});
+    if(!env.CI_PROBE_TOKEN||!/^\d{13}$/.test(env.CI_PROBE_EXPIRES_AT??'')||Date.now()>=Number(env.CI_PROBE_EXPIRES_AT)||request.headers.get('Authorization')!=='Bearer '+env.CI_PROBE_TOKEN)return new Response('Not found',{status:404});
     const input=await request.json();
     try{
       if(input.action==='artifacts'){
         check(/^[A-Za-z0-9._-]+$/.test(input.repo)&&/^[a-f0-9]{40}$/.test(input.commit),'Invalid evidence identity');
         using repo=await env.ARTIFACTS.get(input.repo);
-        const bytes=await repo.readFile({ref:input.commit,path:'evidence.txt'});
-        check(new TextDecoder().decode(bytes)===input.expected,'Native Artifacts binding read mismatch');
+        const file=await repo.readFile({ref:input.commit,path:'evidence.txt'});
+        check(file&&await file.text()===input.expected,'Native Artifacts binding read mismatch');
         return Response.json({artifacts:'passed'});
       }
       if(input.action==='loader'){

@@ -55,7 +55,14 @@ jobs:
         run: npm ci
       - name: Verify package installation guards
         working-directory: ${{ steps.artifacts.outputs.source }}
-        run: node --test scripts/test-package-install.mjs
+        run: node --test scripts/test-package-install.mjs scripts/test-ci-install.mjs
+      - name: Prepare archive reader for pinned pack recipes
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libarchive-tools
+          mkdir -p "$RUNNER_TEMP/pentcloud-archive-bin"
+          ln -s /usr/bin/bsdtar "$RUNNER_TEMP/pentcloud-archive-bin/tar"
+          echo "$RUNNER_TEMP/pentcloud-archive-bin" >> "$GITHUB_PATH"
       - name: Build or reuse verified tool-pack images
         working-directory: ${{ steps.artifacts.outputs.source }}
         env:
@@ -69,5 +76,11 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PENTCLOUD_INSTALL_CONFIG: ${{ secrets.PENTCLOUD_INSTALL_CONFIG }}
         run: node scripts/ci/install.mjs
+      - name: Reconcile task-owned temporary resources
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PENTCLOUD_INSTALL_CONFIG: ${{ secrets.PENTCLOUD_INSTALL_CONFIG }}
+        run: node scripts/ci/cleanup.mjs
       # Deliberately no account-log, trace, auth-cache or installation-state upload.
 

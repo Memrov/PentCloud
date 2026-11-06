@@ -1,6 +1,6 @@
 # Native tool packs
 
-This optional private Worker connects the PentCloud scanner roles to the bounded `@memrov2/pentcloud-*` SDKs. Browser Run and Computer retain their existing roles. An installation without `TOOL_PACKS` continues to use its existing Kali gateway.
+This private Worker connects the PentCloud scanner roles to the bounded `@memrov2/pentcloud-*` SDKs. Browser Run and Computer retain their existing roles. The package-only installation profile binds `TOOL_PACKS` and omits the Kali gateway entirely. Existing legacy installations without `TOOL_PACKS` retain their pinned Kali gateway.
 
 Build the pinned pack images with [PentCloud-tools](https://github.com/Memrov/PentCloud-tools), then provide their immutable image references in a private deployment configuration. The checked-in Wrangler file intentionally contains no account, registry or image references. Exported SDK classes own native Cloudflare Container lifecycle; the gateway uses service-binding RPC and has no public execution endpoint.
 
@@ -14,4 +14,4 @@ Keep the existing bindings and secrets. Backend selection is pinned when an atte
 
 Completed calls replay their durable receipts. Uncertain dispatches block automatic repeat scans. File inputs come from guarded repository or per-attempt scratch paths. Binary inputs can be generated with Cloudflare Computer’s native JavaScript filesystem in scratch; exact scratch input bytes are copied into existing immutable evidence before execution. Inputs have a combined two MiB limit. Full results use the existing immutable Git evidence checkpoints; large results are split into bounded files, with repository paths in the `result.json` concatenation manifest. The model receives a smaller preview. Existing per-attempt evidence limits still apply and incomplete collection is disclosed.
 
-SDK prereleases are explicitly pinned for development validation. Changing a dependency or image requires the SDK checks, application checks and native end-to-end validation before a production rollout. Public CI runs synthetic checks and receives no target or Cloudflare credentials.
+SDK prereleases are explicitly pinned for development validation. Changing a dependency or image requires the SDK checks, application checks and native end-to-end validation before a production rollout. Ordinary pull-request CI runs synthetic checks without deployment credentials; the dedicated [installation workflow](../../docs/installation-ci.md) uses a private GitHub environment scoped to the separate test account/domain.

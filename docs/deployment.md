@@ -54,10 +54,13 @@ image; the gateway example deliberately omits a Container image. Use the
 installer-generated production configurations in your private state directory.
 Never deploy the examples unchanged or copy another installation's identity.
 
-For CI, choose one native Workers Builds source per Worker, with your own
-private source/credentials and preserved generated config. This public repo has
-no deployment credentials, creator-account bindings or automatic deployment
-workflow. Installation uses the guided CLI; no one-click deploy button is available.
+The dedicated [installation CI](installation-ci.md) imports source into native
+Artifacts and tests a package-only installation in the separate testing account.
+Its credentials/settings are private GitHub environment secrets, and its
+ownership state remains in Artifacts. It installs the eleven tool packages
+without a Kali gateway. Ordinary pull-request CI receives no deployment secrets.
+The guided CLI above describes the retained legacy installation profile; no
+public one-click deploy button is available yet.
 
 For development, create a separately named installation with its own Access
 application/audience, app and gateway Workers, Durable Objects, Artifacts

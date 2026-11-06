@@ -1,20 +1,48 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import {mkdir,readFile,writeFile,appendFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,appendFile,rm} from 'node:fs/promises';
 import {join,resolve,dirname} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {randomBytes} from 'node:crypto';
 import {PackageInstaller,PACK_CLASSES} from '../lib/package-install.mjs';
 import {privateJson,withStateLock,readJson} from '../lib/private-install.mjs';
 import {privateProcess} from '../lib/private-process.mjs';
-import {withQAAccess} from '../browser-run-qa.mjs';
-import {environment,client,validateAccount,stateLedger,checkpointLedger,withGit} from './artifacts.mjs';
+import {environment,client,validateAccount,stateLedger,withGit} from './artifacts.mjs';
+import {cleanupPath,cleanupOwner,createCleanupJournal,saveCleanupJournal,deployProbe,withCIProbeAccess,cleanupOwnedResources} from './cleanup.mjs';
 
-async function main(){
+let stage='environment';
+export async function waitForWorkflowProof({api,path,before,identity,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=300000}){
+  const matches=value=>value?.params?.source?.type==='artifacts.repo'&&value.params.source.namespace===identity.namespace&&value.params.source.repoName===identity.repo&&value.params.payload?.ref===identity.ref&&value.params.payload.after===identity.commit&&value.trigger?.source==='event';
+  const deadline=now()+timeoutMs;let own;
+  for(;;){
+    if(!own){
+      const rows=await api.request(path+'?per_page=100&direction=desc');
+      assert(Array.isArray(rows),'CI_WORKFLOW_LIST_INVALID');
+      for(const row of rows){
+        if(before.has(row.id)||row.trigger_source!=='event')continue;
+        const candidate=await api.request(path+'/'+encodeURIComponent(row.id)+'?simple=true');
+        if(matches(candidate)){own=row.id;break;}
+      }
+    }
+    if(own){
+      // Only the matching synthetic event's step metadata is inspected. Never log responses.
+      const result=await api.request(path+'/'+encodeURIComponent(own)+'?simple=false');
+      assert(matches(result),'CI_WORKFLOW_IDENTITY_CHANGED');
+      assert(!['errored','terminated'].includes(result.status),'CI_WORKFLOW_EXECUTION_FAILED');
+      if(result.status==='complete'){
+        assert(Array.isArray(result.steps)&&result.steps.some(step=>step.type==='step'&&step.name==='validate committed result'&&step.success===true),'CI_WORKFLOW_STEP_MISSING');
+        return {kind:'wiring',instanceId:own};
+      }
+    }
+    assert(now()<deadline,'CI_WORKFLOW_PROOF_TIMEOUT');await sleep(5000);
+  }
+}
+export async function main(){
   const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..'),e=environment(),api=client(e);
+  stage='account';
   await validateAccount(api,e);
   const directory=join(process.env.RUNNER_TEMP,'pentcloud-install-state'),ledger=join(process.env.RUNNER_TEMP,'pentcloud-install-ledger');
-  const checkpoint=await stateLedger(api,e,ledger,directory);
+  stage='state';const checkpoint=await stateLedger(api,e,ledger,directory);
   await checkpoint();
   const config={schemaVersion:1,accountId:e.accountId,instance:'pentcloud-ci',accessTeamDomain:e.team,allowedEmails:e.emails};
   const images=JSON.parse(await readFile(join(process.env.RUNNER_TEMP,'pentcloud-pack-images.json'),'utf8'));
@@ -27,7 +55,8 @@ async function main(){
     }
     return privateProcess(kind,args,{cwd:root,...options});
   };
-  const installer=new PackageInstaller({config,profile:{domain:{zoneId:e.zoneId,hostname:e.hostname},images},stateDirectory:directory,root,api,run,checkpoint,log:r=>console.log(JSON.stringify({stage:r.stage,status:r.status}))});
+  const installer=new PackageInstaller({config,profile:{domain:{zoneId:e.zoneId,hostname:e.hostname},images},stateDirectory:directory,root,api,run,checkpoint});
+  stage='installation';
   await withStateLock(directory,async()=>{
     const previous=await readJson(join(directory,'manifest.json'),null);
     await installer.install({upgrade:!!previous,verify:false});
@@ -35,7 +64,9 @@ async function main(){
   console.log('Package-only installation provisioned; verifying native services.');
   const base='/accounts/'+e.accountId,id='ci-'+process.env.GITHUB_RUN_ID+'-'+process.env.GITHUB_RUN_ATTEMPT;
   assert.match(id,/^ci-[0-9]+-[0-9]+$/);
-  const probeName='pentcloud-'+id+'-probe',probeConfig=join(process.env.RUNNER_TEMP,'pentcloud-probe.json'),secret=randomBytes(32).toString('base64url');
+  stage='probe-prepare';
+  const journalPath=cleanupPath(),journal=await createCleanupJournal(journalPath,cleanupOwner(e.accountId)),persist=()=>saveCleanupJournal(journalPath,journal);
+  const probeName=journal.probe.name,probeConfig=join(process.env.RUNNER_TEMP,'pentcloud-probe.json'),secret=randomBytes(32).toString('base64url');
   const workerDomain=await api.request(base+'/workers/subdomain');
   const probeOrigin='https://'+probeName+'.'+workerDomain.subdomain+'.workers.dev';
   await privateJson(probeConfig,{
@@ -44,22 +75,20 @@ async function main(){
     browser:{binding:'BROWSER'},ai:{binding:'AI'},worker_loaders:[{binding:'LOADER'}],
     artifacts:[{binding:'ARTIFACTS',namespace:installer.names.namespace}],
     services:[{binding:'TOOL_PACKS',service:installer.names.gateway,entrypoint:'ToolPackGateway'}],
-    vars:{APP_ORIGIN:installer.state.appUrl},
+    vars:{APP_ORIGIN:installer.state.appUrl,CI_PROBE_EXPIRES_AT:String(Date.now()+60*60*1000)},
   });
-  const proof={checks:[],secretValues:[]};
-  const request=(method,path,body)=>api.request(path,{method,body});
-  let deployed=false;
+  const proof={checks:[]};
   const probe=async body=>{
     const response=await fetch(probeOrigin,{method:'POST',headers:{Authorization:'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'manual',signal:AbortSignal.timeout(300000)});
     assert.equal(response.status,200,'Native service probe failed: '+body.action+(body.pack?' '+body.pack:''));
     const result=await response.json();assert(!result.error,'Native probe reported failure');return result;
   };
   try{
-    const scripts=await api.list(base+'/workers/scripts');
-    assert(!scripts.some(s=>s.id===probeName),'Probe name is already in use');
-    await run('wrangler',['deploy','--config',probeConfig]);deployed=true;
+    stage='probe-deploy';
+    await deployProbe({api,journal,persist,deploy:()=>run('wrangler',['deploy','--config',probeConfig])});
     await installer.workerSecret(probeName,'CI_PROBE_TOKEN',secret);
-    await withQAAccess({api:request,accountId:e.accountId,origin:installer.state.appUrl,proof},async({headers})=>{
+    stage='access-probe';
+    await withCIProbeAccess({api,journal,persist,appId:installer.state.resources.access.id,origin:installer.state.appUrl},async({headers})=>{
       for(const path of ['/v1/runs?view=all','/v1/onboarding','/v1/lifecycle']){
         const r=await fetch(installer.state.appUrl+path,{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});
         assert.equal(r.status,200,'Authenticated application check failed');
@@ -70,50 +99,42 @@ async function main(){
       for(const action of ['loader','markdown']){await probe({action});proof.checks.push(action);}
       await probe({action:'browser',headers});proof.checks.push('Browser Run protected application');
     });
-    assert(Object.values(proof.cleanup).every(x=>x==='removed'),'Temporary Access resources remain');
+    assert(journal.access.policyRemoved&&journal.access.tokenRemoved,'CI_ACCESS_CLEANUP_PENDING');
+    stage='artifacts-proof';
     const workflowPath=base+'/workflows/'+installer.names.workflow+'/instances';
     const before=new Set((await api.request(workflowPath+'?per_page=100&direction=desc')).map(x=>x.id));
     const evidenceBase=base+'/artifacts/namespaces/'+installer.names.namespace,repo=id,gitDir=join(process.env.RUNNER_TEMP,'pentcloud-evidence'),marker='PentCloud installation proof '+e.sha;
     await api.request(evidenceBase+'/repos',{method:'POST',body:{name:repo,description:'Synthetic installation CI evidence'}});
     await mkdir(gitDir,{recursive:true,mode:0o700});
     const commit=await withGit(api,evidenceBase,repo,'write',async(git,remote)=>{
-      await git(['init','--initial-branch=ci-proof',gitDir]);
+      await git(['init','--initial-branch=attempts/'+id,gitDir]);
       await writeFile(join(gitDir,'evidence.txt'),marker,{mode:0o600});
       await git(['-C',gitDir,'add','evidence.txt']);
       await git(['-C',gitDir,'-c','user.name=PentCloud CI','-c','user.email=actions@users.noreply.github.com','commit','-m','Synthetic installation evidence']);
-      await git(['-C',gitDir,'push',remote,'HEAD:refs/heads/ci-proof']);
+      await git(['-C',gitDir,'push',remote,'HEAD:refs/heads/attempts/'+id]);
       return (await git(['-C',gitDir,'rev-parse','HEAD'])).toString().trim();
     });
     await probe({action:'artifacts',repo,commit,expected:marker});proof.checks.push('Artifacts Git write and native binding read');
-    const deadline=Date.now()+300000;
-    while(true){
-      const rows=await api.request(workflowPath+'?per_page=100&direction=desc');
-      const triggered=rows.filter(x=>!before.has(x.id)&&x.trigger_source==='event');
-      assert(!triggered.some(x=>x.status==='errored'),'Artifacts result Workflow failed');
-      if(triggered.some(x=>x.status==='complete'))break;
-      assert(Date.now()<deadline,'Artifacts push did not complete an event-triggered Workflow');
-      await new Promise(r=>setTimeout(r,5000));
-    }
-    proof.checks.push('Artifacts push to result Workflow');
+    stage='workflow-wiring';
+    await waitForWorkflowProof({api,path:workflowPath,before,identity:{namespace:installer.names.namespace,repo,ref:'refs/heads/attempts/'+id,commit}});
+    proof.checks.push('Artifacts push to Workflow wiring: exact synthetic commit reached validate committed result; unknown job ignored (not result acceptance)');
+    stage='tool-packs';
     for(const pack of Object.keys(PACK_CLASSES)){
       await probe({action:'pack',pack,id});
       proof.checks.push('tool-pack '+pack);
       console.log('Verified and retired tool-pack '+pack+'.');
     }
-    await installer.doctor({authenticate:false});
-    const summary=['## Package-only installation test','',...proof.checks.map(x=>'- Passed: '+x),'','Kali installed: no. Model calls: zero. One bounded HTTP package request used the dedicated test hostname.','Cloudflare account logs, login/session data, provider bodies and private installation state are not uploaded.'].join('\n');
-    await appendFile(process.env.GITHUB_STEP_SUMMARY,summary+'\n');
-    console.log('Native Artifacts installation checks passed.');
+    stage='doctor';await installer.doctor({authenticate:false});
   }finally{
-    if(deployed){
-      await api.request(base+'/workers/scripts/'+probeName,{method:'DELETE',missing:true});
-      assert(!(await api.list(base+'/workers/scripts')).some(s=>s.id===probeName),'Disposable probe remains deployed');
-    }
+    const failedStage=stage;stage='cleanup';
+    await cleanupOwnedResources({api,journal,persist});await rm(journalPath);stage=failedStage;
   }
+  const summary=['## Package-only installation test','',...proof.checks.map(x=>'- Passed: '+x),'','Kali installed: no. Model calls: zero. One bounded HTTP package request used the dedicated test hostname.','Cloudflare account logs, login/session data, provider bodies and private installation state are not uploaded.'].join('\n');
+  stage='summary';await appendFile(process.env.GITHUB_STEP_SUMMARY,summary+'\n');
+  console.log('Native Artifacts installation checks and temporary-resource cleanup passed.');
 }
-main().catch(error=>{
-  // Provider bodies and account identities are deliberately not emitted.
-  const message=String(error.message??'').replace(/[a-f0-9]{32}/g,'[redacted-id]').replace(/https?:\/\/[^\s]+/g,'[redacted-url]');
-  console.error('Installation test failed: '+message);process.exitCode=1;
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)await main().catch(()=>{
+  // Never serialize errors: assertion diffs and provider messages can contain identities or credentials.
+  console.error(JSON.stringify({stage,error:'CI_INSTALL_FAILED'}));process.exitCode=1;
 });
 
