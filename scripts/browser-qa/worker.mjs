@@ -76,6 +76,10 @@ export async function reviewUI(env,input) {
         catch(error){item.result='failed';item.errorType=error.name;item.reason=String(error.message).split('\n')[0].slice(0,160);try{await capture(name+'-failed');}catch{}}
         item.finishedAt=new Date().toISOString();result.cases.push(item);return item.result;
       };
+      const withinViewport=async(locator,label)=>{
+        const box=await locator.boundingBox();
+        check(box&&box.x>=0&&box.x+box.width<=viewport.width+1,`${label} exceeds the viewport`);
+      };
       const go=async(path,selector)=>{
         const response=await page.goto(input.origin+path,{waitUntil:'domcontentloaded'});
         check(response?.ok(),'Application navigation HTTP failure');
@@ -121,7 +125,12 @@ export async function reviewUI(env,input) {
         await page.getByRole('tab',{name:'Findings',exact:true}).click();
         await page.locator('.findings-workspace[aria-busy="false"]').waitFor();await capture('findings');
         const select=page.getByRole('combobox',{name:'Target',exact:true});
-        if(await select.count()){await select.click();await capture('findings-target-menu');await page.keyboard.press('Escape');}
+        if(await select.count()){
+          await withinViewport(select,'Target selector');await select.click();await capture('findings-target-menu');
+          check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Target menu widens the page');
+          check(await page.getByRole('option').evaluateAll(options=>options.every(e=>e.scrollWidth<=e.clientWidth+1)),'Target options are clipped horizontally');
+          await page.keyboard.press('Escape');
+        }
       });
       await test('report',async()=>{
         const report=page.getByRole('button',{name:/^(Full report|Assessment files)$/});
@@ -134,7 +143,10 @@ export async function reviewUI(env,input) {
           result.reportOptions??=[];result.reportOptions.push({viewport:viewport.width,options});
           await page.keyboard.press('Escape');
         }
-        if(await page.locator('.assessment-document').count())await capture('report-document');
+        if(await page.locator('.assessment-document').count()){
+          await capture('report-document');await withinViewport(page.locator('.assessment-document'),'Report document');
+          check(await page.locator('.assessment-document').evaluate(e=>e.scrollWidth<=e.clientWidth+1),'Report content is clipped horizontally');
+        }
         else if(!result.unverified.includes('Report document body: no canonical document selected'))result.unverified.push('Report document body: no canonical document selected');
         await page.getByRole('button',{name:'Close report',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
       });

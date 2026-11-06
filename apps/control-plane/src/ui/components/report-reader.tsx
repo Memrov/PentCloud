@@ -45,9 +45,9 @@ function ReportReader({runId,reporter,verifiedFile,open,onOpenChange}:{runId:str
  return <LayerDialog.Root open={open} onOpenChange={onOpenChange}><LayerDialog.Content size="xl" closeLabel="Close report">
   <LayerDialog.Title>{canonical?"Security assessment report":"Assessment files"}</LayerDialog.Title>
   <LayerDialog.Description>Accepted files and separate reviewer notes. Review sensitive evidence before sharing.</LayerDialog.Description>
-  <LayerDialog.Body><div className="report-reader grid min-w-0 gap-4 text-base">
+  <LayerDialog.Body><div className="report-reader grid min-w-0 grid-cols-1 gap-4 text-base">
   {!loading&&!canonical&&<Banner variant="secondary" title="Legacy assessment" description="This assessment has no canonical report index. Choose a file below; evidence files and repository documentation may also appear."/>}
-  <div className="report-reader-controls">{files.length>0&&!canonical&&<Select label="Assessment file" placeholder="Choose the assessment document" value={selected} onValueChange={value=>setSelected(String(value??''))}>{files.map(f=><Select.Option key={f.path} value={f.path}>{f.path}</Select.Option>)}</Select>}
+  <div className="report-reader-controls">{files.length>0&&!canonical&&<Select className="w-full min-w-0 max-w-full" label="Assessment file" placeholder="Choose the assessment document" value={selected} onValueChange={value=>setSelected(String(value??''))}>{files.map(f=><Select.Option className="[overflow-wrap:anywhere]" key={f.path} value={f.path}>{f.path}</Select.Option>)}</Select>}
    <div className="report-reader-actions">{file&&body!==undefined&&<><LinkButton variant="secondary" className="material-download" href={materialFileURL(runId,file)} download={file.name}><DownloadSimpleIcon size={16}/>Markdown</LinkButton><Button variant="secondary" icon={<PrinterIcon size={16}/>} onClick={()=>window.print()}>Print / Save as PDF</Button></>}</div>
   </div>
   {(loading||reading)&&<div className="report-loading" role="status"><Loader size="sm"/>{loading?'Loading accepted report files…':'Opening assessment…'}</div>}
