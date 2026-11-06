@@ -47,4 +47,3 @@ jobs:
         with:
           sarif_file: scorecard.sarif
           category: openssf-scorecard
-
