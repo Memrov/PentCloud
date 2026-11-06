@@ -24,11 +24,12 @@ async function fixtureAssets(){
 }
 const cf=async(accountId,args)=>{const r=JSON.parse((await privateProcess('cf',['browser-run','devtools',...args],{env:{...process.env,CLOUDFLARE_ACCOUNT_ID:accountId},accountAuthorization:true,timeout:60_000})).toString());return r.result??r;};
 export async function main(args=process.argv.slice(2)) {
-  const {values}=parseArgs({args,options:{account:{type:'string'},origin:{type:'string'},output:{type:'string'},'run-id':{type:'string'},'target-access':{type:'boolean'},'fixture-origin':{type:'string'},probe:{type:'boolean'},help:{type:'boolean'}}});
-  if(values.help){console.log('Usage: npm run qa:ui:interactive -- --account ACCOUNT_ID --origin https://APP_HOST --output OUTSIDE_REPO [--run-id EXISTING_COMPLETED_RUN] [--probe] [--target-access --fixture-origin https://OWNED_TEST_HOST]');return;}
+  const {values}=parseArgs({args,options:{account:{type:'string'},origin:{type:'string'},output:{type:'string'},'run-id':{type:'string'},'target-access':{type:'boolean'},'ui-only':{type:'boolean'},'fixture-origin':{type:'string'},probe:{type:'boolean'},help:{type:'boolean'}}});
+  if(values.help){console.log('Usage: npm run qa:ui:interactive -- --account ACCOUNT_ID --origin https://APP_HOST --output OUTSIDE_REPO [--run-id EXISTING_COMPLETED_RUN] [--probe] [--target-access --ui-only] [--target-access --fixture-origin https://OWNED_TEST_HOST]');return;}
   const accountId=values.account??process.env.CLOUDFLARE_ACCOUNT_ID;assert.match(accountId??'',/^[a-f0-9]{32}$/);
   const origin=qaOrigin(values.origin??'');
-  const fixtureOrigin=values['fixture-origin']?qaOrigin(values['fixture-origin']):undefined;
+  if(values['ui-only'])assert(values['target-access'],'--ui-only requires --target-access');
+  const fixtureOrigin=values['fixture-origin']?qaOrigin(values['fixture-origin']):values['ui-only']?'https://target.invalid':undefined;
   if(values['target-access'])assert(fixtureOrigin,'Target access QA requires --fixture-origin for a task-owned synthetic target');assert(values.output,'Select --output outside the repository');
   if(values['run-id'])assert.match(values['run-id'],/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/);
   const directory=resolve(values.output);await mkdir(directory,{recursive:true,mode:0o700});
@@ -66,20 +67,20 @@ export async function main(args=process.argv.slice(2)) {
           proof.workerDeployed=true;await save();
           controller.signal.throwIfAborted();
           let ready=false;
-          for(let attempt=0;attempt<20;attempt++){
+          for(let attempt=0;attempt<60;attempt++){
             controller.signal.throwIfAborted();
             const health=await fetch(qaOriginURL+'/health',{headers,redirect:'manual',signal:AbortSignal.timeout(10_000)});
             if(health.ok){const value=await health.json();if(value.ready&&value.taskId===taskId){ready=true;break;}}
             proof.healthStatus=health.status;
-            await new Promise(resolve=>setTimeout(resolve,1000));
+            await new Promise(resolve=>setTimeout(resolve,2000));
           }
           assert(ready,`QA Worker not ready after deployment (HTTP ${proof.healthStatus})`);
           const anonymous=await fetch(qaOriginURL+'/health',{redirect:'manual',signal:AbortSignal.timeout(10_000)});
           assert(!anonymous.ok,'QA Worker accepted an unauthenticated request');proof.anonymousAccessDenied=true;
-          const response=await fetch(qaOriginURL+'/run',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({origin,headers,runId:values['run-id'],probe:values.probe,...(values['target-access']?{targetAccess:true,fixtureOrigin,assets:await fixtureAssets()}:{} )}),redirect:'manual',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(480_000)])});
+          const response=await fetch(qaOriginURL+'/run',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({origin,headers,runId:values['run-id'],probe:values.probe,...(values['target-access']?{targetAccess:true,uiOnly:values['ui-only']===true,fixtureOrigin,assets:await fixtureAssets()}:{} )}),redirect:'manual',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(480_000)])});
           assert(response.ok,`Native QA invocation HTTP ${response.status}`);
           const evidence=await response.json();assert.equal(evidence.sessionId,ownedId,'QA session provenance mismatch');
-          for(const capture of evidence.captures??[]){assert.match(capture.screenshot,/^[a-z-]+-\d+\.png$/);await writeFile(resolve(directory,capture.screenshot),Buffer.from(capture.png,'base64'),{mode:0o600});delete capture.png;}
+          for(const capture of evidence.captures??[]){assert.match(capture.screenshot,/^[a-z-]+-\d+\.(?:png|jpg)$/);await writeFile(resolve(directory,capture.screenshot),Buffer.from(capture.png,'base64'),{mode:0o600});delete capture.png;}
           for(const trace of evidence.traces??[]){assert.match(trace.name,/^actions-\d+\.zip$/);const clean=await privateProcess('python3',[resolve(root,'scripts/lib/sanitize-qa-trace.py')],{input:JSON.stringify({zip:trace.zip,secrets}),timeout:60_000});await writeFile(resolve(directory,trace.name),clean,{mode:0o600});delete trace.zip;}
           Object.assign(proof,evidence);
         }finally{

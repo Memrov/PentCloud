@@ -31,7 +31,7 @@ export function ProgramPicker({disabled,onPick,perform,targetURL=""}:{disabled:b
    {info&&<>
     <ExternalLink href={info.program.url}>Review {info.program.name} rules</ExternalLink>
     <Select label="Website or API" placeholder={targetURL?"Keep the current target address":"Choose a target"} value={asset||null} disabled={disabled} onValueChange={v=>setAsset(String(v??""))}>{info.assets.map((a,i)=><Select.Option key={i} value={a.value}>{a.value}</Select.Option>)}</Select>
-    {(asset.includes("*")||!info.assets.length)&&<Input label="Concrete target address" placeholder="https://app.example.com" value={concrete} onValueChange={setConcrete} disabled={disabled}/>}
+    {(asset.includes("*")||!info.assets.length)&&<Input label="Concrete target address" placeholder="Enter the full target address" value={concrete} onValueChange={setConcrete} disabled={disabled}/>}
     <Button type="button" variant="secondary" disabled={disabled||!(value||(!info.assets.length&&concrete)||targetURL)} onClick={()=>void perform(async()=>{const raw=value||concrete||targetURL;await onPick(info.program.id,/^https?:\/\//i.test(raw)?raw:"https://"+raw);})}>Use selected program</Button>
    </>}
   </>}
@@ -44,7 +44,7 @@ export function TargetAccessEditor({target,disabled,perform,onChanged}:{target:S
  const prior=target.access;
  const [names,setNames]=useState<Awaited<ReturnType<typeof targetSecretBindings>>>(),[checks,setChecks]=useState<Partial<Record<SecretKind,string>>>({}),[checking,setChecking]=useState<Partial<Record<SecretKind,boolean>>>({});
  useEffect(()=>{let active=true;void targetSecretBindings(target.id).then(value=>{if(active)setNames(value);});return()=>{active=false;};},[target.id]);
- const [headers,setHeaders]=useState(!!prior?.headerBinding),[login,setLogin]=useState(!!prior?.login),[loginURL,setLoginURL]=useState(prior?.login?.url??new URL("login",target.url.endsWith("/")?target.url:target.url+"/").href);
+ const [headers,setHeaders]=useState(!!prior?.headerBinding),[login,setLogin]=useState(!!prior?.login),[loginURL,setLoginURL]=useState(prior?.login?.url??"");
  const [api,setAPI]=useState(!!prior?.api),[apiHeader,setAPIHeader]=useState(prior?.api?.header??"Authorization"),[apiScheme,setAPIScheme]=useState(prior?.api?.scheme??"bearer");
  const [verification,setVerification]=useState(prior?.login?.verification?.kind??"none"),[sender,setSender]=useState(prior?.login?.verification?.kind==="email"?prior.login.verification.sender:"");
  const [provider,setProvider]=useState<VerificationProvider>(prior?.login?.verification?.kind==='email'?prior.login.verification.provider??'cloudflare':'cloudflare');
@@ -57,18 +57,18 @@ export function TargetAccessEditor({target,disabled,perform,onChanged}:{target:S
   <Text>Copy the names below into Cloudflare secrets or Secrets Store bindings. Values stay in Cloudflare.</Text>
   {!refs&&<Text role="status">Loading secret references…</Text>}
   <Checkbox label="Required request headers" checked={headers} onCheckedChange={setHeaders} disabled={disabled}/>
-  {headers&&<>{row("headers","Headers")}<Collapsible><Collapsible.DefaultTrigger>Header format</Collapsible.DefaultTrigger><Collapsible.DefaultPanel><Text>Use a JSON object, for example {`{"X-Bug-Bounty":"your-researcher-name"}`}. Cookies, authorization and Cloudflare identity headers are reserved.</Text></Collapsible.DefaultPanel></Collapsible></>}
+  {headers&&<>{row("headers","Headers")}<Collapsible><Collapsible.DefaultTrigger>Header format</Collapsible.DefaultTrigger><Collapsible.DefaultPanel><Text>Enter the program’s required header names and values as a JSON object. Cookies, authorization and Cloudflare identity headers are reserved.</Text></Collapsible.DefaultPanel></Collapsible></>}
   <Checkbox label="Browser login" checked={login} onCheckedChange={setLogin} disabled={disabled}/>
-  {login&&<div className="grid gap-4"><Input label="Login page" value={loginURL} onValueChange={setLoginURL} disabled={disabled}/>{row("username","Username")}{row("password","Password")}<Text>Each run logs in fresh. Its agents share that run’s login. Check verifies availability; the agent confirms authentication.</Text>
+  {login&&<div className="grid gap-4"><Input label="Login page" type="url" required value={loginURL} onValueChange={setLoginURL} disabled={disabled} placeholder="Enter the full sign-in page address"/>{row("username","Username")}{row("password","Password")}<Text>Each run logs in fresh. Its agents share that run’s login. Check verifies availability; the agent confirms authentication.</Text>
    <Select label="Login verification" value={verification} items={{none:'None',totp:'Authenticator code',email:'Email code or link'}} onValueChange={v=>setVerification(String(v) as typeof verification)} disabled={disabled}/>
    {verification==="totp"&&<>{row("totp","Authenticator seed")}<Text>Store the test account’s Base32 seed or otpauth URI. The agent reads the short-lived code; the seed stays in Cloudflare.</Text></>}
    {verification==="email"&&<div className="grid gap-3"><Select label="Email receiver" value={provider} items={{cloudflare:'Cloudflare Email Routing',agentmail:'AgentMail'}} onValueChange={v=>setProvider(v as VerificationProvider)} disabled={disabled}/>
-    <Input label="Verification sender address or domain" placeholder="no-reply@example.com" value={sender} onValueChange={setSender} disabled={disabled}/>
+    <Input label="Verification sender address or domain" placeholder="Enter the sender address or domain" value={sender} onValueChange={setSender} disabled={disabled}/>
     <Text>Save these settings, then set up and check forwarding in Bug bounty.</Text><div><LinkButton variant="secondary" href={'/dashboard?view=bounty&target='+encodeURIComponent(target.id)}>Set up email forwarding</LinkButton></div>
    </div>}
   </div>}
   {target.kind==="api"&&<><Checkbox label="API authentication" checked={api} onCheckedChange={setAPI} disabled={disabled}/>{api&&<div className="grid gap-3">{row("api","API key")}<Select label="API credential format" value={apiScheme} items={{bearer:'Bearer token',header:'API key header'}} disabled={disabled} onValueChange={v=>{setAPIScheme(v as "bearer"|"header");if(v==="bearer")setAPIHeader("Authorization");}}/>{apiScheme==="header"&&<Input label="API authorization header" value={apiHeader} onValueChange={setAPIHeader} disabled={disabled}/>}<Text>Test authentication with the protected API check during run setup.</Text></div>}</>}
   <Banner variant="secondary" description={<Text>Browser and managed HTTP controls apply to this target. Kali has direct Internet access; scope is not enforced there.</Text>}/>
-  <div><Button type="button" variant="secondary" disabled={disabled||!refs} onClick={()=>void save()}>Save target settings</Button></div>
+  <div><Button type="button" variant="secondary" disabled={disabled||!refs||login&&(!loginURL.trim()||verification==="email"&&!sender.trim())} onClick={()=>void save()}>Save target settings</Button></div>
  </div></Collapsible.DefaultPanel></Collapsible>;
 }

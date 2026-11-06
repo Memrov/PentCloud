@@ -28,6 +28,14 @@ describe("hosted UI privacy", () => {
     expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
     expect(response.headers.get("ETag")).toBe("build-one"); expect(await response.text()).toBe("<html>UI</html>");
   });
+  it("prevents edge script injection without changing private cache directives or API responses", () => {
+    const html = hostedUIResponse(new Response("<html>UI</html>", {headers:{"Content-Type":"text/html","Cache-Control":"private, no-store"}}),"https://app.invalid/");
+    expect(html.headers.get("Cache-Control")).toBe("private, no-store, no-transform");
+    const again = hostedUIResponse(html,"https://app.invalid/");
+    expect(again.headers.get("Cache-Control")).toBe("private, no-store, no-transform");
+    const data = hostedUIResponse(Response.json({ok:true},{headers:{"Cache-Control":"private, no-store"}}),"https://app.invalid/v1/ui/runs");
+    expect(data.headers.get("Cache-Control")).toBe("private, no-store");
+  });
 });
 
 describe("target HTTP identity boundary", () => {

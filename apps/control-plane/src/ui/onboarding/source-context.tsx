@@ -55,7 +55,7 @@ export function SourceContextEditor({target,pending=[],disabled,perform,onChange
             <Button variant="secondary" disabled={disabled} onClick={()=>void load()}>{repos?cursor?"Load more repositories":"Reload repositories":"Load existing repositories"}</Button>
             {!!repos?.length&&<Select label="Artifacts repository" placeholder="Choose a repository" value={repo} disabled={disabled} onValueChange={value=>{const name=String(value??"");setRepo(name);setBranch(repos.find(r=>r.name===name)?.defaultBranch??"");}}>{repos.map(r=><Select.Option key={r.name} value={r.name}>{r.name}</Select.Option>)}</Select>}
             {repos?.length===0&&<p>No Artifacts repositories are available in this installation.</p>}
-          </>:<Input label="Public GitHub repository URL" value={url} onValueChange={setURL} disabled={disabled} placeholder="https://github.com/owner/repository"/>}
+          </>:<Input label="Public GitHub repository URL" value={url} onValueChange={setURL} disabled={disabled} placeholder="Paste the repository URL"/>}
           <Input label="Source branch" value={branch} onValueChange={setBranch} disabled={disabled} placeholder="Repository default"/>
           <Button variant="secondary" disabled={disabled||(mode==="artifacts"?!repo:!url.trim())} onClick={()=>void(mode==="artifacts"?update("attach",{repo,branch}):importRepo())}>{mode==="artifacts"?"Attach source":"Import source"}</Button>
           <Text variant="secondary">For private GitHub source, use your terminal to copy it into Artifacts, then select it here. A Workers & Pages GitHub connection does not itself grant PentCloud source access.</Text>

@@ -220,7 +220,7 @@ export default function Settings({embedded=false}:{embedded?:boolean}={}) {
               />
 
               <footer className="settings-detail-footer">
-                <div><strong>{dirty ? "Unsaved draft" : "All changes saved"}</strong><small>Last saved by {snapshot.settings.savedBy} · {formatSavedAt(snapshot.settings.savedAt)}</small></div>
+                <div><strong>{dirty ? "Unsaved draft" : "All changes saved"}</strong><small>Last saved {formatSavedAt(snapshot.settings.savedAt)}</small></div>
                 <div>
                   <Button variant="secondary" disabled={saving || !dirty} onClick={() => { setDraft(cloneRoles(snapshot.settings.roles)); setNotice(undefined); }}>Discard draft</Button>
                   <Button variant="primary" disabled={disabled || !dirty} onClick={() => void save()}>{saving ? "Validating…" : "Validate and save"}</Button>

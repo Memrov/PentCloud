@@ -93,9 +93,10 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first se
       }
       await browserExpect(page.getByRole("heading",{name:"OpenCode models",exact:true})).toBeVisible();
       const progress=page.getByRole("region",{name:"Discovery progress",exact:true});
-      await browserExpect(progress.getByText("Waiting for the shared scanner",{exact:true})).toBeVisible();
+      await browserExpect(progress.getByText("Waiting for discovery to start",{exact:true})).toBeVisible();
       await browserExpect(progress.getByLabel("Discovery in progress",{exact:true})).toBeVisible();
       await browserExpect(page.getByLabel("Default model",{exact:true})).toBeEnabled();
+      await browserExpect(page.getByRole("combobox",{name:"Default model",exact:true})).toHaveText("Choose an OpenCode model");
       expect(requests.filter(r=>r.path==="/v1/ui/runs"&&r.value).length).toBe(1);
       expect(requests.find(r=>r.path==="/v1/ui/runs"&&r.value)?.value).toMatchObject({target_id:target.id,target_revision:1,authorized:true});
       expect(requests.some(r=>r.path.endsWith("/model.test"))).toBe(false);
@@ -104,6 +105,8 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first se
       await browserExpect(page.getByRole("button",{name:"Save new key",exact:true})).toHaveCount(0);
       await page.getByText("Configure OpenCode in Cloudflare",{exact:true}).click();
       await browserExpect(page.getByRole("button",{name:"Manage Cloudflare secrets"})).toBeVisible();
+      await page.getByRole("combobox",{name:"Default model",exact:true}).click();
+      await page.getByRole("option",{name:"DeepSeek V4 Pro",exact:true}).click();
       await page.getByText("Choose models for individual agents",{exact:true}).click();
       await browserExpect(page.getByLabel("Reporter model")).toBeVisible();
       await page.getByRole("combobox",{name:"Reporter model",exact:true}).click();
@@ -112,7 +115,7 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first se
       const size=await page.getByText("Use an OpenCode Console or Go key",{exact:false}).evaluate(el=>getComputedStyle(el).fontSize);
       expect(size).toBe("14px");
       job={...job,status:"running",revision:2};publish();
-      await browserExpect(progress.getByText("Preparing the scanner and checking your target",{exact:true})).toBeVisible();
+      await browserExpect(progress.getByText("Preparing discovery and checking your target",{exact:true})).toBeVisible();
       await page.getByRole("button",{name:"Test selected models",exact:true}).click();
       await browserExpect(page.getByText("Selected OpenCode models passed the native connection test.",{exact:true})).toBeVisible();
       expect(requests.some(request=>request.path.endsWith("/model.test")&&request.value?.choice?.model==="opencode:byok/conn_fixture123/muse-spark-1.3"&&request.value.choice.credentialId==="bound-go")).toBe(true);
