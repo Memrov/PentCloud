@@ -154,6 +154,13 @@ test('OCI client selection follows the host platform and verifies its release ch
   assert.equal(regctlPlatform('linux','x64'),'linux-amd64');assert.equal(regctlPlatform('darwin','arm64'),'darwin-arm64');assert.throws(()=>regctlPlatform('win32','x64'),/supports/);
   await assert.rejects(f.prepare({fetcher:async()=>({ok:true,arrayBuffer:async()=>Buffer.from('untrusted download')})}),/checksum/i);
 });
+test('a mismatched downloaded executable cannot reach credentials, execution, or image preparation',async t=>{
+  const f=await fixture(t);
+  await assert.rejects(f.prepare({fetcher:async()=>({ok:true,arrayBuffer:async()=>Buffer.from('altered upstream executable')})}),/checksum/i);
+  assert.equal(f.calls.some(call=>call.kind==='wrangler'||basename(call.kind)==='regctl'||call.kind==='node'),false);
+  assert.equal(f.preparations.length,0);assert.equal(f.builds.length,0);
+  assert.equal((await readdir(f.directory)).some(name=>name.startsWith('package-images-')),false);
+});
 
 test('failed checkpoint stops before image build or upload',async t=>{
   const f=await fixture(t);await assert.rejects(f.prepare({checkpoint:async()=>{throw Error('checkpoint unavailable');}}),/checkpoint unavailable/);assert.equal(f.builds.length,0);assert.equal(f.preparations.length,0);

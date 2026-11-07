@@ -34,20 +34,52 @@ function safeCustomerFailure(text){
     ...(Number.isInteger(value.httpStatus)&&value.httpStatus>=100&&value.httpStatus<=599?{httpStatus:value.httpStatus}:{}),
     ...(Array.isArray(value.providerCodes)&&value.providerCodes.length<=16&&value.providerCodes.every(code=>Number.isSafeInteger(code)&&code>=0&&code<=1_000_000_000)?{providerCodes:[...value.providerCodes]}:{})};
 }
-export function captureCustomerProcess(command,args,options={}){
-  return new Promise((resolvePromise,reject)=>{
-    const child=spawn(command,args,{cwd:options.cwd,env:{...(options.env??process.env),CI:'true',CF_SEND_TELEMETRY:'false',NO_COLOR:'1'},stdio:['ignore','pipe','pipe']});
-    const stdout=[],stderr=[];let outBytes=0,errBytes=0,overflow=false;
-    const timer=setTimeout(()=>child.kill('SIGTERM'),options.timeout??105*60*1000);
-    child.stdout.on('data',chunk=>{outBytes+=chunk.length;if(outBytes<=64*1024*1024)stdout.push(chunk);else{overflow=true;child.kill('SIGTERM');}});
-    child.stderr.on('data',chunk=>{errBytes+=chunk.length;if(errBytes<=64*1024)stderr.push(chunk);else{overflow=true;child.kill('SIGTERM');}});
-    child.on('error',()=>{clearTimeout(timer);reject(Error('CI_CUSTOMER_COMMAND_FAILED'));});
-    child.on('close',code=>{
-      clearTimeout(timer);if(code===0&&!overflow)return resolvePromise(Buffer.concat(stdout));
-      const error=Error('CI_CUSTOMER_COMMAND_FAILED'),failure=!overflow&&safeCustomerFailure(Buffer.concat(stderr).toString());
-      if(failure)error.customerFailure=failure;reject(error);
-    });
-  });
+export async function captureCustomerProcess(command,args,options={}){
+  const timeout=options.timeout??105*60*1000;
+  if(!['darwin','linux'].includes(process.platform)||!Number.isSafeInteger(timeout)||timeout<=0||timeout>2147483647)throw Error('CI_CUSTOMER_COMMAND_FAILED');
+  let child;
+  try{child=spawn(command,args,{cwd:options.cwd,env:{...(options.env??process.env),CI:'true',CF_SEND_TELEMETRY:'false',NO_COLOR:'1'},detached:true,stdio:['ignore','pipe','pipe']});}
+  catch{throw Error('CI_CUSTOMER_COMMAND_FAILED');}
+  const stdout=[],stderr=[];let outBytes=0,errBytes=0,overflow=false,failed=false,spawnFailed=false,expired=false,started=0;
+  let escalation,deadline,poll,complete;
+  const closed=new Promise(resolve=>{complete=resolve;});
+  // detached:true creates an owned POSIX group whose ID is this child PID.
+  // Never signal our own CI runner's group, or infer another process's group.
+  const groupGone=()=>{
+    if(!Number.isSafeInteger(child.pid)||child.pid<=1)return spawnFailed;
+    try{process.kill(-child.pid,0);return false;}catch(error){return error.code==='ESRCH';}
+  };
+  const signalGroup=signal=>{
+    if(Number.isSafeInteger(child.pid)&&child.pid>1)try{process.kill(-child.pid,signal);}catch{/* Unknown authority remains pending below. */}
+  };
+  const stop=(signal,interrupted=false)=>{
+    failed||=interrupted;signalGroup(signal);
+    if(started)return;
+    started=Date.now();
+    escalation=setTimeout(()=>{if(!groupGone())signalGroup('SIGKILL');},1000);
+    deadline=setTimeout(()=>{expired=true;complete({code:null});},5000);
+  };
+  const onInterrupt=()=>stop('SIGINT',true),onTerminate=()=>stop('SIGTERM',true);
+  process.on('SIGINT',onInterrupt);process.on('SIGTERM',onTerminate);
+  const timer=setTimeout(()=>stop('SIGTERM',true),timeout);
+  child.stdout.on('data',chunk=>{outBytes+=chunk.length;if(outBytes<=64*1024*1024)stdout.push(chunk);else{overflow=true;stop('SIGTERM',true);}});
+  child.stderr.on('data',chunk=>{errBytes+=chunk.length;if(errBytes<=64*1024)stderr.push(chunk);else{overflow=true;stop('SIGTERM',true);}});
+  child.on('error',()=>{spawnFailed=true;failed=true;stop('SIGTERM');complete({code:null});});
+  // Descendants can keep stdio open after the leader exits. Stop them on exit,
+  // then also prove group absence after close before permitting another command.
+  child.on('exit',()=>stop('SIGTERM'));
+  child.on('close',code=>complete({code}));
+  try{
+    const {code}=await closed;stop('SIGTERM');
+    while(!groupGone()&&Date.now()-started<5000)await new Promise(resolve=>{poll=setTimeout(resolve,25);});
+    if(!groupGone())throw Error('CI_CUSTOMER_GROUP_PENDING');
+    if(code===0&&!overflow&&!failed&&!expired)return Buffer.concat(stdout);
+    const error=Error('CI_CUSTOMER_COMMAND_FAILED'),failure=!overflow&&safeCustomerFailure(Buffer.concat(stderr).toString());
+    if(failure)error.customerFailure=failure;throw error;
+  }finally{
+    clearTimeout(timer);clearTimeout(escalation);clearTimeout(deadline);clearTimeout(poll);
+    process.removeListener('SIGINT',onInterrupt);process.removeListener('SIGTERM',onTerminate);
+  }
 }
 
 export function customerCases(e,env=process.env){

@@ -3,7 +3,8 @@ import {test} from 'node:test';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawnSync,spawn} from 'node:child_process';
+import {once} from 'node:events';
 import {withNativeTestHarness} from './lib/native-test-harness.mjs';
 
 const root=resolve(import.meta.dirname,'..');
@@ -76,6 +77,57 @@ test('customer subprocess failures retain only recognized bounded diagnostic fie
   ])await assert.rejects(captureCustomerProcess(process.execPath,['-e','process.stderr.write(JSON.stringify('+JSON.stringify(diagnostic)+'));process.exitCode=1;']),error=>error.customerFailure===undefined&&!error.message.includes('PRIVATE'));
   const result=await captureCustomerProcess(process.execPath,['-e','process.stdout.write(JSON.stringify({status:"ready"}));process.stderr.write("PRIVATE_WARNING");']);
   assert.equal(result.toString(),'{"status":"ready"}');
+});
+function customerGroupFixture(path,{linger=false,ignoreTerm=false}={}){
+  return `const {spawn,spawnSync}=require('node:child_process');const {writeFileSync}=require('node:fs');
+    const child=spawn(process.execPath,['-e',${JSON.stringify((ignoreTerm?"process.on('SIGTERM',()=>{});":"")+"setInterval(()=>{},1000);")}],{stdio:'ignore'});
+    const pgid=Number(spawnSync('/bin/ps',['-o','pgid=','-p',String(process.pid)],{encoding:'utf8'}).stdout.trim());
+    writeFileSync(${JSON.stringify(path)},JSON.stringify({pid:process.pid,pgid,childPid:child.pid}));
+    ${linger?"setInterval(()=>{},1000);":"process.stdout.write('done');process.exit(0);"}`;
+}
+async function customerGroupRecord(path){
+  const deadline=Date.now()+5000;
+  while(Date.now()<deadline){try{return JSON.parse(await readFile(path,'utf8'));}catch(error){if(error.code!=='ENOENT'&&!(error instanceof SyntaxError))throw error;}await new Promise(resolve=>setTimeout(resolve,10));}
+  assert.fail('local child must start');
+}
+function preserveTestProcess(t,record){
+  t.after(()=>{for(const pid of [record.pid,record.childPid])try{process.kill(pid,'SIGKILL');}catch{}});
+}
+function customerGroupGone(pgid){try{process.kill(-pgid,0);return false;}catch(error){return error.code==='ESRCH';}}
+test('customer subprocess owns its group and removes residual children before returning', {timeout:10000},async t=>{
+  const {captureCustomerProcess}=await import('./ci/install.mjs'),directory=await mkdtemp(join(tmpdir(),'pc-capture-group-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));const path=join(directory,'processes.json');
+  const result=await captureCustomerProcess(process.execPath,['-e',customerGroupFixture(path)]),record=await customerGroupRecord(path);preserveTestProcess(t,record);
+  assert.equal(record.pgid,record.pid,'headless command must own its POSIX process group');assert.equal(result.toString(),'done');assert(customerGroupGone(record.pgid));
+});
+test('customer timeout terminates its complete group and clears parent signal handlers', {timeout:10000},async t=>{
+  const {captureCustomerProcess}=await import('./ci/install.mjs'),directory=await mkdtemp(join(tmpdir(),'pc-capture-timeout-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));const path=join(directory,'processes.json');
+  const before=[process.listenerCount('SIGINT'),process.listenerCount('SIGTERM')];
+  const command=captureCustomerProcess(process.execPath,['-e',customerGroupFixture(path,{linger:true,ignoreTerm:true})],{timeout:200});
+  const record=await customerGroupRecord(path);preserveTestProcess(t,record);
+  await assert.rejects(command,/CI_CUSTOMER_COMMAND_FAILED|CI_CUSTOMER_GROUP_PENDING/);
+  assert.equal(record.pgid,record.pid);assert(customerGroupGone(record.pgid));assert.deepEqual([process.listenerCount('SIGINT'),process.listenerCount('SIGTERM')],before);
+});
+test('parent interruption forwards only to the owned customer group and awaits shutdown', {timeout:15000},async t=>{
+  const module=new URL('./ci/install.mjs',import.meta.url).href;
+  for(const signal of ['SIGINT','SIGTERM'])await t.test(signal,async t=>{
+    const directory=await mkdtemp(join(tmpdir(),'pc-capture-signal-'));t.after(()=>rm(directory,{recursive:true,force:true}));const path=join(directory,'processes.json');
+    const script=`const {captureCustomerProcess}=await import(process.argv[1]);try{await captureCustomerProcess(process.execPath,['-e',${JSON.stringify(customerGroupFixture(path,{linger:true,ignoreTerm:true}))}]);process.exitCode=2;}catch(error){process.stdout.write(error.message);}`;
+    const supervisor=spawn(process.execPath,['--input-type=module','-e',script,module],{stdio:['ignore','pipe','ignore']});
+    t.after(()=>{if(supervisor.exitCode===null&&supervisor.signalCode===null)supervisor.kill('SIGKILL');});
+    const out=[];supervisor.stdout.on('data',bytes=>out.push(bytes));
+    const record=await customerGroupRecord(path);preserveTestProcess(t,record);const exited=once(supervisor,'exit');supervisor.kill(signal);const [code,terminated]=await exited;
+    assert.equal(record.pgid,record.pid);assert.equal(terminated,null);assert.equal(code,0);assert.match(Buffer.concat(out).toString(),/^CI_CUSTOMER_(?:COMMAND_FAILED|GROUP_PENDING)$/);assert(customerGroupGone(record.pgid));
+  });
+});
+test('unprovable customer group shutdown is bounded and fails closed', {timeout:8000},async t=>{
+  const {captureCustomerProcess}=await import('./ci/install.mjs'),original=process.kill,before=[process.listenerCount('SIGINT'),process.listenerCount('SIGTERM')];
+  const probe=t.mock.method(process,'kill',function(pid,signal){if(pid<0&&signal===0)throw Object.assign(Error('PRIVATE_PROBE'),{code:'EPERM'});return original.call(this,pid,signal);});
+  const started=Date.now();
+  try{await assert.rejects(captureCustomerProcess(process.execPath,['-e','process.stdout.write("done");']),/^Error: CI_CUSTOMER_GROUP_PENDING$/);}
+  finally{probe.mock.restore();}
+  assert(Date.now()-started<6500);assert.deepEqual([process.listenerCount('SIGINT'),process.listenerCount('SIGTERM')],before);
 });
 
 test('main cleanup uses the customer subprocess adapter independently of the native Git runner',async()=>{

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtemp,readFile,realpath,rm,stat} from 'node:fs/promises';
+import {mkdtemp,readFile,realpath,rm,stat,open} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
@@ -36,10 +36,13 @@ test('cleanup writes a private schema-2 configuration and invokes only public un
   try{
     const result=await cleanupFixtureInstallation({env:environment(directory),api:account(),output:value=>output.push(value),invoke:async(installation,command,extra=[])=>{
       calls.push({installation,command,extra});
-      assert.equal((await stat(installation.configFile)).mode&0o777,0o600);
+      const config=await open(installation.configFile,'r');
+      try{
+        assert.equal((await config.stat()).mode&0o777,0o600);
+        assert.deepEqual(JSON.parse(await config.readFile('utf8')),installation.config);
+      }finally{await config.close();}
       assert.equal((await stat(installation.stateDirectory)).mode&0o777,0o700);
       assert.equal((await stat(installation.cacheDirectory)).mode&0o777,0o700);
-      assert.deepEqual(JSON.parse(await readFile(installation.configFile,'utf8')),installation.config);
       return command==='uninstall'?{status:'removed',manifestRetained:true}:{status:'verification-resources-cleaned'};
     }});
     assert.deepEqual(calls.map(({command,extra})=>[command,...extra]),[['uninstall','--data','delete','--confirm','pc-fresh-42322110165-1'],['cleanup']]);

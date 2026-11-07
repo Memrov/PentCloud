@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdir,lstat,realpath,open,rm} from 'node:fs/promises';
+import {mkdir,lstat,realpath} from 'node:fs/promises';
 import {dirname,join,resolve,relative,isAbsolute} from 'node:path';
 import {homedir} from 'node:os';
 import {randomUUID} from 'node:crypto';
@@ -13,6 +13,7 @@ import {createDeploymentRunner} from './deployment-runner.mjs';
 import {preparePackageImages,checkPackageBuildPrerequisites} from './package-images.mjs';
 import {PackageInstaller} from './package-install.mjs';
 import {openArtifactState} from './artifact-state.mjs';
+import {withPrivateLock} from './private-lock.mjs';
 import {verifyPackageInstallation,cleanupInstallationVerification,withInstallationAccess,waitForAccessReady,VERIFICATION_STAGES,PROBE_CHECKPOINTS,sanitizeBrowserDiagnostics} from './installation-verify.mjs';
 
 export const customerHelp=`PentCloud customer installer
@@ -47,16 +48,13 @@ async function privatePath(path,root){
   assert(!within(root,path)&&!within(path,root),'PC_PRIVATE_PATH');return path;
 }
 export async function withImageCacheLock(directory,callback,owner){
-  await mkdir(directory,{recursive:true,mode:0o700});
-  const file=join(directory,'operation.lock');let lock;
-  try{lock=await open(file,'wx',0o600);}catch(e){if(e.code==='EEXIST')throw Error('PC_IMAGE_CACHE_LOCKED');throw e;}
-  try{
+  return withPrivateLock(directory,async()=>{
     if(owner){
       const path=join(directory,'installation-owner.json'),prior=await readJson(path,null);
       if(prior)assert.deepEqual(prior,owner,'PC_IMAGE_CACHE_OWNER');else await privateJson(path,owner);
     }
     return await callback();
-  }finally{await lock.close();await rm(file);}
+  },{code:'PC_IMAGE_CACHE_LOCKED'});
 }
 export function publicInstallationResult(result){
   const keys=['status','appUrl','sourceCommit','toolPacks','noKali','modelCalls','ownerVerified','manifestRetained','nextStep'];
@@ -69,7 +67,7 @@ export function installationCommand(command,prior){
 export function customerFailure(error,stage){
   const code=typeof error?.code==='string'?error.code:typeof error?.message==='string'?error.message:'';
   const browserDiagnostics=code==='PC_INSTALLATION_VERIFICATION'&&error.verificationStage==='native-browser'?sanitizeBrowserDiagnostics(error.browserDiagnostics):undefined;
-  const help={PC_NODE_VERSION:'Use Node 26.12.1 or later 26.x.',PC_DEPENDENCIES:'Run npm ci in the source checkout.',PC_GIT_REQUIRED:'Install Git and make it available in PATH.',PC_GO_REQUIRED:'Install Go 1.26.5; set GO_BIN to its executable if needed.',PC_GO_VERSION:'Use Go 1.26.5; set GO_BIN to its executable if needed.',PC_PYTHON_REQUIRED:'Install Python 3.11 or later 3.x as python3.',PC_PYTHON_VERSION:'Use Python 3.11 or later 3.x as python3.',PC_ARCHIVE_READER:'Install libarchive/bsdtar with 7z support and make it available in PATH.',PC_SOURCE_DIRTY:'Use a clean committed source checkout before installation or upgrade.',PC_IMAGE_CACHE_OWNER:'Choose a separate image cache for each installation.'}[code];
+  const help={PC_NODE_VERSION:'Use Node 26.12.1 or later 26.x.',PC_DEPENDENCIES:'Run npm ci in the source checkout.',PC_GIT_REQUIRED:'Install Git and make it available in PATH.',PC_GO_REQUIRED:'Install Go 1.26.5; set GO_BIN to its executable if needed.',PC_GO_VERSION:'Use Go 1.26.5; set GO_BIN to its executable if needed.',PC_PYTHON_REQUIRED:'Install Python 3.11 or later 3.x as python3.',PC_PYTHON_VERSION:'Use Python 3.11 or later 3.x as python3.',PC_ARCHIVE_READER:'Install libarchive/bsdtar with 7z support and make it available in PATH.',PC_SOURCE_DIRTY:'Use a clean committed source checkout before installation or upgrade.',PC_IMAGE_CACHE_OWNER:'Choose a separate image cache for each installation.',PC_LOCK_PREREQUISITE:'Use macOS or Linux with /bin/ps supporting process-group inspection.'}[code];
   return {error:/^PC_[A-Z_]{2,70}$/.test(code)?code:'PC_INSTALLATION_FAILED',stage,
     ...(Number.isInteger(error?.httpStatus)&&error.httpStatus>=400&&error.httpStatus<=599?{httpStatus:error.httpStatus}:Number.isInteger(error?.probeStatus)&&error.probeStatus>=100&&error.probeStatus<=599?{httpStatus:error.probeStatus}:{}),
     ...(code==='PC_CLOUDFLARE_API'&&Array.isArray(error.providerCodes)?{providerCodes:error.providerCodes.filter(Number.isSafeInteger)}:{}),

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile, symlink } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, hostname } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { CloudflareApi, Installer, STOCK_DIGEST, configuration, names, plan, privateJson, readJson, withStateLock } from './lib/private-install.mjs';
 import { regctlPlatform, REGCTL_HASHES } from './lib/private-image.mjs';
 
@@ -371,6 +373,91 @@ test('local operation lock prevents simultaneous manifests and is released after
   await withStateLock(directory, async () => {});
   await writeFile(join(directory, 'unrelated.txt'), 'preserve');
   await assert.rejects(withStateLock(directory, async () => assert.fail()), /unrelated files/);
+});
+async function stoppedLockOwner(t,directory,signal='SIGTERM'){
+  const module=new URL('./lib/private-install.mjs',import.meta.url).href;
+  const script="const {withStateLock}=await import(process.argv[1]);await withStateLock(process.argv[2],async()=>{process.stdout.write('entered');setInterval(()=>{},1000);await new Promise(()=>{});});";
+  const child=spawn(process.execPath,['--input-type=module','-e',script,module,directory],{detached:true,stdio:['ignore','pipe','ignore']});
+  t.after(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');});
+  await once(child.stdout,'data');const exited=once(child,'exit');child.kill(signal);await exited;
+  return child.pid;
+}
+test('a same-host lock from a SIGTERM-terminated process permits local recovery', {timeout:10000}, async t=>{
+  const {directory}=await fixture(t);await stoppedLockOwner(t,directory);
+  let entered=false;await withStateLock(directory,async()=>{entered=true;});assert(entered);
+  await assert.rejects(readFile(join(directory,'operation.lock')),error=>error.code==='ENOENT');
+});
+test('a same-host lock from a SIGKILL-terminated process permits local recovery', {timeout:10000}, async t=>{
+  const {directory}=await fixture(t);await stoppedLockOwner(t,directory,'SIGKILL');
+  await withStateLock(directory,async()=>{});
+  await assert.rejects(readFile(join(directory,'operation.lock')),error=>error.code==='ENOENT');
+});
+test('a dead owner with a surviving child process group cannot be recovered', {timeout:10000}, async t=>{
+  const {directory}=await fixture(t),module=new URL('./lib/private-install.mjs',import.meta.url).href;
+  const script="const {spawn}=await import('node:child_process');const {withStateLock}=await import(process.argv[1]);await withStateLock(process.argv[2],async()=>{const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});process.stdout.write(String(child.pid));setInterval(()=>{},1000);await new Promise(()=>{});});";
+  const owner=spawn(process.execPath,['--input-type=module','-e',script,module,directory],{detached:true,stdio:['ignore','pipe','ignore']});
+  t.after(()=>{try{process.kill(-owner.pid,'SIGKILL');}catch{}});
+  const childPid=Number((await once(owner.stdout,'data'))[0].toString()),exited=once(owner,'exit');owner.kill('SIGKILL');await exited;
+  const path=join(directory,'operation.lock'),bytes=await readFile(path,'utf8'),record=JSON.parse(bytes);assert.equal(record.pgid,owner.pid);
+  await assert.rejects(withStateLock(directory,async()=>assert.fail('live child must retain authority')));assert.equal(await readFile(path,'utf8'),bytes);
+  process.kill(childPid,'SIGKILL');
+  const deadline=Date.now()+3000;let gone=false;
+  while(Date.now()<deadline){try{process.kill(-record.pgid,0);}catch(error){if(error.code==='ESRCH'){gone=true;break;}if(error.code!=='EPERM')throw error;}await new Promise(resolve=>setTimeout(resolve,20));}
+  assert(gone,'child process group must be reaped before recovery');await withStateLock(directory,async()=>{});
+});
+test('operation metadata and private modes are durable before the callback starts',async t=>{
+  const {directory}=await fixture(t);
+  await withStateLock(directory,async()=>{
+    const record=await readJson(join(directory,'operation.lock'));
+    assert.deepEqual(Object.keys(record).sort(),['host','nonce','pgid','pid','schemaVersion']);
+    assert.equal(record.schemaVersion,1);assert.equal(record.pid,process.pid);assert(Number.isSafeInteger(record.pgid)&&record.pgid>0);assert.equal(record.host,hostname());assert.match(record.nonce,/^[a-f0-9-]{36}$/);
+    assert.equal((await stat(directory)).mode&0o777,0o700);assert.equal((await stat(join(directory,'operation.lock'))).mode&0o777,0o600);
+  });
+});
+test('unknown, malformed, foreign-host and live-process locks remain untouched',async t=>{
+  const {directory}=await fixture(t),path=join(directory,'operation.lock');
+  const valid={schemaVersion:1,pid:process.pid,pgid:process.pid,host:hostname(),nonce:randomUUID()};
+  for(const bytes of ['', '{', JSON.stringify({...valid,schemaVersion:0}),JSON.stringify({...valid,pid:0}),JSON.stringify({...valid,host:hostname()+'-other'}),JSON.stringify({...valid,nonce:'unknown'}),JSON.stringify({...valid,extra:true}),JSON.stringify(valid)]){
+    await writeFile(path,bytes,{mode:0o600});let entered=false;
+    await assert.rejects(withStateLock(directory,async()=>{entered=true;}));assert.equal(entered,false);assert.equal(await readFile(path,'utf8'),bytes);
+  }
+});
+test('an inconclusive process probe never authorizes stale-lock removal',async t=>{
+  const {directory}=await fixture(t),path=join(directory,'operation.lock');
+  const bytes=JSON.stringify({schemaVersion:1,pid:2147483647,pgid:2147483647,host:hostname(),nonce:randomUUID()});await writeFile(path,bytes,{mode:0o600});
+  for(const code of ['EPERM','ENOSYS',undefined]){
+    const probe=t.mock.method(process,'kill',()=>{throw Object.assign(Error('private probe failure'),{code});});
+    try{await assert.rejects(withStateLock(directory,async()=>assert.fail('must not enter')));assert.equal(await readFile(path,'utf8'),bytes);}finally{probe.mock.restore();}
+  }
+});
+test('release preserves a replacement lock even when its bytes match the original',async t=>{
+  const {directory}=await fixture(t),path=join(directory,'operation.lock');let replacement;
+  await withStateLock(directory,async()=>{replacement=await readFile(path);await rm(path);await writeFile(path,replacement,{mode:0o600});});
+  assert.deepEqual(await readFile(path),replacement);
+});
+test('a recovery marker is never automatically broken or used to enter a callback',async t=>{
+  const {directory}=await fixture(t);await stoppedLockOwner(t,directory);
+  const path=join(directory,'operation.lock.recovery');await writeFile(path,'retained recovery evidence',{mode:0o600});
+  await assert.rejects(withStateLock(directory,async()=>assert.fail('must not enter')));
+  assert.equal(await readFile(path,'utf8'),'retained recovery evidence');
+});
+test('concurrent stale-lock recovery admits one callback and preserves its active lock', {timeout:10000}, async t=>{
+  const {directory}=await fixture(t);await stoppedLockOwner(t,directory);
+  const module=new URL('./lib/private-install.mjs',import.meta.url).href;
+  const script="const {withStateLock}=await import(process.argv[1]);try{await withStateLock(process.argv[2],async()=>{process.stdout.write('entered');setInterval(()=>{},1000);await new Promise(()=>{});});}catch{process.stdout.write('blocked');}";
+  const children=[0,1].map(()=>spawn(process.execPath,['--input-type=module','-e',script,module,directory],{stdio:['ignore','pipe','ignore']}));
+  t.after(()=>{for(const child of children)if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');});
+  const results=await Promise.all(children.map(async child=>(await once(child.stdout,'data'))[0].toString()));
+  assert.deepEqual(results.toSorted(),['blocked','entered']);
+  const winner=children[results.indexOf('entered')],record=await readJson(join(directory,'operation.lock'));assert.equal(record.pid,winner.pid);
+  await assert.rejects(withStateLock(directory,async()=>assert.fail('must not enter')));assert.deepEqual(await readJson(join(directory,'operation.lock')),record);
+});
+test('recovering a local lock preserves pending remote ownership refusal', {timeout:10000}, async t=>{
+  const {installer,directory}=await fixture(t);await installer.load({create:true});
+  installer.state.resources.namespace={status:'pending'};await installer.save();
+  const before=await readFile(join(directory,'manifest.json'),'utf8');await stoppedLockOwner(t,directory);
+  await assert.rejects(withStateLock(directory,()=>installer.owned('namespace',async()=>({id:'unacknowledged'}),async()=>assert.fail('must not create'))),/uncertain|pending|ownership|acknowledged/i);
+  assert.equal(await readFile(join(directory,'manifest.json'),'utf8'),before);
 });
 test('portable stock transfer supports four pinned binaries, rejects unsupported platforms', () => {
   assert.equal(Object.keys(REGCTL_HASHES).length, 4);

@@ -48,10 +48,12 @@ export async function waitForProbeReady({request,now=Date.now,sleep=ms=>new Prom
   }
 }
 export async function waitForAccessReady({origin,headers,path='/v1/runs?view=all',expectedStatus=200,fetcher=fetch,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=120000,onStatus=()=>{}}){
-  assert(path.startsWith('/v1/')&&!path.startsWith('//')&&[200,404].includes(expectedStatus),'CI_ACCESS_CHECK_INVALID');
+  let base,url;try{base=new URL(origin);url=new URL(path,base);}catch{throw Error('CI_ACCESS_CHECK_INVALID');}
+  assert(base.protocol==='https:'&&base.origin===origin&&!base.username&&!base.password&&!base.port&&base.pathname==='/'&&!base.search&&!base.hash,'CI_ACCESS_CHECK_INVALID');
+  assert(typeof path==='string'&&path.startsWith('/v1/')&&!/[\\\x00-\x20\x7f]/.test(path)&&url.origin===base.origin&&url.pathname.startsWith('/v1/')&&!url.hash&&[200,404].includes(expectedStatus),'CI_ACCESS_CHECK_INVALID');
   const deadline=now()+timeoutMs;
   for(;;){
-    const response=await fetcher(origin+path,{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});
+    const response=await fetcher(url.href,{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});
     onStatus(response.status);
     if(response.status===expectedStatus)return response;
     await response.body?.cancel();

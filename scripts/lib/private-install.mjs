@@ -1,6 +1,7 @@
 // Installation control plane; every operation uses explicitly selected configuration.
 import assert from 'node:assert/strict';
 import { accessSession, appRequest } from './native-auth.mjs';
+import { withPrivateLock } from './private-lock.mjs';
 import {emailConfiguration,emailBindings,configureEmail} from './private-email.mjs';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, lstat, writeFile, rename, chmod, open, rm, realpath } from 'node:fs/promises';
@@ -57,12 +58,7 @@ export async function withStateLock(directory, callback) {
   assert(entries.length === 0 || entries.includes('manifest.json') || entries.every((name) => name === 'operation.lock'),
     'Existing state directory contains unrelated files; choose a new empty directory');
   await chmod(directory, 0o700);
-  const lockPath = join(directory, 'operation.lock');
-  let lock;
-  try { lock = await open(lockPath, 'wx', 0o600); }
-  catch (error) { if (error.code === 'EEXIST') throw new Error('Another operation holds operation.lock; reconcile any interrupted remote operation before removing this lock'); throw error; }
-  try { return await callback(); }
-  finally { await lock.close(); await rm(lockPath); }
+  return withPrivateLock(directory,callback,{code:'PC_STATE_LOCKED'});
 }
 export class CloudflareApi {
   constructor(token, fetcher = fetch,{zoneIds=[]}={}) {

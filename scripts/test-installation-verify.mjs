@@ -8,6 +8,12 @@ import {createServer} from 'node:http';
 import {gzipSync} from 'node:zlib';
 
 const root=resolve(import.meta.dirname,'..'),accountId='a'.repeat(32),zoneId='b'.repeat(32),instance='customer';
+test('Access readiness rejects noncanonical origins and escaped API paths before sending credentials',async()=>{
+  const {waitForAccessReady}=await import('./lib/installation-verify.mjs');
+  const fetcher=()=>assert.fail('invalid destination must not receive service credentials');
+  for(const origin of ['http://app.customer.example','https://user:secret@app.customer.example','https://app.customer.example/path','https://app.customer.example?query=private','https://app.customer.example#private','https://app.customer.example:444','https://app.customer.example/','https://app.customer.example\\@foreign.example'])await assert.rejects(waitForAccessReady({origin,headers:{'CF-Access-Client-Secret':'private'},fetcher}),/CI_ACCESS_CHECK_INVALID/);
+  for(const path of ['/v1/../admin','/v1/%2e%2e/admin','/v1/\\foreign.example','/v1/runs#private','/v1/runs\n'])await assert.rejects(waitForAccessReady({origin:'https://app.customer.example',path,headers:{'CF-Access-Client-Secret':'private'},fetcher}),/CI_ACCESS_CHECK_INVALID/);
+});
 test('native Browser relay preserves upstream MIME, decoded bytes and safe headers in real workerd',async()=>{
   const directory=await mkdtemp(join(tmpdir(),'pentcloud-browser-headers-')),received=[];
   const source='globalThis.fixtureLoaded=true;';
@@ -16,13 +22,16 @@ test('native Browser relay preserves upstream MIME, decoded bytes and safe heade
   });
   await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+upstream.address().port;
   try{
-    await writeFile(join(directory,'worker.mjs'),`import {request} from ${JSON.stringify(join(root,'node_modules/@cloudflare/playwright/lib/index.js'))};import {installationBrowserResponse} from ${JSON.stringify(join(root,'scripts/lib/installation-probe-worker.mjs'))};import {get} from 'node:http';export default {async fetch(){const node=await new Promise(resolve=>get(${JSON.stringify(origin+'/fixture.js')},response=>{response.resume();resolve({type:response.headers['content-type']??null,rawCount:response.rawHeaders.length});}));const client=await request.newContext();try{const api=await client.get(${JSON.stringify(origin+'/fixture.js')});const collected=[];for(const path of ['/fixture.js','/fixture.js?gzip','/fixture.html']){const result=await installationBrowserResponse({url:()=>${JSON.stringify(origin)}+path,method:()=>path.includes('gzip')?'POST':'GET',headers:()=>({Host:'foreign.invalid','Content-Length':'999','Accept-Encoding':'fixture-unsupported',Connection:'x-fixture-hop','X-Fixture-Hop':'drop-me'}),postDataBuffer:()=>new TextEncoder().encode('owned request body')},{origin:${JSON.stringify(origin)},headers:{'CF-Access-Client-Id':'owned-id','CF-Access-Client-Secret':'owned-secret'}});collected.push({type:result.headers['content-type'],encoding:result.headers['content-encoding']??null,length:result.headers['content-length'],bytes:result.body.length,sourceMatches:result.body.toString()===${JSON.stringify(source)},htmlMatches:result.body.toString()==='<main>owned fixture</main>',csp:result.headers['content-security-policy']==="script-src 'self'",cookie:result.headers['set-cookie']?.includes('fixture=owned')===true&&result.headers['set-cookie']?.includes('second=owned')===true&&result.headers['set-cookie']?.split('\\n').length===2});}return Response.json({node,playwrightType:api.headers()['content-type']??null,collected});}finally{await client.dispose();}}};`);
-    await writeFile(join(directory,'wrangler.json'),JSON.stringify({name:'browser-headers-fixture',main:'worker.mjs',compatibility_date:'2026-10-30',compatibility_flags:['nodejs_compat']}));
+    await writeFile(join(directory,'wrangler.json'),JSON.stringify({name:'browser-headers-fixture',main:join(root,'scripts/test-fixtures/installation-browser-headers-worker.mjs'),compatibility_date:'2026-10-30',compatibility_flags:['nodejs_compat'],vars:{FIXTURE_ORIGIN:origin,FIXTURE_SCRIPT:source}}));
     await withNativeTestHarness({root:directory,workers:[{configPath:'wrangler.json'}]},async server=>{
       const result=await (await server.fetch('https://fixture.test/')).json();assert.equal(result.node.type,'text/javascript');
       assert([null,'text/javascript'].includes(result.playwrightType));
       assert.equal(result.collected.length,3);
-      for(const [index,item]of result.collected.entries()){assert.equal(item.type,index===2?'text/html':'text/javascript');assert.equal(item.encoding,null);assert.equal(Number(item.length),item.bytes);assert.equal(item.csp,true);assert.equal(item.cookie,true);assert.equal(index===2?item.htmlMatches:item.sourceMatches,true);}
+      for(const [index,item]of result.collected.entries()){
+        assert.equal(item.type,index===2?'text/html':'text/javascript');assert.equal(item.encoding,null);assert.equal(Number(item.length),item.bytes);assert.equal(item.csp,true);assert.equal(index===2?item.htmlMatches:item.sourceMatches,true);
+        assert.deepEqual(item.setCookie.split(String.fromCharCode(10)),['fixture=owned; HttpOnly; SameSite=Strict','second=owned; Secure']);
+        assert.deepEqual([...item.setCookie].map(char=>char.charCodeAt(0)).filter(code=>code<32),[10]);
+      }
     });
     for(const request of received.slice(-3)){assert.notEqual(request.headers.host,'foreign.invalid');assert.equal(request.headers['x-fixture-hop'],undefined);assert.notEqual(request.headers['accept-encoding'],'fixture-unsupported');assert.equal(request.headers['cf-access-client-secret'],'owned-secret');if(request.method==='POST')assert.equal(request.body,'owned request body');else assert.equal(request.body,'');}
   }finally{await new Promise(resolve=>upstream.close(resolve));await rm(directory,{recursive:true,force:true});}

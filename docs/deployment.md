@@ -98,6 +98,12 @@ permanent uninstall fence or delete saved onboarding data. A previous source
 commit may be redeployed only when its schemas and DO migrations remain compatible;
 this is not a general database rollback mechanism.
 
+Local locks record the owner process and POSIX process group before work starts.
+After interruption, the CLI recovers a valid same-host lock only when that process
+and its entire group are gone. Active, foreign-host, legacy empty or otherwise
+unprovable locks require private reconciliation. This does not clear an uncertain
+Cloudflare resource receipt or overwrite divergent Artifacts state.
+
 ```sh
 npm run pentcloud -- upgrade --config ../my-pentcloud.json --state ../my-pentcloud-state --apply
 npm run pentcloud -- cleanup --config ../my-pentcloud.json --state ../my-pentcloud-state --apply
