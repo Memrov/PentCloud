@@ -59,10 +59,12 @@ if(process.env.NATIVE_STREAMS_ONLY)process.exit(0);
 await fixture(async()=>{
   await get("/seed");await get("/fire");
   assert.equal((await get("/attempt?id=job-0")).deliveries,1);
+  const candidate=await get("/prepare?id=job-0");
   await get("/recovery-after-reset");
   await worker.dispatchFetch("https://coordinator.test/abort").catch(()=>undefined);
-  // Finish only the remote attempt: its old coordinator completion RPC was lost.
-  await get("/release?id=job-0");
+  // Persist only the remote result: no push event exists and the old completion RPC was lost.
+  const finished=await worker.dispatchFetch("https://coordinator.test/finish",{method:"POST",body:JSON.stringify(candidate)});
+  assert.equal(finished.status,200);
   let next;
   for(let retry=0;retry<150;retry++){
     next=await get("/attempt?id=job-1");
@@ -71,6 +73,10 @@ await fixture(async()=>{
   }
   assert.equal(next.deliveries,1,"durable heartbeat reconciles a lost completion then admits FIFO after drain");
   assert.equal((await get("/attempt?id=job-0")).starts,1,"recovery consumes the settled receipt without restarting work");
+  const settled=await get("/snapshot");
+  assert.equal(settled.jobs.find(job=>job.id==='job-0').status,'completed');
+  assert.equal(settled.records.find(row=>row.key==='run:run-0').value.headCommit,candidate.outputCommit);
+  assert.equal((await get('/main?run=run-0')).head,candidate.outputCommit,'durable recovery publishes the accepted candidate after eviction without either notification');
   await get("/cancel?run=run-0");await get("/cancel?run=run-1");await get("/release?id=job-1");
 });
 await fixture(async()=>{
@@ -436,12 +442,6 @@ await fixture(async () => {
   await get("/fire");
   const baseline = (await get("/main?run=run-0")).head;
   const candidate = await get("/prepare?id=job-0");
-  const pushedEarly = await get("/reconcile?id=job-0");
-  assert.equal(
-    pushedEarly.pending,
-    true,
-    "push event cannot fence an unfinished local terminal publication",
-  );
   assert.equal(
     (await get("/snapshot")).jobs.find((job) => job.id === "job-0").status,
     "running",

@@ -101,13 +101,7 @@
   "ai": {
     "binding": "AI"
   },
-  "workflows": [
-    {
-      "binding": "RESULTS",
-      "name": "pentcloud-results",
-      "class_name": "ResultValidation"
-    }
-  ],
+  "triggers": { "events": [] },
   "vars": {
     "CONTROL_BASE_URL": "https://configure-pentcloud.invalid",
     "ACCESS_TEAM_DOMAIN": "",

@@ -10,10 +10,10 @@ test('deployment button has one complete account-independent Worker and all elev
   assert.equal(config.vars.ACCESS_AUD,undefined);assert.equal(config.vars.ACCESS_TEAM_DOMAIN,undefined);assert.equal(config.secrets,undefined);assert.equal(pkg.scripts.build,'node scripts/build-customer.mjs');assert.match(pkg.scripts.deploy,/--config wrangler.jsonc$/);
 });
 
-test('selected Worker names isolate Artifacts, Workflow and wizard metadata for each installation',async()=>{
+test('selected Worker names isolate Artifacts and wizard metadata for each installation',async()=>{
   const {customerConfig}=await import('./build-customer.mjs'),source=await read('wrangler.jsonc');
   const first=customerConfig(structuredClone(source),{worker:'customer-one',accountId:'a'.repeat(32)}),second=customerConfig(structuredClone(source),{worker:'customer-two',accountId:'b'.repeat(32)});
-  for(const value of [first,second]){assert.equal(value.artifacts[0].namespace,value.name);assert.equal(value.workflows[0].name,value.name);assert.equal(value.vars.PENTCLOUD_WORKER_NAME,value.name);assert.equal(value.vars.ARTIFACTS_NAMESPACE,value.name);assert.deepEqual(value.triggers.events,[{type:'cf.artifacts.repo.pushed',filter:{namespace:value.name},targets:[{type:'workflow',workflow_name:value.name}]}]);}
+  for(const value of [first,second]){assert.equal(value.artifacts[0].namespace,value.name);assert.equal(value.workflows,undefined);assert.equal(value.vars.PENTCLOUD_WORKER_NAME,value.name);assert.equal(value.vars.ARTIFACTS_NAMESPACE,value.name);assert.deepEqual(value.triggers,{events:[]});}
   assert.notEqual(first.artifacts[0].namespace,second.artifacts[0].namespace);assert.equal(second.vars.PENTCLOUD_ACCOUNT_ID,'b'.repeat(32));
 });
 
@@ -28,7 +28,7 @@ test('single-character Worker names meet Artifacts namespace rules without shari
   const names=['a','0','b','a-b','a'.repeat(63)];
   const configs=names.map(worker=>customerConfig(structuredClone(source),{worker}));
   const namespaces=configs.map(config=>config.artifacts[0].namespace);
-  for(const config of configs){const namespace=config.artifacts[0].namespace;assert(namespace.length>=2&&namespace.length<=63);assert.match(namespace,/^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9._])?$/);assert.equal(config.vars.ARTIFACTS_NAMESPACE,namespace);assert.equal(config.triggers.events[0].filter.namespace,namespace);assert.equal(config.workflows[0].name,config.name);assert.equal(config.vars.PENTCLOUD_WORKER_NAME,config.name);}
+  for(const config of configs){const namespace=config.artifacts[0].namespace;assert(namespace.length>=2&&namespace.length<=63);assert.match(namespace,/^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9._])?$/);assert.equal(config.vars.ARTIFACTS_NAMESPACE,namespace);assert.equal(config.workflows,undefined);assert.deepEqual(config.triggers,{events:[]});assert.equal(config.vars.PENTCLOUD_WORKER_NAME,config.name);}
   assert.equal(new Set(namespaces).size,names.length);
   assert.throws(()=>customerConfig(structuredClone(source),{worker:'a-'}),/Worker name/);
 });

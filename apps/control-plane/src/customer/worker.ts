@@ -5,7 +5,6 @@ import {Coordinator as CoreCoordinator} from '../native/coordinator';
 import {NativeAttempt as CoreAttempt} from '../native/attempt';
 import type {NativeEnv} from '../native/types';
 import type {ToolPackService} from '../../../../shared/tool-packs';
-export {ResultValidation} from '../native/worker';
 export {NativeDynamicWorkerTail} from '../native/dynamic-worker-tail';
 export {OpenCodeConnectionTest} from '../native/model-test';
 export {TargetEgress} from '../native/target-egress';

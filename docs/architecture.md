@@ -38,10 +38,11 @@ shared stock Kali Container. Separate sessions do not provide network confinemen
 ![Pinned inputs, captured files and hashes, an evidence checkpoint, immutable candidate, validation and Coordinator acceptance form the evidence lifecycle.](../media/evidence.light.png)
 
 Artifacts Git holds immutable inputs, candidates, captured evidence and accepted
-ancestry. A data checkpoint does not advance accepted history. The existing
-ResultValidation Workflow provides candidate-validation hints; Coordinator
-centrally verifies provenance and ancestry before acceptance. There is no
-Workflow per specialist and no second Git control ledger.
+ancestry. A data checkpoint does not advance accepted history. Coordinator
+centrally verifies provenance and ancestry before acceptance. Its durable native
+wake reads the exact persisted Attempt result after a lost completion or eviction;
+Artifacts push notifications are not required. There is no Workflow per specialist
+and no second Git control ledger.
 
 Native OpenCode sessions hold conversations. Git is not the sole transcript
 store or live-state authority. Evidence capture is bounded; expired/unrecorded

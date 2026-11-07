@@ -46,8 +46,28 @@ export function validateBuildConfig(kind, value, template, expectedName, install
   } else throw new Error('Configuration variables must be an object.');
   if (template.vars) config.vars = { ...template.vars, ...config.vars };
   if (kind === 'app') {
+    // Old private Builds metadata can outlive the source. Retire only this
+    // Worker's former RESULTS hint and its exact namespace push target.
+    const retired = (config.workflows ?? []).filter(entry => entry.binding === 'RESULTS' && entry.class_name === 'ResultValidation' && (!entry.script_name || entry.script_name === config.name));
+    if (retired.length) {
+      config.workflows = config.workflows.filter(entry => !retired.includes(entry));
+      if (!config.workflows.length) delete config.workflows;
+      if (Array.isArray(config.triggers?.events)) {
+        const names = new Set(retired.map(entry => entry.name));
+        config.triggers.events = config.triggers.events.flatMap(event => {
+          if (event.type !== 'cf.artifacts.repo.pushed' || Object.keys(event.filter ?? {}).length !== 1 || event.filter.namespace !== config.artifacts?.find(entry => entry.binding === 'ARTIFACTS')?.namespace || !Array.isArray(event.targets)) return [event];
+          const targets = event.targets.filter(target => !(target.type === 'workflow' && names.has(target.workflow_name)));
+          return targets.length ? [{ ...event, targets }] : [];
+        });
+      }
+    }
+    // An explicit empty list tells native deploys to remove the old subscription.
+    config.triggers ??= {};
+    config.triggers.events ??= [];
+    if ((config.workflows ?? []).some(entry => entry.class_name === 'ResultValidation' && (!entry.script_name || entry.script_name === config.name)) || config.exports?.ResultValidation)
+      throw new Error('ResultValidation is retired; remove its obsolete executable contract.');
     const toolBinding = config.services?.[0]?.binding === 'TOOL_PACKS' ? ['TOOL_PACKS', { entrypoint: 'ToolPackGateway' }] : ['TOOLBOX', { entrypoint: 'ToolboxGateway' }];
-    for (const [key, binding, fixed] of [['artifacts', 'ARTIFACTS', {}], ['services', ...toolBinding], ['workflows', 'RESULTS', { class_name: 'ResultValidation' }]]) {
+    for (const [key, binding, fixed] of [['artifacts', 'ARTIFACTS', {}], ['services', ...toolBinding]]) {
       const entries = config[key];
       if (!Array.isArray(entries) || entries.length !== 1 || entries[0].binding !== binding || Object.entries(fixed).some(([k, v]) => entries[0][k] !== v)) throw new Error(`Preserve the ${key} binding contract.`);
       const resource = entries[0][key === 'artifacts' ? 'namespace' : key === 'services' ? 'service' : 'name'];

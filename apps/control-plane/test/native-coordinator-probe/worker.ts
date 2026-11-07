@@ -833,20 +833,6 @@ export class ProbeCoordinator extends Coordinator {
         .one().value,
     );
   }
-  async reconcilePrepared(id: string) {
-    const result = JSON.parse(
-      this.ctx.storage.sql
-        .exec<{
-          value: string;
-        }>("SELECT value FROM native_records WHERE key=?", `probe:result:${id}`)
-        .one().value,
-    ) as AttemptResult;
-    return this.reconcile(
-      "probe",
-      `refs/heads/attempts/${id}`,
-      result.outputCommit!,
-    );
-  }
   async stoppedTarget(id: string, runId: string) {
     const row = this.ctx.storage.sql
       .exec<{
@@ -1152,10 +1138,6 @@ export default {
             url.searchParams.get("run")!,
             Number(url.searchParams.get("max")),
           ),
-        );
-      if (url.pathname === "/reconcile")
-        return Response.json(
-          await coordinator.reconcilePrepared(url.searchParams.get("id")!),
         );
       if (url.pathname === "/prepare")
         return Response.json(

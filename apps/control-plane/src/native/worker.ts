@@ -1,8 +1,3 @@
-import {
-  WorkflowEntrypoint,
-  type WorkflowEvent,
-  type WorkflowStep,
-} from "cloudflare:workers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { NativeEnv } from "./types";
 import type { AgentSettings } from "../settings/catalog";
@@ -496,37 +491,3 @@ export default {
     }
   },
 } satisfies ExportedHandler<NativeEnv>;
-
-/** A native Artifacts event is a reconciliation hint, never result authorization. */
-export class ResultValidation extends WorkflowEntrypoint<NativeEnv> {
-  override async run(event: WorkflowEvent<unknown>, step: WorkflowStep) {
-    const record = (value: unknown): value is Record<string, unknown> =>
-      value !== null && typeof value === "object" && !Array.isArray(value);
-    const data = event.payload;
-    if (!record(data) || !record(data.source) || !record(data.payload))
-      return { ignored: true };
-    const source = data.source,
-      payload = data.payload;
-    if (
-      data.type !== "cf.artifacts.repo.pushed" ||
-      (source.type !== undefined && source.type !== "artifacts.repo") ||
-      source.namespace !== this.env.ARTIFACTS_NAMESPACE ||
-      typeof source.repoName !== "string" ||
-      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(source.repoName) ||
-      typeof payload.ref !== "string" ||
-      !/^refs\/heads\/attempts\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(
-        payload.ref,
-      ) ||
-      typeof payload.after !== "string" ||
-      !/^[a-f0-9]{40}$/.test(payload.after)
-    )
-      return { ignored: true };
-    const repoName = source.repoName,
-      ref = payload.ref,
-      after = payload.after;
-    const coordinator = this.env.COORDINATOR.getByName("global");
-    return step.do("validate committed result", async () => ({
-      result: JSON.stringify(await coordinator.reconcile(repoName, ref, after)),
-    }));
-  }
-}

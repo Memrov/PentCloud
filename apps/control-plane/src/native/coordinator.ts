@@ -2219,33 +2219,6 @@ export class Coordinator extends DurableObject<NativeEnv> {
       });
     }
   }
-  async reconcile(repoName: string, ref: string, commit: string) {
-    await this.start();
-    const match = ref.match(/^refs\/heads\/attempts\/([A-Za-z0-9._-]+)$/);
-    if (!match || !/^[a-f0-9]{40}$/.test(commit)) return { ignored: true };
-    const job = this.get<AttemptRecord>(`job:${match[1]}`);
-    if (!job || this.run(job.runId).repo !== repoName) return { ignored: true };
-    if (job.outputCommit === commit && job.terminal) {
-      await this.projectAccepted(job.runId);
-      return { accepted: true, duplicate: true };
-    }
-    if (
-      job.status !== "running" ||
-      this.activeReceipt()?.id !== job.id ||
-      this.run(job.runId).phase === "cancelled"
-    )
-      return { ignored: true };
-    // A push may arrive before Attempt.publish has durably settled locally. Do
-    // not revoke its active fence in the middle of publication. Recovery resumes
-    // the pinned attempt after eviction and obtains its exact durable result.
-    const execution = await this.attempt(job.id).execution();
-    if (!execution.result) {
-      await this.wake();
-      return { pending: true };
-    }
-    if (execution.result.outputCommit !== commit) return { ignored: true };
-    return this.accept(execution.result);
-  }
   private async advance() {
     for (const expected of this.list<RunRecord>("run:").sort(
       (a, b) => a.createdAt - b.createdAt,

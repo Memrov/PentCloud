@@ -2,7 +2,6 @@
 import { env, exports } from "cloudflare:workers";
 import {
   evictDurableObject,
-  introspectWorkflowInstance,
 } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { accessKeys, accessToken, accessHeaders } from "./access-fixture";
@@ -435,130 +434,6 @@ describe("production router in actual Workers runtime", () => {
         (call) => call.method === "reconcileToolOutcome",
       ),
     ).toEqual([{ method: "reconcileToolOutcome", args: ["job-1"] }]);
-  });
-
-  it("runs the production result Workflow and forwards only a valid immutable candidate hint", async () => {
-    const id = `result-valid-${crypto.randomUUID()}`;
-    await using instance = await introspectWorkflowInstance(
-      bindings.RESULTS,
-      id,
-    );
-    await bindings.RESULTS.create({
-      id,
-      params: {
-        type: "cf.artifacts.repo.pushed",
-        source: {
-          type: "artifacts.repo",
-          namespace: "fixture-artifacts",
-          repoName: "run-fixture",
-        },
-        payload: { ref: "refs/heads/attempts/job-1", after: "a".repeat(40) },
-      },
-    });
-    await instance.waitForStatus("complete");
-    expect(await instance.getOutput()).toEqual({
-      result: JSON.stringify({ accepted: true }),
-    });
-    expect(await recordedCalls()).toEqual([
-      {
-        method: "reconcile",
-        args: ["run-fixture", "refs/heads/attempts/job-1", "a".repeat(40)],
-      },
-    ]);
-  });
-
-  it("routes native Artifacts push events without source.type through validation while leaving unknown jobs ignored",async()=>{
-    const id=`result-native-${crypto.randomUUID()}`;
-    await using instance=await introspectWorkflowInstance(bindings.RESULTS,id);
-    await bindings.RESULTS.create({id,params:{
-      id:"synthetic-native-event",
-      type:"cf.artifacts.repo.pushed",
-      source:{namespace:"fixture-artifacts",repoName:"ci-installation-proof"},
-      payload:{ref:"refs/heads/attempts/ci-unknown-job",before:"0".repeat(40),after:"b".repeat(40),commits:[]},
-    }});
-    await instance.waitForStatus("complete");
-    // This is event wiring, not candidate acceptance: the Coordinator still owns authorization.
-    expect(await instance.getOutput()).toEqual({result:'{"ignored":true}'});
-    expect(await instance.waitForStepResult({name:"validate committed result"})).toEqual({result:'{"ignored":true}'});
-    expect(await recordedCalls()).toEqual([{method:"reconcile",args:["ci-installation-proof","refs/heads/attempts/ci-unknown-job","b".repeat(40)]}]);
-  });
-
-  it("ignores malformed or unrelated Artifacts Workflow payloads without calling Coordinator", async () => {
-    for (const payload of [
-      null,
-      {},
-      {
-        type: "cf.artifacts.repo.deleted",
-        source: {
-          type: "artifacts.repo",
-          namespace: "fixture-artifacts",
-          repoName: "run-fixture",
-        },
-        payload: { ref: "refs/heads/attempts/job-1", after: "a".repeat(40) },
-      },
-      {
-        source: {
-          type: "artifacts.repo",
-          namespace: "fixture-artifacts",
-          repoName: "run-fixture",
-        },
-        payload: { ref: "refs/heads/attempts/job-1", after: "a".repeat(40) },
-      },
-      {
-        type: "cf.artifacts.repo.pushed",
-        source: {
-          type: "other",
-          namespace: "fixture-artifacts",
-          repoName: "run-fixture",
-        },
-        payload: { ref: "refs/heads/attempts/job-1", after: "a".repeat(40) },
-      },
-      {
-        type: "cf.artifacts.repo.pushed",
-        source: {
-          namespace: "other-namespace",
-          repoName: "run-fixture",
-        },
-        payload: { ref: "refs/heads/attempts/job-1", after: "a".repeat(40) },
-      },
-      {
-        type: "cf.artifacts.repo.pushed",
-        source: {
-          type: "artifacts.repo",
-          namespace: "fixture-artifacts",
-          repoName: "run-fixture",
-        },
-        payload: { ref: 1, after: "a".repeat(40) },
-      },
-      {
-        type: "cf.artifacts.repo.pushed",
-        source: {
-          type: "artifacts.repo",
-          namespace: "fixture-artifacts",
-          repoName: "run-fixture",
-        },
-        payload: { ref: "refs/heads/main", after: "a".repeat(40) },
-      },
-      {
-        type: "cf.artifacts.repo.pushed",
-        source: {
-          type: "artifacts.repo",
-          namespace: "fixture-artifacts",
-          repoName: "run-fixture",
-        },
-        payload: { ref: "refs/heads/attempts/job-1", after: "main" },
-      },
-    ]) {
-      const id = `result-ignore-${crypto.randomUUID()}`;
-      await using instance = await introspectWorkflowInstance(
-        bindings.RESULTS,
-        id,
-      );
-      await bindings.RESULTS.create({ id, params: payload });
-      await instance.waitForStatus("complete");
-      expect(await instance.getOutput()).toEqual({ ignored: true });
-    }
-    expect(await recordedCalls()).toEqual([]);
   });
 
   it("routes both API prefixes over typed Durable Object RPC and persists the real SQL call journal across eviction", async () => {

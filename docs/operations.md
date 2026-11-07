@@ -88,3 +88,26 @@ The default app gate reuses dependencies/pinned Go and builds the app; only
 For deployment or key rotation, follow [deployment](deployment.md) and
 [authentication](operations/authentication.md). Reuse installation ownership
 state and preserve Worker identities, bound secrets and migration tags.
+
+## Retiring the former result hint
+
+Result acceptance and publication use Coordinator's durable native recovery wake;
+new installations do not need a result Workflow. Native Builds normalize the old
+`RESULTS`/`ResultValidation` binding and matching namespace push target out of
+private deployment metadata. The source config retains `triggers.events: []` so
+Wrangler's native trigger reconciliation removes the old subscription. Preserve
+unrelated event subscriptions and installation resource identities when upgrading.
+
+Before upgrading an existing installation, verify native trigger reconciliation
+on its test Worker and inspect the resulting subscription and deployment metadata.
+Omitting an event-trigger field does not clear existing subscriptions. The former
+Workflow resource may still reference its old class: verify that the native
+upgrade accepts the removed export before promoting it. If the platform refuses
+that upgrade, remote retirement is a deployment prerequisite; resolve it through
+Cloudflare's native resource controls while retaining historical instances.
+`wrangler workflows delete` also deletes its instances and must not be used as an
+automatic cleanup step. This source change does not delete Workflow history.
+
+Sources: [Artifacts push events](https://developers.cloudflare.com/artifacts/guides/event-subscriptions/),
+[Workflow deletion](https://developers.cloudflare.com/workflows/reference/wrangler-commands/#workflows-delete),
+and [native Wrangler trigger reconciliation](https://github.com/cloudflare/workers-sdk/blob/main/packages/deploy-helpers/src/triggers/deploy.ts).
