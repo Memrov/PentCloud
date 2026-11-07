@@ -159,14 +159,16 @@ const layouts=[];
 const assertChatLayout=async(label)=>{
  const layout=await page.evaluate(()=>{
   const rect=selector=>{const box=document.querySelector(selector).getBoundingClientRect();return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,height:box.height};};
-  return {viewport:innerWidth,height:innerHeight,scrollY,header:rect('.chat-header'),frame:rect('.app-frame'),attempts:rect('.attempt-nav'),messages:rect('.message-scroll'),composer:rect('.composer-wrap'),toolCards:[...document.querySelectorAll('.tool-card')].map(card=>{const box=card.getBoundingClientRect();return {left:box.left,right:box.right};}),actions:[...document.querySelectorAll('.header-actions button')].map(button=>{const box=button.getBoundingClientRect();return {left:box.left,right:box.right};})};
+  const attemptsOpen=document.querySelector('.conversation-details [aria-expanded]').getAttribute('aria-expanded')==='true';
+  return {viewport:innerWidth,height:innerHeight,scrollY,header:rect('.chat-header'),frame:rect('.app-frame'),details:rect('.conversation-details'),attemptsOpen,...(attemptsOpen?{attempts:rect('[role="tablist"]')}:{}),messages:rect('.message-scroll'),composer:rect('.composer-wrap'),toolCards:[...document.querySelectorAll('.tool-card')].map(card=>{const box=card.getBoundingClientRect();return {left:box.left,right:box.right};}),actions:[...document.querySelectorAll('.chat-header button')].map(button=>{const box=button.getBoundingClientRect();return {left:box.left,right:box.right};})};
  });
  layouts.push({label,...layout});
  expect(layout.scrollY).toBe(0);
  expect(layout.frame.height).toBeLessThanOrEqual(layout.height);
  expect(layout.header.top).toBeGreaterThanOrEqual(0);
- expect(layout.attempts.top).toBeGreaterThanOrEqual(0);
- expect(layout.attempts.height).toBeLessThan(80);
+ expect(layout.details.top).toBeGreaterThanOrEqual(0);
+ expect(layout.details.right).toBeLessThanOrEqual(layout.viewport);
+ if(layout.attemptsOpen){expect(layout.attempts.top).toBeGreaterThanOrEqual(0);expect(layout.attempts.height).toBeLessThan(80);}
  expect(layout.messages.height).toBeGreaterThan(200);
  expect(layout.composer.right).toBeLessThanOrEqual(layout.viewport);
  expect(layout.composer.bottom).toBeLessThanOrEqual(layout.height);
@@ -174,6 +176,10 @@ const assertChatLayout=async(label)=>{
  for(const action of layout.actions){expect(action.left).toBeGreaterThanOrEqual(0);expect(action.right).toBeLessThanOrEqual(layout.viewport);}
 };
 const shots=[];
+const choose=async(label,option)=>{
+ await page.getByLabel(label,{exact:false}).click();
+ await page.getByRole('option',{name:option,exact:true}).click();
+};
 try{
  holdNextRunJobs=true;
  await page.goto(origin+'/?run=run-1&job=job-1');
@@ -212,8 +218,8 @@ try{
  await expect(page.getByText('Tool: computer_exec',{exact:true})).toBeVisible();
  await expect(page.getByText('Operator question',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Approach',{exact:false})).toHaveCount(0);
- await page.getByLabel('Continue?',{exact:false}).selectOption('true');
- await page.getByLabel('Approach',{exact:false}).selectOption('safe');
+ await choose('Continue?','Yes');
+ await choose('Approach','Safe choice');
  const pendingDesktop=join(screenshotDir,'native-controls-desktop.png');await page.screenshot({path:pendingDesktop});shots.push(pendingDesktop);
  await page.getByRole('button',{name:'Send answer',exact:true}).click();
  await expect(page.getByText('Operator question',{exact:true})).toHaveCount(0);
@@ -221,28 +227,30 @@ try{
  await page.getByRole('button',{name:'Allow once',exact:true}).click();
  await expect(page.getByRole('button',{name:'Allow once',exact:true})).toHaveCount(0);
  expect(calls.some(call=>call.path.endsWith('/permissions/per_operator/reply')&&JSON.parse(call.body).decision==='once'&&JSON.parse(call.body).session==='ses_root')).toBe(true);
- await expect(page.getByText(/Recorded usage/)).toBeVisible();
+ await page.getByRole('button',{name:'Usage',exact:true}).click();
+ await expect(page.getByText('2 steps · 1,200 input / 350 output tokens',{exact:true})).toBeVisible();
  sessionControls.forms=[stockQuestion];
  await page.reload();
  await expect(page.getByText('Native question choices',{exact:true})).toBeVisible();
- await expect(page.getByText('Keep the existing scope',{exact:true})).toBeVisible();
- await expect(page.getByText('Include the optional section',{exact:true})).toBeVisible();
- await page.getByRole('radio',{name:/Focused/}).check();
+ await expect(page.getByText('Focused: Keep the existing scope',{exact:true})).toBeVisible();
+ await expect(page.getByText('Broader: Include the optional section',{exact:true})).toBeVisible();
+ await choose('Approach preference','Focused');
  await page.getByLabel('Focused details',{exact:false}).fill('Only the existing scope');
  const stockChoices=join(screenshotDir,'native-stock-question.png');await page.screenshot({path:stockChoices});shots.push(stockChoices);
- await page.getByRole('radio',{name:'Type your own answer',exact:true}).check();
+ await choose('Approach preference','Type your own answer');
  await expect(page.getByLabel('Focused details',{exact:false})).toHaveCount(0);
  await page.getByLabel('Approach preference custom answer',{exact:true}).fill('My custom approach');
  const stockCustom=join(screenshotDir,'native-stock-question-custom.png');await page.screenshot({path:stockCustom});shots.push(stockCustom);
  await page.getByRole('button',{name:'Send answer',exact:true}).click();
  await expect(page.getByText('Native question choices',{exact:true})).toHaveCount(0);
  expect(calls.some(call=>call.path.endsWith('/forms/frm_native_custom/reply')&&JSON.stringify(JSON.parse(call.body).answer)===JSON.stringify({q0:'My custom approach'}))).toBe(true);
- await page.getByLabel('Steer specialist').fill('Continue with the authorized scope');
- await page.getByRole('button',{name:'Send steer',exact:true}).click();
- await expect(page.getByLabel('Steer specialist')).toHaveValue('');
+ await page.getByRole('textbox',{name:'Message Primary',exact:true}).fill('Continue with the authorized scope');
+ await page.getByRole('button',{name:'Send message',exact:true}).click();
+ await expect(page.getByRole('textbox',{name:'Message Primary',exact:true})).toHaveValue('');
  expect(calls.some(call=>call.path.endsWith('/steer')&&JSON.parse(call.body).message==='Continue with the authorized scope')).toBe(true);
  await page.getByRole('button',{name:'Stop attempt',exact:true}).click();
  expect(calls.some(call=>call.path.endsWith('/interrupt'))).toBe(true);
+ await page.getByRole('button',{name:'Conversation details',exact:true}).click();
  await assertHealthy('chat');
  await assertChatLayout('desktop');
  const desktop=join(screenshotDir, 'chat-desktop.png');await page.screenshot({path:desktop});shots.push(desktop);
@@ -257,11 +265,12 @@ try{
    const archiveShot=join(screenshotDir,id+'.png');await page.screenshot({path:archiveShot});shots.push(archiveShot);
  }
  await page.goto(origin+'/?run=run-1&job=job-coder');
- await expect(page.getByLabel('Steer specialist')).toHaveAttribute('placeholder',/fresh revision/);
+ await expect(page.getByRole('textbox',{name:'Message Coder',exact:true})).toHaveAttribute('placeholder',/fresh revision/);
  await expect(page.getByText('Attempt has settled',{exact:false})).toHaveCount(0);
- await page.getByLabel('Steer specialist').fill('Review the result once more');
- await page.getByRole('button',{name:'Send steer',exact:true}).click();
- await expect(page.getByRole('navigation',{name:'Specialist attempts'}).getByRole('button',{name:/Attempt 2/})).toBeVisible();
+ await page.getByRole('textbox',{name:'Message Coder',exact:true}).fill('Review the result once more');
+ await page.getByRole('button',{name:'Send message',exact:true}).click();
+ await page.getByRole('button',{name:'Conversation details',exact:true}).click();
+ await expect(page.getByRole('tab',{name:/Attempt 2/})).toBeVisible();
  expect(calls.some(call=>call.path.endsWith('/revisions')&&JSON.parse(call.body).instructions==='Review the result once more'&&typeof JSON.parse(call.body).request_id==='string')).toBe(true);
  run.status='completed';jobs.forEach(job=>{job.status='completed';job.revision+=1;});
  await page.goto(origin+'/dashboard/runs/run-1/jobs/job-coder');
@@ -314,6 +323,7 @@ try{
  await expect(page.locator('html')).toHaveAttribute('data-mode',themeBefore==='dark'?'light':'dark');
  expect(await page.evaluate(()=>localStorage.getItem('theme'))).toBe(themeBefore==='dark'?'light':'dark');
  await page.getByRole('button',{name:'Toggle theme',exact:true}).click();
+ await page.getByRole('button',{name:'Runtime diagnostics and recovery',exact:true}).click();
  const recoveryPanel=page.getByRole('region',{name:'Runtime recovery',exact:true});
  await expect(recoveryPanel.getByText('Coordinator recovery paused after memory resets',{exact:true})).toBeVisible();
  await expect(recoveryPanel).toContainText('1 waiting · No active attempt · Version fixture-runtime-v1');
@@ -362,7 +372,7 @@ try{
  const settingsShot=join(screenshotDir, 'settings-desktop.png');await page.screenshot({path:settingsShot});shots.push(settingsShot);
  settings={...settings,locked:true,blockingRunIds:['run-1']};
  await page.reload();
- await expect(page.getByText('Locked by active runs',{exact:true})).toBeVisible();
+ await expect(page.getByText('Defaults locked by unfinished runs',{exact:true})).toBeVisible();
  await expect(modelSearch).toBeDisabled();
  await expect(page.getByLabel('Primary prompt template')).toBeDisabled();
  await expect(page.getByRole('combobox',{name:'Reasoning effort',exact:true})).toBeDisabled();
@@ -378,16 +388,16 @@ try{
  await expect(page.getByText('Operator question',{exact:true})).toBeVisible();
  await assertChatLayout('mobile-native-controls');
  const pendingMobile=join(screenshotDir,'native-controls-mobile.png');await page.screenshot({path:pendingMobile});shots.push(pendingMobile);
- await page.getByLabel('Continue?',{exact:false}).selectOption('false');
+ await choose('Continue?','No');
  await page.getByRole('button',{name:'Send answer',exact:true}).click();
  await expect(page.getByText('Operator question',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Reject',exact:true}).click();
  await expect(page.getByRole('button',{name:'Reject',exact:true})).toHaveCount(0);
  expect(calls.some(call=>call.path.endsWith('/permissions/per_operator/reply')&&JSON.parse(call.body).decision==='reject')).toBe(true);
  await page.getByRole('button',{name:'Open navigation',exact:true}).click();
- await expect(page.getByRole('complementary',{name:'Run navigation'})).toHaveClass(/run-rail-open/);
- await page.getByRole('complementary',{name:'Run navigation'}).getByRole('button',{name:'Close navigation',exact:true}).click();
- await expect.poll(async()=> (await page.getByRole('complementary',{name:'Run navigation'}).boundingBox()).x).toBeLessThan(-300);
+ await expect(page.getByRole('navigation',{name:'Run navigation',exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'Run navigation',exact:true}).getByRole('button',{name:'Close navigation',exact:true}).click();
+ await expect(page.getByRole('navigation',{name:'Run navigation',exact:true})).toBeHidden();
  await assertChatLayout('mobile');
  const width=await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth}));
  expect(width.scroll).toBeLessThanOrEqual(width.viewport);
@@ -405,9 +415,11 @@ try{
  await page.locator('.workflow-panel').scrollIntoViewIfNeeded();
  const mobileInspector=join(screenshotDir,'dashboard-mobile-inspector.png');await page.screenshot({path:mobileInspector});shots.push(mobileInspector);
  runtimeDiagnostics={coordinator:{version:{id:'fixture-runtime-v1'}},backlog:{waiting:1,oldestWaitingMs:2000},active:{id:'job-1',state:'cancelled',drained:true,unresolvedRemote:0,sessionCleanupPending:false,recovery:{reason:'alarm_memory_limit',sealed:true,observedAt:200,purgedJobs:1}}};
- await page.getByRole('navigation',{name:'Product navigation'}).getByRole('link',{name:'Settings',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Prompts and models'})).toBeVisible();
+ await page.getByRole('link',{name:'All runs',exact:true}).click();
+ await page.getByRole('tab',{name:'Settings',exact:true}).click();
+ await expect(page.getByRole('tab',{name:'Settings',exact:true})).toHaveAttribute('aria-selected','true');
  await expect(page.getByLabel('Primary prompt template')).not.toHaveValue('');
+ await page.getByRole('button',{name:'Runtime diagnostics and recovery',exact:true}).click();
  await expect(recoveryPanel.getByText('Attempt recovery paused after memory resets',{exact:true})).toBeVisible();
  await expect(recoveryPanel).toContainText('Active attempt: job-1');
  const attemptPaused=join(screenshotDir,'runtime-recovery-paused-mobile.png');await recoveryPanel.screenshot({path:attemptPaused});shots.push(attemptPaused);
@@ -425,7 +437,8 @@ try{
  const popupBounds=await page.locator('.settings-model-popup').boundingBox();
  expect(popupBounds.x).toBeGreaterThanOrEqual(0);expect(popupBounds.x+popupBounds.width).toBeLessThanOrEqual(390);
  await modelSearch.press('Escape');
- for(const name of ['Chats','Dashboard','Settings']) await expect(page.getByRole('navigation',{name:'Product navigation'}).getByRole('link',{name,exact:true})).toBeVisible();
+ for(const name of ['Chats','Dashboard']) await expect(page.getByRole('navigation',{name:'Product navigation'}).getByRole('link',{name,exact:true})).toBeVisible();
+ await expect(page.getByRole('tab',{name:'Settings',exact:true})).toHaveAttribute('aria-selected','true');
  await assertHealthy('settings-mobile');
  expect(clientStateWrites).toEqual([]);
  expect(calls.some(call=>/^\/v1\/ui\/runs\/[^/]+\/events$/.test(call.path))).toBe(false);
@@ -433,7 +446,7 @@ try{
  await fs.writeFile(join(screenshotDir, 'result.json'),JSON.stringify({url:origin,title:await page.title(),viewports:['1440x1000','390x844'],consoleErrors,expectedConflictConsoleErrors,externalRequests,screenshots:shots,requestCount:calls.length,stateEvidence,recoveryEvidence,recoveryRequests:recoveryCalls().map(call=>JSON.parse(call.body)),interactions:['native transcript and tool render','native conditional form reply','native permission allow once','recorded session usage','steer','interrupt','fresh revision','dashboard native phases','settings recovery stale CAS rejection without retry','unresolved scanner refusal','explicit coordinator and attempt recovery','settings save If-Match','selected State child survives delayed root-only REST','Kumo keyboard model selection and missing saved selection','exact edited and untouched prompt bytes','locked Kumo settings controls','shared theme persistence','mobile Kumo popup bounds','mobile navigation'],mobileWidth:width,layouts},null,2));
  console.log(JSON.stringify({passed:true,screenshots:shots,consoleErrors,expectedConflictConsoleErrors,externalRequests,stateEvidence,recoveryEvidence,requests:calls.length}));
 }catch(error){
- await fs.writeFile(join(screenshotDir,'failure.json'),JSON.stringify({url:page.url(),consoleErrors,expectedConflictConsoleErrors,externalRequests,stateEvidence,recoveryEvidence,recoveryRequests:recoveryCalls().map(call=>JSON.parse(call.body)),layouts,serverOutput,error:String(error)},null,2));
+ await fs.writeFile(join(screenshotDir,'failure.json'),JSON.stringify({url:page.url(),consoleErrors,expectedConflictConsoleErrors,externalRequests,stateEvidence,recoveryEvidence,recoveryRequests:recoveryCalls().map(call=>JSON.parse(call.body)),layouts,serverOutput,error:String(error),snapshot:await page.locator('body').ariaSnapshot()},null,2));
  await page.screenshot({path:join(screenshotDir,'failure.png')}).catch(()=>{});
  throw error;
 }finally{await browser.close();server?.kill();}
