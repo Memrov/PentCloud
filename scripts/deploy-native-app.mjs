@@ -12,11 +12,11 @@ const app = join(root, 'apps/control-plane');
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const options = args.filter((arg) => arg !== '--dry-run');
-assert(options.length === 0 || (options.length === 4 && options[0] === '--config' && options[2] === '--output'),
-  'Usage: deploy-native-app.mjs [--config FILE --output DIRECTORY] [--dry-run]');
+assert(options.length === 0 || ((options.length === 2 || options.length === 4) && options[0] === '--config' && (options.length === 2 || options[2] === '--output')),
+  'Usage: deploy-native-app.mjs [--config FILE [--output DIRECTORY]] [--dry-run]');
 const config = options.length ? resolve(options[1]) : join(app, 'wrangler.jsonc');
-const output = options.length ? resolve(options[3]) : join(app, 'dist/worker');
-const manifestPath = options.length ? `${output}.worker-build.json` : join(app, 'dist/worker-build.json');
+const output = options.length === 4 ? resolve(options[3]) : join(app, 'dist/worker');
+const manifestPath = options.length === 4 ? `${output}.worker-build.json` : join(app, 'dist/worker-build.json');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 assert.equal(manifest.schemaVersion, 1, 'Rebuild the application before deployment');
 assert.equal(sha256(await readFile(config)), manifest.configSha256,

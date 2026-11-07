@@ -24,10 +24,20 @@ storage/use path. Do not put credentials into prompts, Git or source config.
 
 ## Setup authorization
 
-The small first-run wizard requires the same verified Access JWT as the app.
+After protection is configured, the first-run wizard requires the same verified
+Access JWT as the app.
 Mutation routes reject foreign browser origins. The only unauthenticated setup
 status is a fixed indication that Access has not been configured; it cannot
-create storage or save secrets.
+create storage or save model secrets through the normal authenticated routes.
+
+The initial `/v1/ui/setup/access` route works only while both Access settings are
+absent. It requires a scoped Cloudflare account token and verifies the exact
+current Worker version before any mutation. It reads the existing Zero Trust
+organization, creates an owner-email-only hostname policy, and atomically saves
+Access settings and an optional OpenCode key as Worker Secrets. The account token
+is never retained. It refuses to replace unrelated Access apps/policies. This
+account-admin authorization bootstraps the app login; it is not an anonymous
+first-owner claim.
 
 Artifacts preparation uses the deployment's native binding and revokes its unused
 initial Git credential. Model-key saving requires an administrator-supplied,

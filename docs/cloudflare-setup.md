@@ -19,8 +19,8 @@ This guide covers your self-hosted installation.
    single-member workspace and inspect actual model/privacy availability.
    See [key creation](https://opencode.ai/v2/docs/console/api) for the current UI.
 5. **Deployment status:** review [deployment](deployment.md). The previous CLI
-   installer is removed. After deployment, open `/setup` for the three-step browser
-   wizard: Cloudflare bindings, Artifacts workspace and OpenCode secret. The
+   installer is removed. Use the deployment button, then open `/setup` for the three-step browser
+   wizard: owner Access, Artifacts workspace and OpenCode secret. The
    dashboard alternative below works for existing installations too.
 
 ## Add the OpenCode key in Cloudflare

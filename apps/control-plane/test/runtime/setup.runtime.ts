@@ -23,3 +23,11 @@ it('constructs secret API requests with Workers-supported redirect protection',a
   await expect(saveSetupKey({CF_VERSION_METADATA:{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}},{accountId:'a'.repeat(32),worker:'example-app',apiToken:'t'.repeat(40),key:'private-model-key',route:'go'},async(url,init)=>{requests.push(new Request(url,init));return Response.json({success:true});})).resolves.toBeUndefined();
   expect(requests).toHaveLength(2);expect(requests.every(request=>request.redirect==='manual')).toBe(true);
 });
+
+it('limits the public first-run route to scoped bootstrap input and this application origin',async()=>{
+  const headers={'X-Fixture-Unconfigured':'1','Content-Type':'application/json'};
+  const status=await app.default.fetch('https://operator.test/v1/ui/setup',{headers});expect(await status.json()).toMatchObject({access:false,ready:false});
+  const invalid=await app.default.fetch('https://operator.test/v1/ui/setup/access',{method:'POST',headers,body:JSON.stringify({apiToken:'PRIVATE_SENTINEL'})});expect(invalid.status).toBe(400);expect(await invalid.text()).not.toContain('PRIVATE_SENTINEL');
+  const foreign=await app.default.fetch('https://operator.test/v1/ui/setup/access',{method:'POST',headers:{...headers,Origin:'https://foreign.invalid'},body:'{}'});expect(foreign.status).toBe(403);
+  const installed=await app.default.fetch('https://operator.test/v1/ui/setup/access',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});expect(installed.status).toBe(401);
+});

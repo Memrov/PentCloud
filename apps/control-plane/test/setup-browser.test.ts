@@ -35,4 +35,13 @@ describe.skipIf(process.env.PENTCLOUD_SETUP_BROWSER!=='1')('small setup wizard i
     const page=await browser.newPage();await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:false,missing:['Cloudflare Access'],storage:false,models:false,ready:false})}));
     try{await page.goto(origin);await check(page.getByRole('link',{name:'Access setup'})).toBeVisible();await check(page.getByRole('button',{name:'2. Workspace',exact:true})).toBeDisabled();await check(page.getByRole('button',{name:'Continue',exact:true})).toBeDisabled();}finally{await page.close();}
   });
+  it('bootstraps hostname Access with one temporary credential and clears it before sign-in',async()=>{
+    const page=await browser.newPage();let configured=false;
+    await page.route('**/v1/ui/setup**',async route=>{
+      if(route.request().method()==='POST'){const input=route.request().postDataJSON();expect(new URL(route.request().url()).pathname).toBe('/v1/ui/setup/access');expect(input).toMatchObject({accountId:'a'.repeat(32),worker:'customer-app',email:'owner@example.com',apiToken:'temporary-setup-token',key:'private-model-key'});configured=true;return route.fulfill({contentType:'application/json',body:JSON.stringify({configured:true})});}
+      return route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,accountId:'a'.repeat(32),worker:'customer-app',access:configured,missing:configured?[]:['Cloudflare Access'],storage:false,models:configured,ready:false})});
+    });
+    try{await page.goto(origin+'/setup');await page.getByLabel('Owner email',{exact:true}).fill('owner@example.com');await check(page.getByLabel('Cloudflare account ID')).toHaveValue('a'.repeat(32));await page.getByLabel('Setup API token').fill('temporary-setup-token');await page.getByLabel('OpenCode key (optional)').fill('private-model-key');await page.getByRole('button',{name:'Protect this installation',exact:true}).click();await check(page.getByRole('button',{name:'Sign in to continue',exact:true})).toBeVisible();await check(page.getByLabel('Setup API token')).toHaveCount(0);await page.getByRole('button',{name:'Sign in to continue',exact:true}).click();await check(page.getByText('Your deployment has the required service bindings.',{exact:true})).toBeVisible();expect(await page.evaluate(()=>Object.keys(localStorage).length)).toBe(0);}finally{await page.close();}
+  });
+
 });

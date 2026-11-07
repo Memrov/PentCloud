@@ -22,12 +22,14 @@ belongs to one owner or a trusted team in their own Cloudflare account. See
 
 ## Get started
 
-After deploying the Cloudflare resources, open the protected app for a small
-three-step wizard: check Cloudflare bindings, prepare the Artifacts workspace and
-save your OpenCode key. Existing configured installations open the app directly;
-revisit the wizard at `/setup`. The previous CLI installer has been removed.
-A complete fresh-account deployment button is still pending. See
-[customer setup and deployment prerequisites](docs/deployment.md).
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Memrov/PentCloud)
+
+Choose your Cloudflare account and a Worker name. Cloudflare copies the repository
+and runs Workers Builds to deploy the app and eleven smaller tool packages in your
+account. Open the deployed app for the three-step setup wizard: protect it with
+Cloudflare Access, prepare the Artifacts workspace, and connect OpenCode. Existing
+configured installations open the app directly; revisit the wizard at `/setup`.
+See [deployment prerequisites and validation](docs/deployment.md).
 
 ### Before you start
 
@@ -72,13 +74,13 @@ For errors: [Setup and runtime debugging](docs/operations/debugging.md).
 
 | Capability | What it gives you |
 | --- | --- |
-| **Agentic security testing** | A primary agent and specialists use browser, HTTP and Kali capabilities for an authorized assessment. |
+| **Agentic security testing** | A primary agent and specialists use browser, HTTP and bounded tool-package capabilities for an authorized assessment. |
 | **Git-backed evidence** | Pinned inputs, captured files and accepted output commits connect results to a reviewable work history. |
 | **Durable orchestration** | Recorded state, receipts and supported recovery paths keep interruptions visible. Uncertain remote actions require reconciliation. |
 | **Separate agent sessions** | Each revision has its own OpenCode session/workspace. Specialist conversations remain individually accessible. |
 | **Source-informed testing** | Reference separate source repositories at exact per-run commits, alongside bounded document/source/config attachments. |
 | **Model flexibility** | Choose supported OpenCode models per role, including explicitly configured Console BYOK connections. |
-| **Cloudflare-native runtime** | Workers, Durable Objects, Artifacts, Browser Run and an on-demand shared Kali Container run in your account. |
+| **Cloudflare-native runtime** | Workers, Durable Objects, Artifacts, Browser Run and on-demand tool Containers run in your account. |
 
 Separate sessions do not mean parallel scans or a private Container for each agent.
 One mutating attempt runs at a time, with at most two waiting. Read-only preparation

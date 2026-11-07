@@ -1,88 +1,98 @@
 # Install and deployment
 
-PentCloud now has a small browser setup wizard at `/setup`. Open the protected
-application after deploying its Cloudflare resources. Existing configured
-installations open the application directly; `/setup` remains available.
-The custom command-line installer and privileged installation-test pipeline have
-been removed.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Memrov/PentCloud)
 
-## Customer setup
+## Customer installation
 
-1. **Cloudflare:** sign in through Cloudflare Access. The wizard checks that the app
-   has its Durable Objects, Artifacts, Workflow, Browser Run, Workers AI, Worker
-   Loader, version metadata and tool gateway bindings. Missing bindings are shown
-   with a link to Cloudflare. Resource and Access provisioning remain deployment
-   prerequisites; a binding check does not start or test every service.
-2. **Workspace:** click **Prepare workspace**. The native Artifacts binding creates
-   one initial repository if the namespace is empty, then revokes the unused Git
-   token. Existing repositories satisfy this check and are preserved.
-3. **Models:** enter an OpenCode key and choose Go or Console. To save from the
-   wizard, create a temporary account token with **Workers Scripts Edit** using
-   the provided scoped link, then enter the account ID and app Worker name.
-   The server verifies that this Worker owns its current version before writing
-   the key to a native Worker Secret. The setup token is used only in memory for
-   that request. Revoke it afterward. Alternatively, add the secret directly in
-   Cloudflare and click **Check again**. Click **Open PentCloud** when ready.
+Before starting, enable Workers Paid, Containers and a workers.dev subdomain in
+your Cloudflare account. Complete native Zero Trust setup; its free Access plan
+is sufficient within its limits. Keep your OpenCode key ready. Review
+[requirements and costs](requirements.md).
 
-Saving a key deploys a new Worker version. Use this first-run flow on the intended
-installation. A configured key is not proof of valid billing or inference access:
-use the existing explicit model test when creating the first project. Setup runs
-no model, assessment or container scan. It needs no setup agent or agent harness.
+1. **Deploy to Cloudflare:** choose your account, repository name and Worker name.
+   Use the repository root and accept the detected `npm run build` and
+   `npm run deploy` commands. Cloudflare copies the public repository into your
+   GitHub/GitLab account and runs Workers Builds. No local CLI or Docker install
+   is needed. The first build prepares all eleven smaller tool images.
+2. **Cloudflare:** open the deployed URL. In the wizard, enter your owner email
+   and create the scoped first-setup token using its Cloudflare link. Account ID
+   and Worker name are prefilled when supplied by Builds; otherwise copy them
+   from your Cloudflare account. Optionally enter the OpenCode key and Go/Console
+   route here to save everything with the same temporary token. Click **Protect
+   this installation**, then **Sign in to continue**.
+3. **Workspace:** click **Prepare workspace**. The native Artifacts binding
+   creates one connection-check repository only when the namespace is empty,
+   revokes unused setup Git tokens, and preserves existing repositories.
+4. **Models:** a key supplied in step 2 is already configured. Otherwise save one
+   using a temporary Workers Scripts Edit token, or add it in Cloudflare and
+   click **Check again**. Revoke setup tokens when finished. Click **Open PentCloud**.
 
-The implementation follows current Cloudflare documentation for
-[bindings](https://developers.cloudflare.com/workers/runtime-apis/bindings/),
-[Artifacts repository capabilities and token revocation](https://developers.cloudflare.com/artifacts/api/workers-binding/),
-[version metadata](https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/),
-[exact Worker version lookup](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/get/),
-[Worker Secret updates](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/update/), and
-[scoped account-token links](https://developers.cloudflare.com/fundamentals/api/how-to/account-owned-token-template/).
+A configured key does not prove billing or inference access. Use the existing
+explicit model test when creating the first project. Setup runs no model or
+assessment. Existing configured installations open the application directly;
+`/setup` remains available.
 
-## Managed deployment
+## What Cloudflare manages
 
-Use the installation's Cloudflare
-[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) connection
-to GitHub or an [Artifacts repository](https://developers.cloudflare.com/workers/ci-cd/builds/git-integration/artifacts-integration/).
-Preserve its private configuration. The checked-in Wrangler files are compilation
-examples with empty Access settings, not ready-to-use customer configurations.
+The root `wrangler.jsonc` is the new-customer deployment. It deploys **one Worker**
+containing the app, a private tool gateway through native
+[loopback bindings](https://developers.cloudflare.com/workers/runtime-apis/context/#exports),
+Durable Objects, Artifacts, a Workflow, Browser Run, Workers AI, Worker Loader and
+all eleven smaller tool Containers. New installs do not use Kali. Existing
+separate-Worker and legacy installations retain their private configurations.
 
-New installations use the eleven smaller tool packages, deployed independently
-through native [Containers image management](https://developers.cloudflare.com/containers/guides/image-management/).
-Do not install Kali for a new installation. Existing legacy backends remain
-compatible. Application updates do not require rebuilding tool images.
+[Deploy buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
+do not deploy multiple Workers together, and subdirectory templates cannot import
+files outside that subdirectory. Deploying the whole repository as one Worker
+avoids both restrictions. Worker names selected by Builds determine the Artifacts
+namespace and Workflow name, keeping separate installations isolated.
 
-Give staging its own app, Durable Objects, Artifacts namespace, Workflow and Access
-policy in the test account/domain. A tool gateway used in testing must also belong
-to that test installation/account. Production remains separate.
-[Worker Previews](https://developers.cloudflare.com/workers/previews/resources/)
-do not automatically select matching peer service Workers, and Workflows need a
-dedicated test deployment.
+The build fetches a checksum-pinned revision of
+[PentCloud-tools](https://github.com/Memrov/PentCloud-tools) and uses its existing
+verified image preparation scripts. Native Wrangler and
+[Workers Builds](https://developers.cloudflare.com/containers/guides/deploy/#deploy-with-workers-builds)
+build and publish the images into the customer's Cloudflare account. There is no
+custom image registry, installer state machine or setup agent. Node and Go are
+pinned; no account credentials or account logs are sent to GitHub Actions.
 
-For source verification, run `npm ci`, `npm run verify:full` and `npm run test:browser`
-with Node 26.12.1 or later 26.x and Go 1.26.5. The native build verifies the prebuilt
-Worker, runtime modules and source map before deployment. GitHub source checks
-need no Cloudflare account credentials or account logs. Browser tests cover the
-wizard on desktop and mobile; Workers tests cover authentication and secret input.
+## Access and credentials
 
-## Validation
+The first-setup token needs **Workers Scripts Edit**, **Access Apps and Policies
+Edit**, and **Access Organizations Read**, scoped to the customer's account.
+Before making any change, the Worker verifies that its exact current version
+belongs to the selected account/script. It creates an owner-email-only
+**hostname-based** Access app and atomically saves the issuer, audience and any
+supplied model key using the native
+[bulk-secret API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/bulk_update/).
+The token is never persisted. Setup closes as soon as either Access setting exists.
+Existing unrelated Access policies are never overwritten.
 
-On November 6, 2026, the wizard completed a live run at the separate
-`setup.heflare.app` test installation: binding status, native Artifacts creation,
-Worker version verification, native Secret save and opening the application.
-Desktop and mobile Chrome checks reported no script errors. The Secret check used
-a dummy OpenCode key and ran no inference or assessment. The dummy secret,
-temporary Access policies/service tokens and account tokens were removed;
-the owner Access policy and test installation remain. No account credentials or
-account logs were added to GitHub Actions.
+Hostname Access is deliberate: Cloudflare currently documents that
+[worker-level Access does not support WebSockets](https://developers.cloudflare.com/workers/configuration/cloudflare-access/#protect-one-worker).
+Keep protection on the hostname users will visit. Adding a custom domain later
+also requires protecting that hostname in the same Access application.
 
-## Limitations
+Runtime services use native bindings, without a separate API token per service.
+Model keys use Worker Secrets. See [authentication](operations/authentication.md),
+[Artifacts capabilities](https://developers.cloudflare.com/artifacts/api/workers-binding/)
+and [account-token template links](https://developers.cloudflare.com/fundamentals/api/how-to/account-owned-token-template/).
 
-This is post-deployment setup. A complete fresh-account **Deploy to Cloudflare**
-button, automatic Access provisioning and automatic tool-image installation are
-not shipped. Cloudflare's [deployment button](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
-supports selected bindings; the full PentCloud stack still needs a configured
-deployment. The wizard reports missing resources rather than becoming a second
-infrastructure installer.
+## Validation and updates
 
-Human SSO sign-in, paid model inference and a complete assessment need their own
-acceptance checks. Review [requirements and costs](requirements.md),
-[Cloudflare credential setup](cloudflare-setup.md) and [operations](operations.md).
+Source checks: `npm ci`, `npm run verify:full`, and `npm run test:browser`, using
+Node 26.12.1 and Go 1.26.5. Checks cover the complete customer Worker, native
+loopback gateway, authenticated/public bootstrap boundaries, secret handling,
+installation name isolation, desktop/mobile UI and verified source maps.
+Source-only dry runs skip Container rollout; the actual deploy builds/publishes
+images through Wrangler. A dry run alone does not prove image provisioning.
+
+The earlier wizard was validated at `setup.heflare.app` with real Artifacts and
+Secret writes and a dummy model key. Hosted validation of the complete deployment
+button is in progress on this PR. Production remains separate. Human SSO, model
+inference and a complete assessment must be reported separately from source checks.
+
+Use the copied repository's Workers Builds connection for updates. Preserve its
+configuration and secrets. Existing installations keep using their original
+build/deploy commands and private configuration; do not replace them with the new
+customer template. See [Cloudflare setup](cloudflare-setup.md) and
+[operations](operations.md).

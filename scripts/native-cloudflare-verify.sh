@@ -41,6 +41,8 @@ if [[ "$worker" != gateway ]]; then
   "$native_go" run ./scripts/native-specialists -check
   npm run test:unit
   npm run test:workers
+  npm run test:customer
+  node --test scripts/test-customer-deploy.mjs
   node --test scripts/test-native-worker-source-maps.mjs
   if (( full )); then
     npm run build --workspace @pentcloud/tool-packs

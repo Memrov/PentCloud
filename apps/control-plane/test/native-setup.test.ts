@@ -23,7 +23,7 @@ describe('small first-run setup',()=>{
   });
   it('rejects a different Worker and sanitizes authorization failures before any secret write',async()=>{
     const fetcher=vi.fn(async()=>new Response('PRIVATE_TOKEN_OR_PROVIDER_BODY',{status:403}));
-    await expect(saveSetupKey({CF_VERSION_METADATA:{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}},{accountId:'a'.repeat(32),worker:'wrong-app',apiToken:'t'.repeat(40),key:'private-model-key',route:'go'},fetcher)).rejects.toThrow('403: Check the account, Worker name and Workers Scripts Edit permission.');expect(fetcher).toHaveBeenCalledTimes(1);
+    await expect(saveSetupKey({CF_VERSION_METADATA:{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}},{accountId:'a'.repeat(32),worker:'wrong-app',apiToken:'t'.repeat(40),key:'private-model-key',route:'go'},fetcher)).rejects.toThrow('403: Check the account, Worker name and required setup-token permissions.');expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it('recognizes an existing workspace without creating a setup repository',async()=>{
     const create=vi.fn(),env={ARTIFACTS:{get:async()=>{throw {code:'NOT_FOUND'};},list:async()=>({repos:[{id:'existing-data'}]}),create}};
@@ -45,4 +45,25 @@ describe('small first-run setup',()=>{
     await expect(saveSetupKey({CF_VERSION_METADATA:{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}},{accountId:'a'.repeat(32),worker:'example-app',apiToken:'t'.repeat(40),key:'private-model-key',route:'go'},fetcher)).rejects.toThrow(/^403:/);expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+});
+
+describe('native Access bootstrap',()=>{
+  const env={CF_VERSION_METADATA:{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}},input={accountId:'a'.repeat(32),worker:'pentcloud',apiToken:'t'.repeat(40),email:'owner@example.com',key:'private-model-key',route:'go'};
+  it('verifies Worker ownership before creating an owner-only hostname policy and atomically saving native secrets',async()=>{
+    const calls:{url:string;init?:RequestInit}[]=[];
+    const fake=async(url:RequestInfo|URL,init?:RequestInit)=>{calls.push({url:String(url),...(init?{init}:{})});return Response.json({success:true,result:String(url).endsWith('/organizations')?{auth_domain:'team.cloudflareaccess.com'}:String(url).includes('/access/apps?')?[]:init?.method==='POST'?{id:'app-id',aud:'a'.repeat(64)}:{}});};
+    const {configureSetupAccess}=await import('../src/native/setup');await configureSetupAccess(env,input,'https://customer.example/setup',fake);
+    expect(calls[0]!.url).toContain('/versions/'+env.CF_VERSION_METADATA.id);
+    const create=calls.find(c=>c.init?.method==='POST')!;expect(JSON.parse(String(create.init!.body))).toMatchObject({domain:'customer.example',type:'self_hosted',policies:[{decision:'allow',include:[{email:{email:'owner@example.com'}}]}]});
+    const save=calls.at(-1)!;expect(save.url).toMatch(/\/secrets-bulk$/);expect(save.init?.method).toBe('PATCH');const secrets=JSON.parse(String(save.init!.body)).secrets;
+    expect(Object.keys(secrets).sort()).toEqual(['ACCESS_AUD','ACCESS_TEAM_DOMAIN','OPENCODE_GO_API_KEY']);expect(secrets.ACCESS_AUD.text).toBe('a'.repeat(64));
+    expect(calls.every(c=>c.init?.redirect==='manual')).toBe(true);
+  });
+  it('cannot reset an installation with existing Access settings',async()=>{
+    const {configureSetupAccess}=await import('../src/native/setup'),fake=vi.fn();await expect(configureSetupAccess({...env,ACCESS_AUD:'configured'},input,'https://customer.example',fake)).rejects.toThrow(/^409:/);expect(fake).not.toHaveBeenCalled();
+  });
+  it('refuses to replace another Access application or policy',async()=>{
+    const {configureSetupAccess}=await import('../src/native/setup');const fake=vi.fn(async(url:RequestInfo|URL,_init?:RequestInit)=>Response.json({success:true,result:String(url).endsWith('/organizations')?{auth_domain:'team.cloudflareaccess.com'}:String(url).includes('/access/apps?')?[{id:'other',name:'Someone else',domain:'customer.example',type:'self_hosted',aud:'a'.repeat(64)}]:{}}));
+    await expect(configureSetupAccess(env,input,'https://customer.example',fake)).rejects.toThrow(/^409:/);expect(fake.mock.calls.every(call=>!call[1]?.method)).toBe(true);
+  });
 });

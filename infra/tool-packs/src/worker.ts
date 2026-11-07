@@ -26,7 +26,19 @@ export {PasswordRunner} from "@memrov2/pentcloud-password/worker";
 export {ReferenceRunner} from "@memrov2/pentcloud-reference/worker";
 export {MetasploitRunner} from "@memrov2/pentcloud-metasploit/worker";
 
-type Env=Cloudflare.Env;
+type Env={
+  RECON:DurableObjectNamespace<import("@memrov2/pentcloud-recon/worker").ReconRunner>;
+  HTTP:DurableObjectNamespace<import("@memrov2/pentcloud-http/worker").HttpRunner>;
+  NUCLEI:DurableObjectNamespace<import("@memrov2/pentcloud-nuclei/worker").NucleiRunner>;
+  SQLMAP:DurableObjectNamespace<import("@memrov2/pentcloud-sqlmap/worker").SqlmapRunner>;
+  SERVICE:DurableObjectNamespace<import("@memrov2/pentcloud-service/worker").ServiceRunner>;
+  WEB_CONTEXT:DurableObjectNamespace<import("@memrov2/pentcloud-web-context/worker").WebContextRunner>;
+  PCAP:DurableObjectNamespace<import("@memrov2/pentcloud-pcap/worker").PcapRunner>;
+  FILE_ANALYSIS:DurableObjectNamespace<import("@memrov2/pentcloud-file-analysis/worker").FileRunner>;
+  PASSWORD:DurableObjectNamespace<import("@memrov2/pentcloud-password/worker").PasswordRunner>;
+  REFERENCE:DurableObjectNamespace<import("@memrov2/pentcloud-reference/worker").ReferenceRunner>;
+  METASPLOIT:DurableObjectNamespace<import("@memrov2/pentcloud-metasploit/worker").MetasploitRunner>;
+};
 const binding={recon:"RECON",http:"HTTP",nuclei:"NUCLEI",sqlmap:"SQLMAP",service:"SERVICE","web-context":"WEB_CONTEXT",pcap:"PCAP","file-analysis":"FILE_ANALYSIS",password:"PASSWORD",reference:"REFERENCE",metasploit:"METASPLOIT"} as const;
 
 function reconRequest(input:Record<string,unknown>):ReconRequest {
@@ -102,7 +114,7 @@ export class ToolPackGateway extends WorkerEntrypoint<Env> implements ToolPackSe
           for(let page=0;page<16;page++){
             const listing=await client.listTools(cursor?{cursor}:undefined),tool=listing.tools.find(t=>t.name===r.name);
             if(tool){
-              const valid=validator.getValidator(tool.inputSchema)(r.arguments);
+              const valid=validator.getValidator(tool.inputSchema as Parameters<typeof validator.getValidator>[0])(r.arguments);
               if(!valid.valid)return {rejected:true,notExecuted:true,error:valid.errorMessage};
               return await client.callTool({name:tool.name,arguments:r.arguments as Record<string,unknown>},undefined,{timeout:120000});
             }

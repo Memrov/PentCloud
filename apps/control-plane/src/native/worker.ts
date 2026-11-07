@@ -12,7 +12,7 @@ import { normalizeUploadIds, MATERIAL_FILE_LIMIT } from "./materials";
 import { confinedRelative } from "./tool-policy";
 import { hostedUIResponse } from "./ui-response";
 import {readVerificationEmail} from './verification-email';
-import {prepareSetupStorage,saveSetupKey,setupStatus} from './setup';
+import {configureSetupAccess,prepareSetupStorage,saveSetupKey,setupStatus} from './setup';
 
 import { TOOLBOX_GENERATION_HEADER, toolboxOperatorReply } from "../../../../shared/toolbox-rpc";
 
@@ -92,8 +92,11 @@ export default {
   },
   async fetch(request: Request, env: NativeEnv): Promise<Response> {
     const url = new URL(request.url);
+    if(url.pathname==='/v1/ui/setup/access'&&request.method==='POST'&&!env.ACCESS_TEAM_DOMAIN&&!env.ACCESS_AUD){
+      try{const origin=request.headers.get('Origin');if((origin&&origin!==url.origin)||request.headers.get('Sec-Fetch-Site')==='cross-site')throw Error('403: Use this application’s origin.');await configureSetupAccess(env,await body(request,16384),request.url);return Response.json({configured:true},{headers:browserViewHeaders});}catch(error){return errorResponse(error,env);}
+    }
     if(url.pathname==='/v1/ui/setup'&&request.method==='GET'&&(!env.ACCESS_TEAM_DOMAIN||!env.ACCESS_AUD))
-      return Response.json({schemaVersion:1,access:false,missing:['Cloudflare Access'],storage:false,models:false,ready:false},{headers:browserViewHeaders});
+      return Response.json({schemaVersion:1,access:false,accountId:Reflect.get(env,'PENTCLOUD_ACCOUNT_ID'),worker:Reflect.get(env,'PENTCLOUD_WORKER_NAME'),missing:['Cloudflare Access'],storage:false,models:false,ready:false},{headers:browserViewHeaders});
     if (url.pathname === "/health")
       return Response.json({
         application: "PentCloud",
