@@ -1,10 +1,18 @@
 import type { OpenCodeWorkerd } from "@opencode/sdk/workerd";
 import { fetchWeb } from "agents/webfetch";
 import { targetHeaders } from "./target-headers";
+import { DEFAULT_SEARCH_PROVIDER, SEARCH_PROVIDERS, isSearchProvider, type SearchProvider } from "../../../../shared/search-providers";
 
 const RESULT_LIMIT = 2 * 1024 * 1024;
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
-export const MANAGED_SEARCH_PROVIDER = "tinyfish";
+/** Workers exposes encrypted runtime secrets to OpenCode's native env integrations. */
+export function assertSearchBinding(env: object, provider: SearchProvider): void {
+  if (!isSearchProvider(provider)) throw new Error("Invalid web search provider");
+  const binding = SEARCH_PROVIDERS.find(item => item.id === provider)!.binding;
+  const value: unknown = Reflect.get(env, binding);
+  if (value === undefined && provider === "tinyfish") return;
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Configure the Cloudflare ${binding} encrypted Worker secret for ${provider} web search`);
+}
 
 export function nativeSearchOptions(args:Record<string,unknown>){
   if(args.sort!==undefined&&args.sort!=="default")throw new Error("Native web search does not support date/CVSS sorting; omit sort or use default");
@@ -75,18 +83,17 @@ export async function managedBrowser(args: Record<string, unknown>, options: Bro
   return boundedResult({ ...base, markdown: page.content, format: page.via });
 }
 
-export async function managedWebSearch(query: string, limit: number, signal: AbortSignal, api: Pick<OpenCodeWorkerd.Interface["websearch"], "query">) {
+export async function managedWebSearch(query: string, limit: number, signal: AbortSignal, api: Pick<OpenCodeWorkerd.Interface["websearch"], "query">, provider: SearchProvider = DEFAULT_SEARCH_PROVIDER) {
+  if (!isSearchProvider(provider)) throw new Error("Invalid web search provider");
   if (!query.trim() || query.length > 1024) throw new Error("Web search query must contain 1–1024 characters");
   signal = AbortSignal.any([signal, AbortSignal.timeout(30000)]);
   signal.throwIfAborted();
   const count = Math.max(1, Math.min(10, Number.isFinite(limit) ? Math.floor(limit) : 5));
   const startedAt = Date.now();
-  // Explicit provider selection prevents silent fallback to a billed provider.
-  // The application has no TinyFish key; keyless access carries no service SLA.
-  // OpenCode owns TinyFish transport, decoding, deadlines and rate-limit errors.
-  const response = await api.query({ query, providerID: MANAGED_SEARCH_PROVIDER }, { signal });
+  // OpenCode owns provider transport; explicit selection prevents billing fallback.
+  const response = await api.query({ query, providerID: provider }, { signal });
   signal.throwIfAborted();
-  if (response.data.providerID !== MANAGED_SEARCH_PROVIDER) throw new Error("Native web search returned an unexpected provider");
+  if (response.data.providerID !== provider) throw new Error("Native web search returned an unexpected provider");
   const seen = new Set<string>();
   const items = response.data.results.flatMap((item) => {
     try {

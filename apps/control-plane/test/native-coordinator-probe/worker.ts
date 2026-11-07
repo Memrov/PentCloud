@@ -713,6 +713,7 @@ export class ProbeCoordinator extends Coordinator {
       roles.primary.promptFormat = "pentagi-template";
     }
     if (kind === "missing-format") delete roles.primary.promptFormat;
+    if (kind === "search-provider") roles.primary.searchProvider = "random" as typeof roles.primary.searchProvider;
     if (kind === "type")
       roles.primary.promptTemplate = 123 as unknown as string;
     if (kind === "infrastructure") {

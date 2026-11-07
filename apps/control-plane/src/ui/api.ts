@@ -1,4 +1,5 @@
 import type { UIActivityEvent } from "./presentation";
+import { isSearchProvider } from "../../../../shared/search-providers";
 import type { FormAnswer, PendingForm, PendingPermission, SessionControls } from "../native/managed-session";
 import type { BrowserLiveViewResult } from "../native/browser-live-view";
 import {
@@ -485,6 +486,7 @@ function parseRoles(value: unknown): SettingsRoles {
       || (role.promptFormat !== undefined && role.promptFormat !== "markdown" && role.promptFormat !== "pentagi-template")
       || !digest(role.upstreamPromptDigest)
       || typeof role.model !== "string"
+      || (role.searchProvider !== undefined && !isSearchProvider(role.searchProvider))
       || !UI_REASONING_EFFORTS.includes(role.reasoningEffort as UIReasoningEffort)) {
       throw new Error(`invalid ${id} settings`);
     }
@@ -493,6 +495,7 @@ function parseRoles(value: unknown): SettingsRoles {
       ...(role.promptFormat === undefined ? {} : { promptFormat: role.promptFormat }),
       upstreamPromptDigest: role.upstreamPromptDigest,
       model: role.model,
+      ...(role.searchProvider === undefined ? {} : { searchProvider: role.searchProvider }),
       reasoningEffort: role.reasoningEffort,
     }];
   })) as SettingsRoles;

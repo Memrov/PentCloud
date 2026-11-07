@@ -1167,7 +1167,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       // Catalog validation has a finite vocabulary. Crypto/storage/runtime errors
       // must retain their server classification instead of becoming client errors.
       if (
-        /^(roles must |settings document is too large|(?:primary|adviser|coder|maintenance|memorist|pentester|searcher) (?:settings are invalid|prompt template |upstream prompt digest |model is invalid|reasoning effort is invalid|OpenCode Go requires ))/.test(
+        /^(roles must |settings document is too large|(?:primary|adviser|coder|maintenance|memorist|pentester|searcher) (?:settings are invalid|prompt template |upstream prompt digest |model is invalid|reasoning effort is invalid|search provider is invalid|OpenCode Go requires ))/.test(
           message,
         )
       )

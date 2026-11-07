@@ -1,6 +1,9 @@
-/** Legacy fixture redaction only. Authentication is signed Cloudflare Access
- * identity; no runtime path reads an operator secret or Secrets Store. */
+import { SEARCH_PROVIDERS } from "./search-providers";
+
+/** Plain binding redaction only; never resolve Secrets Store getters here. */
 export function knownRuntimeSecrets(env: object): string[] {
-  const value=Reflect.get(env,"CONTROL_TOKEN");
-  return typeof value==="string"&&value?[value]:[];
+  return ["CONTROL_TOKEN", ...SEARCH_PROVIDERS.map(provider => provider.binding)].flatMap(name => {
+    const value = Reflect.get(env, name);
+    return typeof value === "string" && value ? [value] : [];
+  });
 }

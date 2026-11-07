@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { managedBrowser, managedWebSearch, nativeSearchOptions } from "../src/native/managed-retrieval";
+import { assertSearchBinding, managedBrowser, managedWebSearch, nativeSearchOptions } from "../src/native/managed-retrieval";
+import { SEARCH_PROVIDERS } from "../../../shared/search-providers";
 import type { OpenCodeWorkerd } from "@opencode/sdk/workerd";
 
 const signal = () => new AbortController().signal;
@@ -116,6 +117,24 @@ const native = (results: Array<{ url: string; title?: string; content?: string }
 });
 
 describe("native OpenCode web search compatibility", () => {
+  it.each(SEARCH_PROVIDERS)("routes only to the selected $id provider", async ({ id }) => {
+    let calls = 0;
+    const api: QueryAPI = { query: async (input, options) => {
+      calls++;
+      expect(input).toEqual({ providerID: id, query: "Cloudflare" });
+      expect(options?.signal).toBeInstanceOf(AbortSignal);
+      return { location: { directory: "/" }, data: { providerID: id, results: [{ url: "https://example.org/source", time: {} }] } };
+    } };
+    expect((await managedWebSearch("Cloudflare", 3, signal(), api, id)).provider).toBe(id);
+    expect(calls).toBe(1);
+  });
+  it("rejects provider substitution and propagates rate limits without fallback", async () => {
+    await expect(managedWebSearch("Cloudflare", 3, signal(), native([{ url: "https://example.org" }]), "exa")).rejects.toThrow("unexpected provider");
+    let calls = 0;
+    const api: QueryAPI = { query: async () => { calls++; throw new Error("HTTP 429"); } };
+    await expect(managedWebSearch("Cloudflare", 3, signal(), api, "tavily")).rejects.toThrow("HTTP 429");
+    expect(calls).toBe(1);
+  });
   it("states retrieval semantics and rejects unsupported exploit selectors before querying",()=>{
     expect(nativeSearchOptions({mode:"research"})).toMatchObject({requested_mode:"research",behavior:expect.stringContaining("Sourced retrieval only")});
     expect(()=>nativeSearchOptions({mode:"exploit",sort:"date"})).toThrow("does not support");
@@ -161,5 +180,23 @@ describe("native OpenCode web search compatibility", () => {
       return native([{ url: "https://example.org/late" }]).query(input);
     } };
     await expect(managedWebSearch("Cloudflare", 3, abort.signal, api)).rejects.toThrow("search cancelled");
+  });
+});
+
+describe("native search binding authentication", () => {
+  it.each(SEARCH_PROVIDERS)("accepts only the selected $binding runtime secret without reading other bindings", ({ id, binding }) => {
+    const env = Object.fromEntries(SEARCH_PROVIDERS.map(item => [item.binding, { get() { throw new Error("must never resolve a Store binding"); } }]));
+    Object.assign(env, { [binding]: "private-fixture" });
+    expect(() => assertSearchBinding(env, id)).not.toThrow();
+  });
+  it("keeps historical TinyFish keyless when its binding is absent", () => {
+    expect(() => assertSearchBinding({}, "tinyfish")).not.toThrow();
+  });
+  it.each(SEARCH_PROVIDERS.filter(item => item.id !== "tinyfish"))("fails clearly for missing $binding without using another provider", ({ id, binding }) => {
+    expect(() => assertSearchBinding({ TINYFISH_API_KEY: "other-provider-fixture" }, id)).toThrow(binding);
+  });
+  it("rejects empty secrets and does not resolve Secrets Store bindings", () => {
+    for (const value of ["", "  ", { get() { throw new Error("private getter payload"); } }])
+      expect(() => assertSearchBinding({ EXA_API_KEY: value }, "exa")).toThrow("Configure the Cloudflare EXA_API_KEY encrypted Worker secret");
   });
 });

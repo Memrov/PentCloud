@@ -50,7 +50,7 @@ response bounds, cancellation and mutation receipts remain.
 | Native API request tool | Clean headers plus selected target key; redirects not followed |
 | Managed HTTP reader | Cleans SDK headers on every hop; passes a URL, not an inherited operator Request |
 | Cloudflare Chromium / Kali | Private cloud execution; no operator request/cookie/header object supplied to those tools |
-| OpenCode / research / conversion | Existing fixed providers/bindings; no operator HTTP headers supplied |
+| OpenCode / research / conversion | Native model/conversion bindings and versioned per-role search providers; no operator HTTP headers supplied |
 
 This is identity containment, not a new hostname allowlist. Preserve stock tool
 schemas, the prepared Kali image and professional egress caveat. User-supplied

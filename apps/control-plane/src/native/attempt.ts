@@ -36,7 +36,8 @@ import type { ExecWorkspaceLike } from "@cloudflare/computer/tools/core";
 import { browserTool } from "agents/browser/ai-sdk";
 import { openCodeTool, type CloudflareTool } from "./cloudflare-tools";
 import { OpenCodeHarness } from "agents/harness/opencode";
-import { managedBrowser, managedWebSearch, nativeSearchOptions } from "./managed-retrieval";
+import { assertSearchBinding, managedBrowser, managedWebSearch, nativeSearchOptions } from "./managed-retrieval";
+import { DEFAULT_SEARCH_PROVIDER } from "../../../../shared/search-providers";
 import { readonlyBrowserLiveView, type BrowserLiveViewResult } from "./browser-live-view";
 import { ManagedSession, type SessionControls } from "./managed-session";
 import { ToolboxGenerationLostError, ToolboxPendingError, touchToolbox, waitForToolbox } from "./toolbox-lifecycle";
@@ -2355,7 +2356,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     }, name, args);
   }
   private async webSearch(args: Record<string, unknown>, signal?: AbortSignal) {
-    await this.active();
+    const state = await this.active();
     const semantics=nativeSearchOptions(args);
     const requested =
       typeof args.max_results === "number" && args.max_results > 0
@@ -2366,11 +2367,15 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       : this.abortController.signal;
     this.inFlightTools++;
     try {
+      const provider = state.input.settings.searchProvider ?? DEFAULT_SEARCH_PROVIDER;
+      assertSearchBinding(this.env, provider);
+      const runtime = await this.harness.opencode();
       const output = await managedWebSearch(
         String(args.query),
         Math.min(10, requested),
         combined,
-        (await this.harness.opencode()).websearch,
+        runtime.websearch,
+        provider,
       );
       await this.active();
       return this.safe({
