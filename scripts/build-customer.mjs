@@ -19,11 +19,11 @@ return config;
 async function main(){
 const config=customerConfig(JSON.parse(await readFile(new URL('../wrangler.jsonc',import.meta.url),'utf8')),{worker:process.env.WRANGLER_CI_OVERRIDE_NAME,accountId:process.env.CLOUDFLARE_ACCOUNT_ID});
 await writeFile(new URL('../wrangler.jsonc',import.meta.url),JSON.stringify(config,null,2)+'\n');
-const commit='ce1849dce533120307d13c0ab86df919c71787be';
+const commit='d62c15449911c66258ecdb32c2e4f66c66d62cbd';
 const response=await fetch(`https://codeload.github.com/Memrov/PentCloud-tools/tar.gz/${commit}`,{signal:AbortSignal.timeout(90000)});
 assert(response.ok,'Could not download the pinned tool source');
 const archive=Buffer.from(await response.arrayBuffer());
-assert.equal(createHash('sha256').update(archive).digest('hex'),'2b188ff08fa47c88f69359b336a40b4c2df6aecd7d31b8d8bfe6d2dd2f0ecbed','Tool source checksum mismatch');
+assert.equal(createHash('sha256').update(archive).digest('hex'),'45edc4f160af5b8d1466d8c221a71cbb55127793e985cf73b487c17f7aac4cf8','Tool source checksum mismatch');
 await mkdir(new URL('../.pentcloud-tools/',import.meta.url),{recursive:true});
 await writeFile(new URL('../.pentcloud-tools/source.tgz',import.meta.url),archive);
 const run=(command,args,cwd=root)=>execFileSync(command,args,{cwd,stdio:'inherit',env:{...process.env,GOTOOLCHAIN:'go1.26.5',WRANGLER_SEND_METRICS:'false'}});
