@@ -35,6 +35,28 @@ const fixture = async (run) => withNativeTestHarness({
   await run(url);
 });
 await fixture(async()=>{
+  const value=await get("/native-streams");
+  assert.match(value.migrationFailure,/injected import rollback/);assert.deepEqual(value.afterFailure,{legacy:2,cursor:0});
+  assert.equal(value.importedCursor,2,"concurrent lazy imports each legacy row once");
+  assert.match(value.claimFailure,/injected claim rollback/);assert.deepEqual(value.rollback,{cursor:2,status:"created",active:null});
+  assert.match(value.fresh.text,/id: 0\ndata: /);assert.match(value.fresh.text,/"timestamp":100/);assert.match(value.fresh.text,/\[redacted\]/);assert.doesNotMatch(value.fresh.text,/fixture-key|event: activity/);
+  assert.doesNotMatch(value.reconnect.text,/id: 0\n/);assert.match(value.reconnect.text,/id: 1\n/);
+  assert.equal(value.old.status,410,"legacy global cursors require a reload onto protocol 2");
+  assert.equal(value.streaming,"streaming","completed runs stay live for revision");
+  assert.equal((value.revised.text.match(/"type":"run.started"/g)||[]).length,2);
+  assert.match(value.lateResult,/purged/);assert.match(value.lateAppend,/purged/);assert.match(value.tail,/event: done/);
+  assert.match(value.purgeFailure,/injected purge commit rollback/);assert.deepEqual(value.failedPurge,{state:"streaming",tombstones:0});
+  assert.equal(value.purged,null);assert.equal(value.legacyRemaining,0);assert.equal(value.untouchedLegacy,1);
+});
+await fixture(async()=>{
+  const before=await get("/stream-restart?seed");
+  await worker.dispatchFetch("https://coordinator.test/abort").catch(()=>undefined);
+  const after=await get("/stream-restart"), resumed=await get("/stream-restart?after=0");
+  assert.equal(after.text,before.text,"native durable replay survives coordinator eviction");
+  assert.doesNotMatch(resumed.text,/id: 0\n/);assert.match(resumed.text,/id: 1\n/);
+});
+if(process.env.NATIVE_STREAMS_ONLY)process.exit(0);
+await fixture(async()=>{
   await get("/seed");await get("/fire");
   assert.equal((await get("/attempt?id=job-0")).deliveries,1);
   await get("/recovery-after-reset");

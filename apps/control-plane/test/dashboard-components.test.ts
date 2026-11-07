@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {DashboardButton,reportReady} from "../src/ui/components/dashboard-button";
 import { RunMap } from "../src/ui/dashboard/run-map";
-import { WorkflowTimelineView } from "../src/ui/dashboard/workflow-timeline";
+import { connectWorkflowActivity, WorkflowTimelineView } from "../src/ui/dashboard/workflow-timeline";
 import { layoutRunGraph, reduceWorkflowEvents } from "../src/ui/dashboard/model";
 import type { UIJob } from "../src/ui/api";
 
@@ -14,6 +14,25 @@ const jobs: UIJob[] = [
 ];
 
 describe("workflow dashboard components", () => {
+  it("consumes native zero-based replay through a completed run into its live revision", () => {
+    const listeners=new Map<string,EventListener>(),events:import("../src/ui/presentation").UIActivityEvent[]=[],states:string[]=[];
+    let closed=0,url="";
+    const stop=connectWorkflowActivity("run-1",{event:event=>events.push(event),connection:state=>states.push(state)},value=>{url=value;return {addEventListener:(name:string,listener:EventListener)=>listeners.set(name,listener),close:()=>{closed++;}} as unknown as EventSource;});
+    const send=(id:number,type:string,instanceId="run-1")=>listeners.get("message")!({data:JSON.stringify({instanceId,eventId:id,timestamp:id*100,type}),lastEventId:String(id)} as MessageEvent);
+    expect(url).toBe("/v1/ui/runs/run-1/workflow-events?protocol=2");
+    send(0,"run.started");send(1,"run.completed");expect(closed).toBe(0);
+    send(2,"run.started");listeners.get("up-to-date")!({} as Event);expect(states.at(-1)).toBe("live");expect(closed).toBe(0);
+    expect(events[0]?.eventId).toBe(0);expect(reduceWorkflowEvents(events,1000).status).toBe("running");
+    send(3,"phase.started","other-run");expect(events).toHaveLength(3);
+    send(4,"run.completed");expect(closed).toBe(1);expect(states.at(-1)).toBe("closed");stop();expect(closed).toBe(2);
+  });
+  it("closes completed history only after up-to-date, and closes empty history on native done", () => {
+    const listeners=new Map<string,EventListener>();let closed=0;
+    connectWorkflowActivity("run-1",{event:()=>{},connection:()=>{}},()=>({addEventListener:(name:string,listener:EventListener)=>listeners.set(name,listener),close:()=>{closed++;}} as unknown as EventSource));
+    listeners.get("message")!({data:JSON.stringify({instanceId:"run-1",eventId:0,timestamp:0,type:"run.completed"}),lastEventId:"0"} as MessageEvent);
+    expect(closed).toBe(0);listeners.get("up-to-date")!({} as Event);expect(closed).toBe(1);
+    listeners.get("done")!({} as Event);expect(closed).toBe(2);
+  });
   it("links report-ready only to accepted reporters for the selected run and target",()=>{
     const reporter:UIJob={id:"report",runId:"run-1",role:"reporter",status:"completed",revision:1,outputCommit:"a".repeat(40)};
     expect(reportReady([reporter],"other-run")).toBe(false);

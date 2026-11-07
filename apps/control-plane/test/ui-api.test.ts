@@ -92,6 +92,8 @@ describe("operator UI API client", () => {
   });
 
   it("parses only activity event fields used by the dashboard timeline", () => {
+    expect(parseActivityEvent({instanceId: "run-1", eventId: 0, timestamp: 0, type: "input.committed"})).toMatchObject({eventId:0,type:"input.committed"});
+    expect(() => parseActivityEvent({instanceId: "run-1", eventId: -1, timestamp: 0, type: "run.started"})).toThrow("invalid activity event");
     expect(parseActivityEvent({instanceId: "run-1", eventId: 8, timestamp: 2100, type: "platform.memory_recovery_sealed", jobId: "job-1"})).toMatchObject({type: "platform.memory_recovery_sealed", jobId: "job-1"});
     expect(parseActivityEvent({
       instanceId: "job-1",

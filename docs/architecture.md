@@ -67,6 +67,22 @@ from its active receipt. Native memory backoff and the persisted recovery seal
 also govern API wakes. Scheduler remains responsible for verification expiry;
 startup retires its former recovery schedules through public list/cancel calls.
 
+Run activity uses the native Streams capability with one `activity:v2:<runId>`
+log. Synchronous append joins the surrounding admission/phase transaction;
+writers are opened before that transaction and authority is rechecked afterward.
+Legacy `native_activity` rows are imported lazily for only the requested run,
+in global-ID order, with deletion and native append in one atomic transaction.
+Untouched runs retain their original rows. There is no second active event store.
+
+The authenticated workflow-events URL requires `?protocol=2`. Native SSE owns
+zero-based per-run sequence IDs, replay, heartbeats, cancellation and reconnect
+via `Last-Event-ID`; the previous global cursor URL returns 410 for native runs
+and requires a UI reload. The timeline consumes default message frames and waits
+for `up-to-date` before treating a replayed terminal event as current. Revisions
+emit a new run-start boundary. Clients can close at completion; the durable
+stream remains open until permanent purge, whose public writer discard/commit
+atomically removes history with the run tombstone and records.
+
 ## Source is context, not the work repository
 
 ![A source repository is pinned per run and read through bounded tools. The agent writes assessment work into a separate run repository.](../media/source-context.light.png)

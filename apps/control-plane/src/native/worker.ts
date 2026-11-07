@@ -300,7 +300,7 @@ export default {
             const archived = await history.getRun(id);
             if (action === "jobs") return Response.json(archived);
             return new Response(
-              "event: end\ndata: {}\n\n",
+              url.searchParams.get("protocol") === "2" ? "event: done\ndata: {}\n\n" : "event: end\ndata: {}\n\n",
               {
                 headers: {
                   "Content-Type": "text/event-stream",

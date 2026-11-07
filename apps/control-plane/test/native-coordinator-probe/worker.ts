@@ -138,6 +138,68 @@ export class FakeAttempt extends DurableObject<Bindings> {
   async inputReady(){return !!await this.ctx.storage.get("input");}
 }
 export class ProbeCoordinator extends Coordinator {
+  async streamRestartScenario(seed: boolean, after?: string) {
+    const internal=this as unknown as {activityWriter(id:string):Promise<import("agents/streams").StreamWriter>;activity(writer:import("agents/streams").StreamWriter,id:string,type:string):void};
+    if(seed){
+      await this.seed(1,"coder",false);
+      for(const [key,patch] of [["run:run-0",{phase:"completed",status:"completed"}],["job:job-0",{status:"completed"}]] as const){const row=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM native_records WHERE key=?",key).one();this.write(key,{...JSON.parse(row.value),...patch});}
+      const writer=await internal.activityWriter("run-0");internal.activity(writer,"run-0","run.started");internal.activity(writer,"run-0","run.completed");
+    }
+    const response=await this.stream("run-0",new Request("https://probe/workflow-events?protocol=2",after===undefined?{}:{headers:{"Last-Event-ID":after}}));
+    const reader=response.body!.getReader();let text="";
+    while(!text.includes("event: up-to-date")){const part=await reader.read();if(part.done)break;text+=new TextDecoder().decode(part.value);}
+    await reader.cancel();return {text};
+  }
+  async nativeStreamsScenario() {
+    await this.seed(1,"coder",false);
+    const internal=this as unknown as {activityWriter(id:string):Promise<import("agents/streams").StreamWriter>;activity(writer:import("agents/streams").StreamWriter,id:string,type:string,role?:string,job?:string,error?:string):void;claimNext():Promise<void>};
+    const read=<T>(key:string)=>JSON.parse(this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM native_records WHERE key=?",key).one().value) as T;
+    const legacy=[{instanceId:"run-0",eventId:101,timestamp:100,type:"run.started"},{instanceId:"run-0",eventId:205,timestamp:200,type:"run.completed"}];
+    for(const event of legacy)this.ctx.storage.sql.exec("INSERT INTO native_activity(id,run_id,value) VALUES(?,?,?)",event.eventId,event.instanceId,JSON.stringify(event));
+    this.ctx.storage.sql.exec("INSERT INTO native_activity(run_id,value) VALUES(?,?)","untouched-run",JSON.stringify({...legacy[0],instanceId:"untouched-run"}));
+    // Fail halfway through import: native chunks and legacy deletion must roll back together.
+    const open=this.streams.open.bind(this.streams);
+    let injected=false;
+    this.streams.open=async(...args)=>{const writer=await open(...args),append=writer.append;writer.append=chunk=>{if((chunk as {timestamp?:number}).timestamp===200&&!injected){injected=true;throw new Error("injected import rollback");}return append(chunk);};return writer;};
+    let migrationFailure="";try{await internal.activityWriter("run-0");}catch(error){migrationFailure=String(error);}
+    this.streams.open=open;
+    const afterFailure={legacy:this.ctx.storage.sql.exec("SELECT * FROM native_activity WHERE run_id='run-0'").toArray().length,cursor:(await this.streams.status("activity:v2:run-0"))?.cursor};
+    const [writer,other]=await Promise.all([internal.activityWriter("run-0"),internal.activityWriter("run-0")]);
+    const importedCursor=writer.cursor;
+    // Failure after append during a real claim must also roll back job/active authority.
+    const activity=internal.activity.bind(this);
+    internal.activity=(...args)=>{activity(...args);throw new Error("injected claim rollback");};
+    let claimFailure="";try{await internal.claimNext();}catch(error){claimFailure=String(error);}
+    internal.activity=activity;
+    const rollback={cursor:writer.cursor,status:read<AttemptRecord>("job:job-0").status,active:this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM native_records WHERE key=?","active").toArray().map(row=>JSON.parse(row.value))[0]??null};
+    internal.activity(other,"run-0","phase.started","coder","job-0","probe fixture-key");
+    const replay=async(request:Request)=>{const response=await this.stream("run-0",request);if(response.status!==200)return {status:response.status,text:await response.text()};const reader=response.body!.getReader();let text="";while(!text.includes("event: up-to-date")){const part=await reader.read();if(part.done)break;text+=new TextDecoder().decode(part.value);}await reader.cancel();return {status:response.status,text};};
+    const fresh=await replay(new Request("https://probe/workflow-events?protocol=2"));
+    const reconnect=await replay(new Request("https://probe/workflow-events?protocol=2",{headers:{"Last-Event-ID":"0"}}));
+    const old=await replay(new Request("https://probe/workflow-events?cursor=205"));
+    this.write("job:job-0",{...read<AttemptRecord>("job:job-0"),status:"completed"});
+    this.write("run:run-0",{...read<RunRecord>("run:run-0"),phase:"completed",status:"completed",repo:"run-run-0"});
+    await this.revisionForTest("job-0","Revise completed work","stream-revise");
+    const revised=await replay(new Request("https://probe/workflow-events?protocol=2"));
+    const streaming=(await this.streams.status(writer.streamId))?.state;
+    await this.cancelRun("run-0");
+    // A writer open held before native open completes must not recreate data after purge.
+    let release!:()=>void,entered!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;}),reached=new Promise<void>(resolve=>{entered=resolve;});let pause=true;
+    this.streams.open=async(...args)=>{if(pause){pause=false;entered();await held;}return open(...args);};
+    const late=internal.activityWriter("run-0").then(()=>"unexpected writer",error=>String(error));await reached;
+    const live=await this.stream("run-0",new Request("https://probe/workflow-events?protocol=2"));const reader=live.body!.getReader();let liveText="";
+    while(!liveText.includes("event: up-to-date")){const part=await reader.read();liveText+=new TextDecoder().decode(part.value);}
+    const cleanup=this as unknown as {collectCredentialVersions():void},collect=cleanup.collectCredentialVersions.bind(this);
+    cleanup.collectCredentialVersions=()=>{throw new Error("injected purge commit rollback");};
+    let purgeFailure="";try{await this.purgeRun("run-0","run-0");}catch(error){purgeFailure=String(error);}
+    const failedPurge={state:(await this.streams.status(writer.streamId))?.state,tombstones:this.ctx.storage.sql.exec("SELECT key FROM native_records WHERE key='purged:run:run-0'").toArray().length};
+    cleanup.collectCredentialVersions=collect;
+    await this.purgeRun("run-0","run-0");release();const lateResult=await late;
+    let tail="";for(;;){const part=await reader.read();if(part.done)break;tail+=new TextDecoder().decode(part.value);}
+    this.streams.open=open;
+    let lateAppend="";try{internal.activity(writer,"run-0","run.started");}catch(error){lateAppend=String(error);}
+    return {migrationFailure,afterFailure,importedCursor,claimFailure,rollback,fresh,reconnect,old,revised,streaming,purgeFailure,failedPurge,untouchedLegacy:this.ctx.storage.sql.exec("SELECT * FROM native_activity WHERE run_id='untouched-run'").toArray().length,lateResult,lateAppend,tail,purged:(await this.streams.status(writer.streamId))?.state??null,legacyRemaining:this.ctx.storage.sql.exec("SELECT * FROM native_activity WHERE run_id='run-0'").toArray().length};
+  }
   async bountyGateScenario(){
     const target=await this.onboardingAction('target.save',{id:'bounty-gate-target',kind:'website',name:'Owned fixture',url:'https://owned.invalid/',revision:null},'fixture') as {id:string;revision:number};
     const denied:string[]=[];
@@ -294,7 +356,7 @@ export class ProbeCoordinator extends Coordinator {
     if(mode==="clear-failure"){
       this.write("run:other-run",{...run,id:"other-run",phase:"specialists"});
       this.write("job:other-job",{...job,id:"other-job",runId:"other-run",status:"created"});
-      (this as unknown as {claimNext():void}).claimNext();blocked=read<unknown>("active")===null;
+      await (this as unknown as {claimNext():Promise<void>}).claimNext();blocked=read<unknown>("active")===null;
       await this.ctx.storage.put("probe:scannerClearFailure",false);after=await this.purgeRun("run-0","run-0");
     }
     return {error,before,blocked,after,clears:(await this.ctx.storage.get<number>("probe:scannerClears"))??0};
@@ -1052,6 +1114,8 @@ export default {
       if (url.pathname === "/recovery-after-reset") return Response.json(await coordinator.recoveryAfterReset());
       if (url.pathname === "/native-memory-handoff") return Response.json(await coordinator.nativeMemoryHandoff());
       if (url.pathname === "/readonly-queue") return Response.json(await coordinator.readonlyQueueScenario());
+      if (url.pathname === "/stream-restart") return Response.json(await coordinator.streamRestartScenario(url.searchParams.has("seed"),url.searchParams.get("after")??undefined));
+      if (url.pathname === "/native-streams") return Response.json(await coordinator.nativeStreamsScenario());
       if (url.pathname === "/native-wake") return Response.json(await coordinator.nativeWakeScenario());
       if (url.pathname === "/platform-schedules") return Response.json(await coordinator.platformRecoverySchedules());
       if (url.pathname === "/platform-backoff") { await coordinator.onAlarmMemoryLimit({ sealed: false, nextTime: Date.now() + 60000 }); return Response.json(await coordinator.diagnostics()); }
