@@ -46,6 +46,7 @@
     "bounded-output": "Maintain the original bounded log-reading procedure with available shell utilities.",
     "computer-capabilities": "Browser is available separately; unsupported shell/Linux/container-host operations must not be promised or invented.",
     "computer-runtime": "Cloudflare Computer owns guarded files, Worker shell and isolated JavaScript; stock Kali MCP owns Linux scanners. No implicit Docker/deadline/port claims.",
+    "computer-tool-contract": "Use the single Computer file/execution surface and its actual schemas.",
     "git-memory-capability": "Git memory covers only accepted stored artifacts and supplied history; it does not record every agent event or promise semantic search.",
     "git-memory-english": "Preserve English technical-channel discipline without claiming unsupported indexing behavior or cross-engagement access.",
     "git-memory-terminology": "Memory is Git-backed text retrieval and reusable Markdown artifacts, not a vector or Graphiti backend.",
@@ -78,7 +79,7 @@
     "structured-context": "The current objective and original arguments arrive as structured launch context, not an embedded historical snapshot.",
     "structured-files": "Attachment metadata is dynamic and comes from structured task input.",
     "structured-time": "Read the actual launch time from immutable structured task input; never freeze a timestamp into the static role.",
-    "worker-detachment": "Native terminal rejects detach; stock MCP owns remote process lifecycle.",
+    "worker-detachment": "Computer execution does not support detach; stock MCP owns remote process lifecycle.",
     "worker-directory": "Computer operations are scoped to the live task root; no cross-command cwd assumption.",
     "worker-paths": "Guarded native operations support relative paths and reject escaping the task root.",
     "worker-timeouts": "Bound requests and inspect remote asynchronous operations rather than imposing a fictional global deadline.",
@@ -275,9 +276,12 @@
             {
               "source": "1. **Task Analysis**\n   - Gather context with terminal/file operations BEFORE delegation\n   - Verify environment state independently when possible\n   - Construct precise task descriptions based on complete understanding",
               "sourceSha256": "3075a71416557c3a76f09d935a3c4bb97b1cb1a7efd3feffc86ba630fb066e1f",
-              "output": "1. **Task Analysis**\n   - Gather context with terminal/file operations BEFORE delegation\n   - Verify environment state independently when possible\n   - Construct precise task descriptions based on complete understanding",
-              "outputSha256": "3075a71416557c3a76f09d935a3c4bb97b1cb1a7efd3feffc86ba630fb066e1f",
-              "destination": "primary.md"
+              "output": "1. **Task Analysis**\n   - Gather context with Computer file tools BEFORE delegation\n   - Verify environment state independently when possible\n   - Construct precise task descriptions based on complete understanding",
+              "outputSha256": "aec79afc2ea49e8eeb46f0fde457a205b635feeeed7216568028802d93e0d83c",
+              "destination": "primary.md",
+              "adaptations": [
+                "computer-tool-contract"
+              ]
             },
             {
               "source": "2. **Task Boundaries**\n   - Work ONLY within the scope of the current subtask\n   - Do NOT attempt to execute planned subtasks in the backlog\n   - Focus on producing results that enable future subtasks to succeed",
@@ -1374,10 +1378,11 @@
             {
               "source": "2. **Technical channel — English.** The wire between you, your team, search engines, the vector store, and the runtime container. Outgoing entries are:\n   - delegation `question` fields you send to `maintenance`, `memorist`, `search`, and the `question`/`code`/`output` you send with `advice` to the mentor\n   - vector-store search queries: `search_code.questions`, `graphiti_search.query`\n   - vector-store write payloads with `store_code` (`code`, `question`, `explanation`, `description`)\n   - runtime payloads inside the Docker container: `terminal` `input`/`cwd`, `file` `path`/`content`, browser `url`\n   - the `result` field of your closing `code_result` call — the full code-development write-up consumed by the calling agent for further reasoning\n   - every line of source code, every code comment, and every identifier you produce in any field",
               "sourceSha256": "00eb1ab9625e8e2fb0dd79e2264ee4cd3acea1e8debd3c40f4d1c1510f7ed070",
-              "output": "2. **Technical channel — English.** The wire between you, your team, search engines, the Git memory, and the task runtime. Outgoing entries are:\n   - delegation `question` fields you send to `maintenance`, `memorist`, `search`, and the `question`/`code`/`output` you send with `advice` to the mentor\n   - Git-memory search queries: `search_code.questions` (reusable knowledge and any history actually recorded in Git memory)\n   - Git-memory write payloads with `store_code` (`code`, `question`, `explanation`, `description`)\n   - runtime payloads sent to Computer or stock Kali tools: `terminal` `input`/`cwd`, `file` `path`/`content`, browser `url`\n   - the `result` field of your closing `code_result` call — the full code-development write-up consumed by the calling agent for further reasoning\n   - every line of source code, every code comment, and every identifier you produce in any field",
-              "outputSha256": "c58d2809b3672657509ac3ddaa93423e894839d4579d90217011977bdb48dfd4",
+              "output": "2. **Technical channel — English.** The wire between you, your team, search engines, the Git memory, and the task runtime. Outgoing entries are:\n   - delegation `question` fields you send to `maintenance`, `memorist`, `search`, and the `question`/`code`/`output` you send with `advice` to the mentor\n   - Git-memory search queries: `search_code.questions` (reusable knowledge and any history actually recorded in Git memory)\n   - Git-memory write payloads with `store_code` (`code`, `question`, `explanation`, `description`)\n   - runtime payloads sent to Computer or stock Kali tools: `computer_exec` `command`/`cwd`/`backend`, `computer_read/write/edit` `path` and their advertised fields, browser `url`\n   - the `result` field of your closing `code_result` call — the full code-development write-up consumed by the calling agent for further reasoning\n   - every line of source code, every code comment, and every identifier you produce in any field",
+              "outputSha256": "50671650d56c6c3202d49d944e9dcb91a0b7180a05a053028f99fb777783c462",
               "destination": "coder.md",
               "adaptations": [
+                "computer-tool-contract",
                 "runtime-payload-language",
                 "git-memory-terminology",
                 "native-role-memory-tool"
@@ -1568,8 +1573,8 @@
             {
               "source": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eDocker __DOCKER_IMAGE__ with working directory __CWD__\u003c/runtime\u003e\n\u003cports\u003e\n__CONTAINER_PORTS__\n\u003c/ports\u003e\n\u003ctimeout\u003eDefault: 120 seconds (Hard limit: 20 minutes)\u003c/timeout\u003e\n\u003crestrictions\u003e\n- No GUI applications\n- No Docker host access\n- No software installation via Docker images\n- Command-line operations only\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
               "sourceSha256": "76ea1b0e17e432cc9b804fe882ec065a049c65b55649267f16a51396f4e8dbce",
-              "output": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eCloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer tools or workspace_javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.\u003c/runtime\u003e\n\u003cports\u003eUse only callback/listener ports explicitly allocated in task context or returned by the stock Kali tool. Cloudflare Worker shell does not expose Linux sockets or forwarded ports.\u003c/ports\u003e\n\u003ctimeout\u003eThere is no default attempt deadline. Respect the advertised tool's request limits; a request timeout does not prove a remote operation stopped. Inspect its returned operation/scan identifier before retrying.\u003c/timeout\u003e\n\u003crestrictions\u003e\n- Use cloudflare_browser for advertised persistent Chromium interactions; Worker shell is not a Linux desktop\n- No Docker host access or per-agent container lifecycle\n- Do not replace or modify the stock Kali image; use available tools or report missing capabilities\n- Choose advertised Computer, JavaScript, browser or stock Kali MCP capabilities according to the task\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
-              "outputSha256": "1e93b8ee61a7cfb095366920f6ae7d9d8569af1951aff34e0c9d7af94fa7b443",
+              "output": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eCloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer_exec with backend native-javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.\u003c/runtime\u003e\n\u003cports\u003eUse only callback/listener ports explicitly allocated in task context or returned by the stock Kali tool. Cloudflare Worker shell does not expose Linux sockets or forwarded ports.\u003c/ports\u003e\n\u003ctimeout\u003eThere is no default attempt deadline. Respect the advertised tool's request limits; a request timeout does not prove a remote operation stopped. Inspect its returned operation/scan identifier before retrying.\u003c/timeout\u003e\n\u003crestrictions\u003e\n- Use cloudflare_browser for advertised persistent Chromium interactions; Worker shell is not a Linux desktop\n- No Docker host access or per-agent container lifecycle\n- Do not replace or modify the stock Kali image; use available tools or report missing capabilities\n- Choose advertised Computer, JavaScript, browser or stock Kali MCP capabilities according to the task\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
+              "outputSha256": "fe02d71c73083500499b5b2326fc6ce5195fb0f7d61e8030356e31921a990c74",
               "destination": "coder.md",
               "adaptations": [
                 "workspace-path",
@@ -1928,10 +1933,11 @@
             {
               "source": "2. **Technical channel — English.** The wire between you, your team, the vector store, and the runtime container. Outgoing entries are:\n   - delegation `question` fields you send to `memorist`, `search`, and the `question`/`code`/`output` you send with `advice` to the mentor\n   - vector-store search queries: `search_guide.questions`\n   - vector-store write payloads with `store_guide` (`guide`, `question`)\n   - runtime payloads inside the Docker container: `terminal` `input`/`cwd`, `file` `path`/`content`, browser `url`",
               "sourceSha256": "27213f7929975dfa83359808bfa667b5deed44b6cdc3e9b17de4a469644d749e",
-              "output": "2. **Technical channel — English.** The wire between you, your team, the Git memory, and the task runtime. Outgoing entries are:\n   - delegation `question` fields you send to `memorist`, `search`, and the `question`/`code`/`output` you send with `advice` to the mentor\n   - Git-memory search queries: `search_guide.questions`\n   - Git-memory write payloads with `store_guide` (`guide`, `question`)\n   - runtime payloads sent to Computer or stock Kali tools: `terminal` `input`/`cwd`, `file` `path`/`content`, browser `url`",
-              "outputSha256": "adcd01f72a5b09f2c4a5545cae247e2912ed67a8fa0e36b6521ce9eceb8f075b",
+              "output": "2. **Technical channel — English.** The wire between you, your team, the Git memory, and the task runtime. Outgoing entries are:\n   - delegation `question` fields you send to `memorist`, `search`, and the `question`/`code`/`output` you send with `advice` to the mentor\n   - Git-memory search queries: `search_guide.questions`\n   - Git-memory write payloads with `store_guide` (`guide`, `question`)\n   - runtime payloads sent to Computer or stock Kali tools: `computer_exec` `command`/`cwd`/`backend`, `computer_read/write/edit` `path` and their advertised fields, browser `url`",
+              "outputSha256": "afb38d373effc33dd256afd5611d2546473e72c28ccd9f9a70d5184311b00063",
               "destination": "maintenance.md",
               "adaptations": [
+                "computer-tool-contract",
                 "runtime-payload-language",
                 "git-memory-terminology"
               ]
@@ -1976,8 +1982,8 @@
             {
               "source": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eDocker __DOCKER_IMAGE__ with working directory __CWD__\u003c/runtime\u003e\n\u003cports\u003e\n__CONTAINER_PORTS__\n\u003c/ports\u003e\n\u003ctimeout\u003eDefault: 120 seconds (Hard limit: 20 minutes)\u003c/timeout\u003e\n\u003crestrictions\u003e\n- No GUI applications\n- No Docker host access\n- No software installation via Docker images\n- Command-line operations only\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
               "sourceSha256": "76ea1b0e17e432cc9b804fe882ec065a049c65b55649267f16a51396f4e8dbce",
-              "output": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eCloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer tools or workspace_javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.\u003c/runtime\u003e\n\u003cports\u003eUse only callback/listener ports explicitly allocated in task context or returned by the stock Kali tool. Cloudflare Worker shell does not expose Linux sockets or forwarded ports.\u003c/ports\u003e\n\u003ctimeout\u003eThere is no default attempt deadline. Respect the advertised tool's request limits; a request timeout does not prove a remote operation stopped. Inspect its returned operation/scan identifier before retrying.\u003c/timeout\u003e\n\u003crestrictions\u003e\n- Use cloudflare_browser for advertised persistent Chromium interactions; Worker shell is not a Linux desktop\n- No Docker host access or per-agent container lifecycle\n- Do not replace or modify the stock Kali image; use available tools or report missing capabilities\n- Choose advertised Computer, JavaScript, browser or stock Kali MCP capabilities according to the task\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
-              "outputSha256": "1e93b8ee61a7cfb095366920f6ae7d9d8569af1951aff34e0c9d7af94fa7b443",
+              "output": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eCloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer_exec with backend native-javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.\u003c/runtime\u003e\n\u003cports\u003eUse only callback/listener ports explicitly allocated in task context or returned by the stock Kali tool. Cloudflare Worker shell does not expose Linux sockets or forwarded ports.\u003c/ports\u003e\n\u003ctimeout\u003eThere is no default attempt deadline. Respect the advertised tool's request limits; a request timeout does not prove a remote operation stopped. Inspect its returned operation/scan identifier before retrying.\u003c/timeout\u003e\n\u003crestrictions\u003e\n- Use cloudflare_browser for advertised persistent Chromium interactions; Worker shell is not a Linux desktop\n- No Docker host access or per-agent container lifecycle\n- Do not replace or modify the stock Kali image; use available tools or report missing capabilities\n- Choose advertised Computer, JavaScript, browser or stock Kali MCP capabilities according to the task\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
+              "outputSha256": "fe02d71c73083500499b5b2326fc6ce5195fb0f7d61e8030356e31921a990c74",
               "destination": "maintenance.md",
               "adaptations": [
                 "workspace-path",
@@ -2314,10 +2320,11 @@
             {
               "source": "2. **Technical channel — English.** The wire between you, the vector store, the temporal knowledge graph, and the runtime container. Outgoing entries are:\n   - vector-store semantic queries against long-term memory (the `questions` array of the search-in-memory tool)\n   - knowledge-graph queries: `graphiti_search.query`\n   - runtime payloads inside the Docker container for verifying findings: `terminal` `input`/`cwd`, `file` `path`/`content`\n   - the `result` field of your closing `memorist_result` call — the full historical-context write-up consumed by the calling agent for further reasoning",
               "sourceSha256": "c88888a89cfa270c5e1aa7461173adcb2f2d54b7e7015b1f16357069ee961970",
-              "output": "2. **Technical channel — English.** The wire between you, the Git memory, the recorded engagement history, and the task runtime. Outgoing entries are:\n   - Git-memory literal text queries against long-term memory (the `questions` array of the search-in-memory tool)\n   - recorded-history queries: `search_in_memory.questions`\n   - runtime payloads sent to Computer or stock Kali tools for verifying findings: `terminal` `input`/`cwd`, `file` `path`/`content`\n   - the `result` field of your closing `memorist_result` call — the full historical-context write-up consumed by the calling agent for further reasoning",
-              "outputSha256": "a023b253a08147ca818608fbadbe3d25cafa2fb5b69542cb0fc4bcca51503ab5",
+              "output": "2. **Technical channel — English.** The wire between you, the Git memory, the recorded engagement history, and the task runtime. Outgoing entries are:\n   - Git-memory literal text queries against long-term memory (the `questions` array of the search-in-memory tool)\n   - recorded-history queries: `search_in_memory.questions`\n   - runtime payloads sent to Computer or stock Kali tools for verifying findings: `computer_exec` `command`/`cwd`/`backend`, `computer_read/write/edit` `path` and their advertised fields\n   - the `result` field of your closing `memorist_result` call — the full historical-context write-up consumed by the calling agent for further reasoning",
+              "outputSha256": "404c43d6269debd039e0e3fe81d0fc3c8fa0194dda2e7057d8ca83a112d449fc",
               "destination": "memorist.md",
               "adaptations": [
+                "computer-tool-contract",
                 "runtime-payload-language",
                 "git-memory-terminology",
                 "git-memory-capability",
@@ -2553,8 +2560,8 @@
             {
               "source": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eDocker __DOCKER_IMAGE__ with working directory __CWD__\u003c/runtime\u003e\n\u003cports\u003e\n__CONTAINER_PORTS__\n\u003c/ports\u003e\n\u003ctimeout\u003eDefault: 120 seconds (Hard limit: 20 minutes)\u003c/timeout\u003e\n\u003crestrictions\u003e\n- No GUI applications\n- No Docker host access\n- Command-line operations only\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
               "sourceSha256": "04478877b1d7c3ef6bf9c206f0eb1edb101ae4bce16ba45984e3d2549ddb10ac",
-              "output": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eCloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer tools or workspace_javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.\u003c/runtime\u003e\n\u003cports\u003eUse only callback/listener ports explicitly allocated in task context or returned by the stock Kali tool. Cloudflare Worker shell does not expose Linux sockets or forwarded ports.\u003c/ports\u003e\n\u003ctimeout\u003eThere is no default attempt deadline. Respect the advertised tool's request limits; a request timeout does not prove a remote operation stopped. Inspect its returned operation/scan identifier before retrying.\u003c/timeout\u003e\n\u003crestrictions\u003e\n- Use cloudflare_browser for advertised persistent Chromium interactions; Worker shell is not a Linux desktop\n- No Docker host access or per-agent container lifecycle\n- Choose advertised Computer, JavaScript, browser or stock Kali MCP capabilities according to the task\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
-              "outputSha256": "47573bcdf874ac646bc343cdbc81382bd9800413ed9d5f56295ad807f2a13505",
+              "output": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eCloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer_exec with backend native-javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.\u003c/runtime\u003e\n\u003cports\u003eUse only callback/listener ports explicitly allocated in task context or returned by the stock Kali tool. Cloudflare Worker shell does not expose Linux sockets or forwarded ports.\u003c/ports\u003e\n\u003ctimeout\u003eThere is no default attempt deadline. Respect the advertised tool's request limits; a request timeout does not prove a remote operation stopped. Inspect its returned operation/scan identifier before retrying.\u003c/timeout\u003e\n\u003crestrictions\u003e\n- Use cloudflare_browser for advertised persistent Chromium interactions; Worker shell is not a Linux desktop\n- No Docker host access or per-agent container lifecycle\n- Choose advertised Computer, JavaScript, browser or stock Kali MCP capabilities according to the task\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
+              "outputSha256": "605614d37efb19cf9277aaef082a0deb0f6e7710fe2e0b5d34d8f1c23c3977f8",
               "destination": "memorist.md",
               "adaptations": [
                 "workspace-path",
@@ -2638,20 +2645,22 @@
             {
               "source": "\u003cavailable_tools\u003e\n\u003ctool name=\"file\"\u003e\n\u003cpurpose\u003eRead files from the container's local filesystem\u003c/purpose\u003e\n\u003cusage\u003eAlways use absolute paths for reliable file access\u003c/usage\u003e\n\u003c/tool\u003e",
               "sourceSha256": "030453edaec144ed40c5a8d6f6109d0c58d524794760b85b423373ac0fddc9e9",
-              "output": "\u003cavailable_tools\u003e\n\u003ctool name=\"file\"\u003e\n\u003cpurpose\u003eRead files from the guarded task workspace\u003c/purpose\u003e\n\u003cusage\u003eUse paths confined to the task workspace for reliable file access\u003c/usage\u003e\n\u003c/tool\u003e",
-              "outputSha256": "7f5acbce50053af98ef09c1e6ba02184ece5d52e368c393d2c4e3878fdf45812",
+              "output": "\u003cavailable_tools\u003e\n\u003ctool name=\"computer_read\"\u003e\n\u003cpurpose\u003eRead files from the guarded task workspace\u003c/purpose\u003e\n\u003cusage\u003eUse paths confined to the task workspace for reliable file access\u003c/usage\u003e\n\u003c/tool\u003e",
+              "outputSha256": "fc23161b6b36443a53cfaa67ec4f65ed9ebf7501de2477f5316aa6b878d9af91",
               "destination": "tools.md",
               "adaptations": [
+                "computer-tool-contract",
                 "native-file-tool"
               ]
             },
             {
               "source": "\u003ctool name=\"terminal\"\u003e\n\u003cpurpose\u003eExecute commands within the container environment\u003c/purpose\u003e\n\u003cusage\u003eSet appropriate timeouts and handle long-running processes\u003c/usage\u003e\n\u003c/tool\u003e\n\u003c/available_tools\u003e",
               "sourceSha256": "1ae57ffdb6d5760c466e5c91288280633d63cb825227bdf259bda92ef57197d7",
-              "output": "\u003ctool name=\"terminal\"\u003e\n\u003cpurpose\u003eExecute supported text/file and read-only Git commands in Worker shell; use advertised Computer JavaScript or stock Kali MCP for their respective capabilities\u003c/purpose\u003e\n\u003cusage\u003eRespect documented tool limits and inspect stock Kali operation IDs for long-running work\u003c/usage\u003e\n\u003c/tool\u003e\n\u003c/available_tools\u003e",
-              "outputSha256": "e16c5e95e0ff4b302da55309bccf41bf3dea62d251aa55b1eb7477a32dfa44bd",
+              "output": "\u003ctool name=\"computer_exec\"\u003e\n\u003cpurpose\u003eExecute supported text/file and read-only Git commands in Worker shell; use advertised Computer JavaScript or stock Kali MCP for their respective capabilities\u003c/purpose\u003e\n\u003cusage\u003eRespect documented tool limits and inspect stock Kali operation IDs for long-running work\u003c/usage\u003e\n\u003c/tool\u003e\n\u003c/available_tools\u003e",
+              "outputSha256": "f9291a27ddbdced77867cf45647e096ddbaec277ffa57f1d729dbaa912785897",
               "destination": "tools.md",
               "adaptations": [
+                "computer-tool-contract",
                 "native-file-tool"
               ]
             }
@@ -2731,8 +2740,8 @@
             {
               "source": "1. Decompose the user question into precise vector-store queries\n2. Use exact sentence matching for better search results\n3. Leverage the runtime container (terminal/file) to verify findings or extract additional details when needed\n4. Follow the LANGUAGE POLICY above on every tool call. Every `message` is an engagement-log entry written in `engagement language`; every search query, runtime command, and the closing `memorist_result.result` stay on the technical channel in English\n5. Closing entries: you MUST use the `memorist_result` tool — `result` is the technical-channel historical-context write-up consumed by the calling agent (English), `message` is the engagement-log closing summary (`engagement language`)",
               "sourceSha256": "c1b4a73bad509a2570fd6193947970b3850bc7086c518cc22ecc5f57ac95c3ad",
-              "output": "1. Decompose the user question into precise Git-memory queries\n2. Use exact sentence matching for better search results\n3. Leverage the guarded workspace (Computer/terminal/file) to verify findings or extract additional details when needed\n4. Follow the LANGUAGE POLICY above on every tool call. Every `message` is an engagement-log entry written in `engagement language`; every search query, runtime command, and the closing `memorist_result.result` stay on the technical channel in English\n5. Closing entries: you MUST use the `memorist_result` tool — `result` is the technical-channel historical-context write-up consumed by the calling agent (English), `message` is the engagement-log closing summary (`engagement language`)",
-              "outputSha256": "9002838e985b60560159a68ca78473756f410bc6479ee68931a8dcc64dabf4b0",
+              "output": "1. Decompose the user question into precise Git-memory queries\n2. Use exact sentence matching for better search results\n3. Use computer_read/write/edit and computer_exec in the guarded workspace to verify findings or extract additional details when needed\n4. Follow the LANGUAGE POLICY above on every tool call. Every `message` is an engagement-log entry written in `engagement language`; every search query, runtime command, and the closing `memorist_result.result` stay on the technical channel in English\n5. Closing entries: you MUST use the `memorist_result` tool — `result` is the technical-channel historical-context write-up consumed by the calling agent (English), `message` is the engagement-log closing summary (`engagement language`)",
+              "outputSha256": "69f694c6a01b0717734aebd3b2c6c2873648ebcf33375108b67219529a83c360",
               "destination": "memorist.md",
               "adaptations": [
                 "runtime-payload-language",
@@ -2820,10 +2829,11 @@
             {
               "source": "2. **Technical channel — English.** The wire between you, your team, search engines, the vector store, and the runtime container. Outgoing entries are:\n   - delegation `question` fields you send to `coder`, `maintenance`, `memorist`, `search`, and the `question`/`code`/`output` you send with `advice` to the mentor\n   - external search queries: `web_search.query` (use `mode=exploit` to find exploits/PoCs), `graphiti_search.query`, `search_guide.questions`\n   - vector-store payloads you write with `store_guide` (`guide`, `question`)\n   - runtime payloads inside the Docker container: `terminal` `input`/`cwd`, `file` `path`/`content`, browser `url`\n   - the `result` field of your closing `hack_result` call — the full pentest write-up consumed by the calling agent for further reasoning",
               "sourceSha256": "27e72c7fa375f95591d491ddd54a97c2c72a0ff7d09a859985f632c3b153e5b3",
-              "output": "2. **Technical channel — English.** The wire between you, your team, search engines, the Git memory, and the task runtime. Outgoing entries are:\n   - delegation `question` fields you send to `coder`, `maintenance`, `memorist`, `search`, and the `question`/`code`/`output` you send with `advice` to the mentor\n   - external search queries: `web_search.query` (use `mode=exploit` to find exploits/PoCs), `search_guide.questions` (reusable knowledge and any history actually recorded in Git memory)\n   - Git-memory payloads you write with `store_guide` (`guide`, `question`)\n   - runtime payloads sent to Computer or stock Kali tools: `terminal` `input`/`cwd`, `file` `path`/`content`, browser `url`\n   - the `result` field of your closing `hack_result` call — the full pentest write-up consumed by the calling agent for further reasoning",
-              "outputSha256": "c545717c5018d653a29861ef1e3f1e508756f70724642c67384d3fad2983466d",
+              "output": "2. **Technical channel — English.** The wire between you, your team, search engines, the Git memory, and the task runtime. Outgoing entries are:\n   - delegation `question` fields you send to `coder`, `maintenance`, `memorist`, `search`, and the `question`/`code`/`output` you send with `advice` to the mentor\n   - external search queries: `web_search.query` (use `mode=exploit` to find exploits/PoCs), `search_guide.questions` (reusable knowledge and any history actually recorded in Git memory)\n   - Git-memory payloads you write with `store_guide` (`guide`, `question`)\n   - runtime payloads sent to Computer or stock Kali tools: `computer_exec` `command`/`cwd`/`backend`, `computer_read/write/edit` `path` and their advertised fields, browser `url`\n   - the `result` field of your closing `hack_result` call — the full pentest write-up consumed by the calling agent for further reasoning",
+              "outputSha256": "57ccf2d08c4e97caa434bc2c878d33aa2e1a9b1701c231d61883f17333555b41",
               "destination": "pentester.md",
               "adaptations": [
+                "computer-tool-contract",
                 "runtime-payload-language",
                 "git-memory-terminology",
                 "native-role-memory-tool"
@@ -3044,8 +3054,8 @@
             {
               "source": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eDocker __DOCKER_IMAGE__ with working directory __CWD__\u003c/runtime\u003e\n\u003cports\u003e\n__CONTAINER_PORTS__\n\u003c/ports\u003e\n\u003ctimeout\u003eDefault: 120 seconds (Hard limit: 20 minutes)\u003c/timeout\u003e\n\u003crestrictions\u003e\n- No GUI applications\n- No Docker host access\n- No UDP port scanning\n- No software installation via Docker images\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
               "sourceSha256": "ce8bd44ab30019d23e186437862a67986fc34db06c5f4e4e9680884423c98b51",
-              "output": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eCloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer tools or workspace_javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.\u003c/runtime\u003e\n\u003cports\u003eUse only callback/listener ports explicitly allocated in task context or returned by the stock Kali tool. Cloudflare Worker shell does not expose Linux sockets or forwarded ports.\u003c/ports\u003e\n\u003ctimeout\u003eThere is no default attempt deadline. Respect the advertised tool's request limits; a request timeout does not prove a remote operation stopped. Inspect its returned operation/scan identifier before retrying.\u003c/timeout\u003e\n\u003crestrictions\u003e\n- Use cloudflare_browser for advertised persistent Chromium interactions; Worker shell is not a Linux desktop\n- No Docker host access or per-agent container lifecycle\n- Use UDP scanning only if an advertised stock Kali MCP tool supports it within the engagement scope\n- Do not replace or modify the stock Kali image; use available tools or report missing capabilities\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
-              "outputSha256": "db7402a139235c78be695b95fcbbb438d8f65303341aa8dd4efc10ce688c9e50",
+              "output": "\u003ccontainer_constraints\u003e\n\u003cruntime\u003eCloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer_exec with backend native-javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.\u003c/runtime\u003e\n\u003cports\u003eUse only callback/listener ports explicitly allocated in task context or returned by the stock Kali tool. Cloudflare Worker shell does not expose Linux sockets or forwarded ports.\u003c/ports\u003e\n\u003ctimeout\u003eThere is no default attempt deadline. Respect the advertised tool's request limits; a request timeout does not prove a remote operation stopped. Inspect its returned operation/scan identifier before retrying.\u003c/timeout\u003e\n\u003crestrictions\u003e\n- Use cloudflare_browser for advertised persistent Chromium interactions; Worker shell is not a Linux desktop\n- No Docker host access or per-agent container lifecycle\n- Use UDP scanning only if an advertised stock Kali MCP tool supports it within the engagement scope\n- Do not replace or modify the stock Kali image; use available tools or report missing capabilities\n\u003c/restrictions\u003e\n\u003c/container_constraints\u003e",
+              "outputSha256": "4607fc2b9235d3e275bc970789537656c63e2b7d7552fa39598e76c077a6c6cf",
               "destination": "pentester.md",
               "adaptations": [
                 "workspace-path",
@@ -3829,8 +3839,8 @@
     "roles": 8,
     "sections": 105,
     "paragraphs": 350,
-    "retainedParagraphs": 184,
-    "adaptedParagraphs": 166,
+    "retainedParagraphs": 183,
+    "adaptedParagraphs": 167,
     "paragraphsInSkill": 36
   },
   "branchPolicy": {

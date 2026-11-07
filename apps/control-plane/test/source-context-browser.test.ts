@@ -5,7 +5,7 @@ import {createServer,type ViteDevServer} from "vite";
 import {fileURLToPath} from "node:url";
 describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("optional source context in target setup",()=>{
   let server:ViteDevServer,browser:Browser,origin:string;
-  beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL("../",import.meta.url)),mode:"development",server:{host:"127.0.0.1",port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!;browser=await chromium.launch({channel:"chrome",headless:true});},30000);
+  beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL("../",import.meta.url)),mode:"browser-fixture",server:{host:"127.0.0.1",port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!;browser=await chromium.launch({channel:"chrome",headless:true});},30000);
   afterAll(async()=>{await browser?.close();await server?.close();});
   for(const width of [390,1440])it("attaches existing source and recovers a pending native import at "+width+"px",async()=>{
     const context=await browser.newContext({viewport:{width,height:1000},reducedMotion:"reduce"}),page=await context.newPage();

@@ -27,14 +27,17 @@ assert packages['readies'] == packages['initializes'] == 0, packages
 assert packages['execution']['drained'] and not packages['execution']['sessionCleanupPending'], packages
 assert 'bounded profiles' in packages['prompt'] and 'pentcloud_tool' in packages['skill'], packages
 assert 'Kali tools are unavailable' in packages['skill'], packages
-assert 'pentcloud_tool' in packages['shell']['capability'], packages
-_, package_template = probe('package-only-template')
-assert 'bounded profiles' in package_template['prompt'] and 'Kali tools are unavailable' in package_template['prompt'], package_template
-assert package_template['readies'] == package_template['initializes'] == 0 and package_template['execution']['drained'], package_template
+assert packages['shell']['exitCode'] == 0 and packages['shell']['stdout'] == 'owned\n', packages
+_, compatibility = probe('prompt-compatibility')
+for case in compatibility['results']:
+    assert case['saved'] == case['replayed'], case
+    assert 'template execution is retired' in case['error'] and 'Markdown' in case['error'], case
+    assert not case['created'], case
+assert compatibility['modelRequests'] == 0, compatibility
 # Exercise different DOs concurrently: unique Git directories must prevent global
 # isomorphic-git locks from crossing DO-owned SQLite I/O contexts.
 with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:
-    results = dict(pool.map(probe, ['computer', 'computer-coder', 'shell', 'javascript', 'publish', 'cancel', 'replay', 'drain', 'codemode', 'known-running', 'memory', 'research-policy', 'mcp-schema', 'session-stateless', 'session-cleanup-failure', 'metasploit-owned', 'metasploit-unknown', 'metasploit-control-race', 'metasploit-inspect-race', 'metasploit-stale-inventory']))
+    results = dict(pool.map(probe, ['computer', 'computer-coder', 'shell', 'javascript', 'publish', 'cancel', 'replay', 'drain', 'known-running', 'memory', 'research-policy', 'mcp-schema', 'session-stateless', 'session-cleanup-failure', 'metasploit-owned', 'metasploit-unknown', 'metasploit-control-race', 'metasploit-inspect-race', 'metasploit-stale-inventory']))
 results['header-secret-redaction'] = {'passed': True}
 for kind in ['native-discovery', 'native-discovery-failed', 'native-discovery-empty', 'native-discovery-legacy']:
     _, result = probe(kind)
@@ -197,6 +200,7 @@ assert managed['permissionPending']['permissions'][0]['id'] == 'per_managed_prob
 native_names = {'pentcloud_read_evidence','cloudflare_browser','computer_read','computer_ls','computer_find','computer_grep','computer_write','computer_edit','computer_delete','computer_exec'}
 for role in roles:
     names=set(results['sdk-role-'+role]['providerTools']['names'])
+    assert not {'file','terminal','workspace_javascript'} & names, (role, names)
     assert native_names <= names, (role, sorted(native_names-names))
     kali_names={'pentcloud_kali_import','pentcloud_kali_files','pentcloud_kali_export'}
     assert (kali_names <= names) if role in ('coder','maintenance','pentester') else not (kali_names & names), (role, names)
@@ -210,23 +214,28 @@ assert 'computer native marker' in computer['exec']['content'] and '"exitCode":0
 assert '42' in computer['javascript']['content'], computer
 assert 'cannot change source' in computer['source']['content'], computer
 assert 'error' in computer['escape']['content'] and 'error' in computer['git']['content'], computer
+assert 'error' in computer['symlink']['content'] and 'error' in computer['captured']['content'], computer
+assert all('retired' in error for error in computer['retired'].values()), computer
 assert not computer['drainedDuring'] and computer['rejectedAfterCancel'] and computer['drainedAfter'], computer
 assert computer['cwdBlocked'] and computer['lateBlocked'] and computer['baseline'] == 'accepted baseline\n', computer
 shell = results['shell']
-assert shell['read']['exit_code'] == 0 and shell['read']['output'] == 'accepted baseline\n', shell
-assert shell['git']['exit_code'] == 0, shell
-assert shell['blockGit']['exit_code'] != 0 and shell['blockSource']['exit_code'] != 0, shell
+assert shell['read']['exitCode'] == 0 and shell['read']['stdout'] == 'accepted baseline\n', shell
+assert shell['git']['exitCode'] == 0, shell
+assert shell['blockGit']['exitCode'] != 0 and shell['blockSource']['exitCode'] != 0, shell
 assert shell['baseline'] == 'accepted baseline\n', shell
-assert shell['evidence']['exit_code'] == 0 and 'native-shell' in shell['evidence']['output'], shell
-assert shell['unsupported']['exit_code'] == 127, shell
-assert shell['curl']['exit_code'] == 0, shell['curl']
-assert json.loads(shell['curl']['output'].replace('\r\n', '\n').split('\n\n', 1)[1]) == {'method': 'POST', 'header': 'native', 'body': 'curl fixture body'}, shell['curl']
-assert shell['curlFile'] == shell['curl']['output'], shell
+assert shell['evidence']['exitCode'] == 0 and 'native-shell' in shell['evidence']['stdout'], shell
+assert shell['unsupported']['exitCode'] == 127, shell
+assert shell['timeout'] and shell['drainedAfterTimeout'], shell
+assert shell['outputWindow']['exitCode'] == 0 and '2500' in shell['outputWindow']['stdout'] and '\n1\n' not in shell['outputWindow']['stdout'], shell
+assert shell['curl']['exitCode'] == 0, shell['curl']
+assert json.loads(shell['curl']['stdout'].replace('\r\n', '\n').split('\n\n', 1)[1]) == {'method': 'POST', 'header': 'native', 'body': 'curl fixture body'}, shell['curl']
+assert shell['curlFile'] == shell['curl']['stdout'], shell
 assert '207' in shell['curlFile'] and 'application/json' in shell['curlFile'].lower(), shell
 javascript = results['javascript']
 assert javascript['scratch']['exitCode'] == 0 and javascript['scratch']['stdout'] == 'isolated scratch\n', javascript
+assert javascript['memory']['exitCode'] == 0, javascript
 assert javascript['blockEscape']['exitCode'] != 0 and javascript['fileWrite']['exitCode'] != 0, javascript
-assert javascript['fileRead']['exitCode'] == 0, javascript
+assert javascript['fileRead']['exitCode'] != 0 and 'not available' in javascript['fileRead']['stderr'], javascript
 for name in ['publish', 'replay']:
     published = results[name]
     assert published['main'] == published['base'] and published['head'] != published['base'], published
@@ -244,10 +253,6 @@ assert cancelled['state']['result']['runtime']['terminal']['id'] == 'probe-termi
 drain = results['drain']
 assert not drain['before']['drained'] and drain['lateRejected'] and drain['after']['drained'], drain
 assert drain['after']['state'] == 'cancelled' and not drain['published'], drain
-codemode = results['codemode']
-assert codemode['read']['ok'] and not codemode['denied']['ok'], codemode
-assert not codemode['terminalUnavailable']['ok'] and not codemode['invalidSchema']['ok'], codemode
-assert codemode['baseline'] == 'accepted baseline\n', codemode
 known = results['known-running']
 assert known['newCallFenced'] and known['starts'] == 1, known
 assert not known['before']['drained'] and known['before']['unresolvedRemote'] == 1, known
@@ -289,7 +294,7 @@ assert not stale_inventory['after']['drained'] and stale_inventory['terminate'][
 startup = results['sdk-startup']
 assert not startup['storedModelSecret'], 'Native SDK session storage must not persist the binding value'
 assert startup['startup']['stage'] == 'model.request.ready' and startup['startup']['promptCharacters'] > 1000, startup
-assert startup['renderer']['isolated'] and startup['renderer']['linearMemoryBytes'] > 0 and startup['messages'] == 2, startup
+assert startup['messages'] == 2, startup
 assert startup['answer']['status'] == 'unanswered' and startup['answer']['reason'] == 'failed', startup
 import pathlib
 browser_schema = next(tool['input_schema'] for tool in json.loads((pathlib.Path(__file__).resolve().parents[4]/'contracts/pentagi-tools.json').read_text())['tools'] if tool['name']=='browser')

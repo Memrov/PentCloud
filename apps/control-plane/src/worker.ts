@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import './native/lifecycle-diagnostics';
 export { NativeDynamicWorkerTail } from './native/dynamic-worker-tail';
-export { default, ResultValidation } from './native/worker';
+export { default } from './native/worker';
 export { Coordinator } from './native/coordinator';
 export { NativeAttempt } from './native/attempt';
 export { TargetEgress } from './native/target-egress';

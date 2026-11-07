@@ -13,7 +13,7 @@ for (const [kind, path] of [['app', '../apps/control-plane/wrangler.jsonc'], ['g
     assert.throws(() => validateBuildConfig(kind, undefined, template), /Set PENTCLOUD/);
     assert.throws(() => validateBuildConfig(kind, '{"private-value":', template), /^Error: PENTCLOUD_DEPLOY_CONFIG must be valid JSON\.$/);
     assert.throws(() => validateBuildConfig(kind, JSON.stringify(config), template, 'another-worker'), /does not match/);
-    for (const patch of [{ migrations: [] }, { durable_objects: {} }, { main: 'other.js' }, { env: {} }, { build: {} }, { vars: [] }, { vars: { OPENCODE_GO_API_KEY: 'example' } }, ...(kind === 'app' ? [{ services: [] }, { workflows: [] }, { artifacts: [] }, { browser: {} }, { ai: {} }, { services: [{ binding: 'TOOLBOX', service: 'example-toolbox', entrypoint: 'OtherGateway' }] }] : [{ containers: [] }])]) {
+    for (const patch of [{ migrations: [] }, { durable_objects: {} }, { main: 'other.js' }, { env: {} }, { build: {} }, { vars: [] }, { vars: { OPENCODE_GO_API_KEY: 'example' } }, ...(kind === 'app' ? [{ services: [] }, { artifacts: [] }, { browser: {} }, { ai: {} }, { services: [{ binding: 'TOOLBOX', service: 'example-toolbox', entrypoint: 'OtherGateway' }] }] : [{ containers: [] }])]) {
       assert.throws(() => validateBuildConfig(kind, JSON.stringify({ ...config, ...patch }), template));
     }
   });
@@ -35,4 +35,35 @@ test('app: first-run Builds accept smaller tool packages without requiring a mod
   const config={...template,services:[{binding:'TOOL_PACKS',service:'example-tools',entrypoint:'ToolPackGateway'}],secrets:{required:['OPENCODE_GO_API_KEY']}};
   const result=validateBuildConfig('app',JSON.stringify(config),template,config.name);
   assert.equal(result.secrets,undefined);assert.equal(result.services[0].binding,'TOOL_PACKS');
+});
+
+
+test('app: obsolete result hint metadata is retired without changing installation or unrelated triggers', async()=>{
+  const template=JSON.parse(await readFile(new URL('../apps/control-plane/wrangler.jsonc',import.meta.url),'utf8'));
+  const other={binding:'OTHER',name:'other-workflow',class_name:'OtherWorkflow'};
+  const pushed={type:'cf.artifacts.repo.pushed',filter:{namespace:'installation-artifacts'},targets:[{type:'workflow',workflow_name:'installation-results'}]};
+  const otherTarget={type:'workflow',workflow_name:'other-workflow'};
+  const unrelated={type:'cf.artifacts.repo.created',filter:{namespace:'installation-artifacts'},targets:[otherTarget]};
+  const config={...template,name:'installation-app',artifacts:[{binding:'ARTIFACTS',namespace:'installation-artifacts'}],vars:{...template.vars,ARTIFACTS_NAMESPACE:'installation-artifacts'},workflows:[{binding:'RESULTS',name:'installation-results',class_name:'ResultValidation'},other],triggers:{crons:['0 * * * *'],events:[pushed,{...pushed,targets:[...pushed.targets,otherTarget]},unrelated]}};
+  const result=validateBuildConfig('app',JSON.stringify(config),template,config.name);
+  assert.deepEqual(result,{...config,workflows:[other],triggers:{crons:config.triggers.crons,events:[{...pushed,targets:[otherTarget]},unrelated]}});
+  assert.deepEqual(validateBuildConfig('app',JSON.stringify(result),template,result.name),result,'normalization is idempotent');
+  const retired=validateBuildConfig('app',JSON.stringify({...config,workflows:[config.workflows[0]],triggers:{events:[pushed]}}),template,config.name);
+  assert.equal(retired.workflows,undefined);assert.deepEqual(retired.triggers,{events:[]});
+  assert.throws(()=>validateBuildConfig('app',JSON.stringify({...config,workflows:[{...config.workflows[0],binding:'RENAMED'}]}),template),/ResultValidation.*retired/);
+});
+
+
+test('app: legacy bundler metadata uses Vite map policy without changing installation metadata', async () => {
+  const template = JSON.parse(await readFile(new URL('../apps/control-plane/wrangler.jsonc', import.meta.url), 'utf8'));
+  const config = { ...template, name: 'existing-installation', minify: true, upload_source_maps: false,
+    rules: [{ type: 'Text', globs: ['**/*.tmpl', '**/*.tmpl?raw', '**/*.md?raw', '**/*.md'], fallthrough: true }],
+    dependencies_instrumentation: { enabled: false }, routes: [{ pattern: 'example.invalid/*', zone_name: 'example.invalid' }],
+    artifacts: [{ binding: 'ARTIFACTS', namespace: 'existing-artifacts' }], vars: { ...template.vars, ARTIFACTS_NAMESPACE: 'existing-artifacts' },
+  };
+  const { minify, rules, ...expected } = config;
+  expected.upload_source_maps = true;
+  const result = validateBuildConfig('app', JSON.stringify(config), template, config.name);
+  assert.deepEqual(result, expected);
+  assert.deepEqual(validateBuildConfig('app', JSON.stringify(result), template, config.name), result);
 });

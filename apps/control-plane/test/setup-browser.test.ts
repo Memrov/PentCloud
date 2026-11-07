@@ -5,7 +5,7 @@ import {createServer,type ViteDevServer} from 'vite';
 import {fileURLToPath} from 'node:url';
 describe.skipIf(process.env.PENTCLOUD_SETUP_BROWSER!=='1')('small setup wizard in a real browser',()=>{
   let server:ViteDevServer,browser:Browser,origin:string;
-  beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL('../',import.meta.url)),server:{host:'127.0.0.1',port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!.replace(/\/$/,'');browser=await chromium.launch({channel:'chrome',headless:true});},30000);
+  beforeAll(async()=>{server=await createServer({mode: 'browser-fixture',root:fileURLToPath(new URL('../',import.meta.url)),server:{host:'127.0.0.1',port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!.replace(/\/$/,'');browser=await chromium.launch({channel:'chrome',headless:true});},30000);
   afterAll(async()=>{await browser?.close();await server?.close();});
   for(const width of [1440,390])it('prepares storage, saves a secret and opens the app at '+width+'px',async()=>{
     const context=await browser.newContext({viewport:{width,height:900}}),page=await context.newPage(),errors:string[]=[],writes:string[]=[];

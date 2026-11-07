@@ -230,49 +230,6 @@
       }
     },
     {
-      "name": "file",
-      "description": "Reads, writes, or edits local files (see 'action'). Prefer edit_file for targeted changes to an existing file; use write_file only for a new file or a full rewrite.",
-      "category": "environment",
-      "input_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "action": {
-            "type": "string",
-            "enum": [
-              "read_file",
-              "write_file",
-              "edit_file"
-            ],
-            "description": "'read_file' reads the file (no other field needed). 'write_file' overwrites it with 'content' (the whole file). 'edit_file' applies the patch in 'diff' (existing content elsewhere is untouched)."
-          },
-          "content": {
-            "type": "string",
-            "description": "write_file only: the complete new file content (not a diff, not a partial update)."
-          },
-          "diff": {
-            "type": "string",
-            "description": "edit_file only: unified-diff hunk(s) - '@@ -old +new @@' header, then ' '/'-'/'+' lines. Always keep at least one unchanged context line so the location is unambiguous; context/removed lines must match the file's current content verbatim (read_file first). Header line numbers are only a hint - the line text is what must match."
-          },
-          "path": {
-            "type": "string",
-            "description": "Absolute path to the file, taken literally. This field is not run through a shell, so command substitutions, variables and globs would become part of the filename - resolve them with the terminal tool first and pass the result."
-          },
-          "message": {
-            "type": "string",
-            "title": "File action message",
-            "description": "Engagement-log entry — a 1-2 short sentence running commentary describing what you are reading, writing, or editing and why. Written in the engagement language declared by your system prompt."
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "action",
-          "path",
-          "message"
-        ]
-      }
-    },
-    {
       "name": "firecrawl",
       "description": "Search in the firecrawl search engine, it combines web search with page scraping to return the main-content markdown for each result, ideal for deep research on complex technical topics and reading documentation directly from the discovered web sites",
       "category": "search_network",
@@ -1376,46 +1333,6 @@
         "required": [
           "query",
           "max_results",
-          "message"
-        ]
-      }
-    },
-    {
-      "name": "terminal",
-      "description": "Calls a terminal command in blocking mode. Use timeout=0 or a negative value to apply the configured server default timeout. Explicit positive values are accepted up to 10800 seconds (3 hours); values outside this range are replaced by the server default. Only one command can be executed at a time",
-      "category": "environment",
-      "input_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "input": {
-            "type": "string",
-            "description": "Command to be run in the docker container terminal according to the command-execution rules"
-          },
-          "cwd": {
-            "type": "string",
-            "description": "Custom current working directory to execute the command in, or the default directory if not specified"
-          },
-          "detach": {
-            "type": "boolean",
-            "description": "Set to true for INTERACTIVE or LONG-RUNNING commands: shells (msfconsole, bash, python), listeners (nc -lvnp, socat TCP-LISTEN), servers (python -m http.server, php -S), monitors (tcpdump, tail -f). These commands expect user input or run indefinitely. When true: command runs in background, you get immediate confirmation, no stdout/stderr captured. When false: command must complete within timeout and return output. For quick batch commands (nmap, curl, ls) use false"
-          },
-          "timeout": {
-            "type": "integer",
-            "description": "Execution time limit in seconds. Use 0 value to apply the configured server default timeout. Explicit positive values are accepted up to 10800 seconds (3 hours); any value outside the 1–10800 range or non-positive is replaced by the server default. For batch commands that may run long, use the 'timeout' shell utility INSIDE your command to ensure clean completion with full output: 'timeout 55 nmap -sV target' (set 5-10 seconds less than this parameter). For interactive/long-running commands, use detach=true instead of relying solely on timeout"
-          },
-          "message": {
-            "type": "string",
-            "title": "Terminal command message",
-            "description": "Engagement-log entry — a 1-2 short sentence running commentary explaining what you intend to achieve by running this command. Written in the engagement language declared by your system prompt."
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "input",
-          "cwd",
-          "detach",
-          "timeout",
           "message"
         ]
       }

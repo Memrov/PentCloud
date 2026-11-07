@@ -56,8 +56,8 @@ If a model stops without its original role result, the same session gets one
 idempotent finalization operation to submit existing work and disclose incomplete
 coverage. It cannot execute code, browse, delegate or start scanner mutations.
 Unknown remote outcomes retain their existing ownership/reconciliation fence.
-The existing ResultValidation Workflow remains a candidate-push hint, not proof
-that the model succeeded.
+Durable Coordinator recovery reads the exact persisted Attempt result without
+requiring an Artifacts push notification or completion acknowledgement.
 
 Saved API credentials continue through `pentcloud_api_request`, injected by the
 Worker for the selected API audience with redirects disabled. No blanket secret

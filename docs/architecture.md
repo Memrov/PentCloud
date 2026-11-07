@@ -25,12 +25,12 @@ Kali retains direct Internet access without network scope enforcement. [Capabili
 
 ## Separate conversations, shared accepted work
 
-![Coordinator and native queue track separate OpenCode sessions and workspaces. Agents read accepted Git work and use role-dependent capabilities. Only one mutating attempt runs at a time; Kali is shared.](../media/agents.light.png)
+![Coordinator and native Lifecycle track separate OpenCode sessions and workspaces. Agents read accepted Git work and use role-dependent capabilities. Only one mutating attempt runs at a time; Kali is shared.](../media/agents.light.png)
 
 The roles shown are examples, not simultaneous scanning lanes. Each revision gets
 a fresh native session/workspace. Coordinator SQLite is the live run/settings and
-admission authority; one native queue allows one mutating attempt and at most two
-waiting. Role-dependent tools reach Worker capabilities, Browser Run and one
+admission authority; its durable admission order allows one mutating attempt and
+at most two waiting. Role-dependent tools reach Worker capabilities, Browser Run and one
 shared stock Kali Container. Separate sessions do not provide network confinement.
 
 ## Evidence with a history
@@ -38,10 +38,11 @@ shared stock Kali Container. Separate sessions do not provide network confinemen
 ![Pinned inputs, captured files and hashes, an evidence checkpoint, immutable candidate, validation and Coordinator acceptance form the evidence lifecycle.](../media/evidence.light.png)
 
 Artifacts Git holds immutable inputs, candidates, captured evidence and accepted
-ancestry. A data checkpoint does not advance accepted history. The existing
-ResultValidation Workflow provides candidate-validation hints; Coordinator
-centrally verifies provenance and ancestry before acceptance. There is no
-Workflow per specialist and no second Git control ledger.
+ancestry. A data checkpoint does not advance accepted history. Coordinator
+centrally verifies provenance and ancestry before acceptance. Its durable native
+wake reads the exact persisted Attempt result after a lost completion or eviction;
+Artifacts push notifications are not required. There is no Workflow per specialist
+and no second Git control ledger.
 
 Native OpenCode sessions hold conversations. Git is not the sole transcript
 store or live-state authority. Evidence capture is bounded; expired/unrecorded
@@ -57,6 +58,31 @@ uses recorded state and operation receipts; unknown mutations keep their safety
 ownership until reconciled. Captured evidence may finish a data-only checkpoint
 while an owner drains, but this does not resume scanning/model work or accept a
 result. Purge waits for safe drain. See [operations](operations.md).
+
+Coordinator uses one native Lifecycle job, `pentcloud:recover`, to inspect that
+SQLite authority. Admissions persist the wake in the same transaction as the job
+record. The job returns a 15-second heartbeat while recovery work is handed to
+`trackAlarmWork`; one in-memory promise prevents overlapping recovery passes.
+A wake received during a pass remains durable, and a restarted object resumes
+from its active receipt. Native memory backoff and the persisted recovery seal
+also govern API wakes. Scheduler remains responsible for verification expiry;
+startup retires its former recovery schedules through public list/cancel calls.
+
+Run activity uses the native Streams capability with one `activity:v2:<runId>`
+log. Synchronous append joins the surrounding admission/phase transaction;
+writers are opened before that transaction and authority is rechecked afterward.
+Legacy `native_activity` rows are imported lazily for only the requested run,
+in global-ID order, with deletion and native append in one atomic transaction.
+Untouched runs retain their original rows. There is no second active event store.
+
+The authenticated workflow-events URL requires `?protocol=2`. Native SSE owns
+zero-based per-run sequence IDs, replay, heartbeats, cancellation and reconnect
+via `Last-Event-ID`; the previous global cursor URL returns 410 for native runs
+and requires a UI reload. The timeline consumes default message frames and waits
+for `up-to-date` before treating a replayed terminal event as current. Revisions
+emit a new run-start boundary. Clients can close at completion; the durable
+stream remains open until permanent purge, whose public writer discard/commit
+atomically removes history with the run tombstone and records.
 
 ## Source is context, not the work repository
 

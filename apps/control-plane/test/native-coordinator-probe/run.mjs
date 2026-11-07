@@ -19,7 +19,7 @@ const deadline = (promise, ms) =>
     promise,
     new Promise((_, reject) => {
       const timer = setTimeout(
-        () => reject(new Error("Queue alarm waited for unbounded Attempt.run")),
+        () => reject(new Error("Lifecycle alarm waited for unbounded Attempt.run")),
         ms,
       );
       timer.unref();
@@ -33,6 +33,79 @@ const fixture = async (run) => withNativeTestHarness({
   // local ports, isolated storage, diagnostics and deterministic shutdown.
   worker = {dispatchFetch: server.fetch};
   await run(url);
+});
+await fixture(async()=>{
+  const value=await get("/native-streams");
+  assert.match(value.migrationFailure,/injected import rollback/);assert.deepEqual(value.afterFailure,{legacy:2,cursor:0});
+  assert.equal(value.importedCursor,2,"concurrent lazy imports each legacy row once");
+  assert.match(value.claimFailure,/injected claim rollback/);assert.deepEqual(value.rollback,{cursor:2,status:"created",active:null});
+  assert.match(value.fresh.text,/id: 0\ndata: /);assert.match(value.fresh.text,/"timestamp":100/);assert.match(value.fresh.text,/\[redacted\]/);assert.doesNotMatch(value.fresh.text,/fixture-key|event: activity/);
+  assert.doesNotMatch(value.reconnect.text,/id: 0\n/);assert.match(value.reconnect.text,/id: 1\n/);
+  assert.equal(value.old.status,410,"legacy global cursors require a reload onto protocol 2");
+  assert.equal(value.streaming,"streaming","completed runs stay live for revision");
+  assert.equal((value.revised.text.match(/"type":"run.started"/g)||[]).length,2);
+  assert.match(value.lateResult,/purged/);assert.match(value.lateAppend,/purged/);assert.match(value.tail,/event: done/);
+  assert.match(value.purgeFailure,/injected purge commit rollback/);assert.deepEqual(value.failedPurge,{state:"streaming",tombstones:0});
+  assert.equal(value.purged,null);assert.equal(value.legacyRemaining,0);assert.equal(value.untouchedLegacy,1);
+});
+await fixture(async()=>{
+  const before=await get("/stream-restart?seed");
+  await worker.dispatchFetch("https://coordinator.test/abort").catch(()=>undefined);
+  const after=await get("/stream-restart"), resumed=await get("/stream-restart?after=0");
+  assert.equal(after.text,before.text,"native durable replay survives coordinator eviction");
+  assert.doesNotMatch(resumed.text,/id: 0\n/);assert.match(resumed.text,/id: 1\n/);
+});
+if(process.env.NATIVE_STREAMS_ONLY)process.exit(0);
+await fixture(async()=>{
+  await get("/seed");await get("/fire");
+  assert.equal((await get("/attempt?id=job-0")).deliveries,1);
+  const candidate=await get("/prepare?id=job-0");
+  await get("/recovery-after-reset");
+  await worker.dispatchFetch("https://coordinator.test/abort").catch(()=>undefined);
+  // Persist only the remote result: no push event exists and the old completion RPC was lost.
+  const finished=await worker.dispatchFetch("https://coordinator.test/finish",{method:"POST",body:JSON.stringify(candidate)});
+  assert.equal(finished.status,200);
+  let next;
+  for(let retry=0;retry<150;retry++){
+    next=await get("/attempt?id=job-1");
+    if(next.deliveries===1)break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(next.deliveries,1,"durable heartbeat reconciles a lost completion then admits FIFO after drain");
+  assert.equal((await get("/attempt?id=job-0")).starts,1,"recovery consumes the settled receipt without restarting work");
+  const settled=await get("/snapshot");
+  assert.equal(settled.jobs.find(job=>job.id==='job-0').status,'completed');
+  assert.equal(settled.records.find(row=>row.key==='run:run-0').value.headCommit,candidate.outputCommit);
+  assert.equal((await get('/main?run=run-0')).head,candidate.outputCommit,'durable recovery publishes the accepted candidate after eviction without either notification');
+  await get("/cancel?run=run-0");await get("/cancel?run=run-1");await get("/release?id=job-1");
+});
+await fixture(async()=>{
+  const value=await get("/readonly-queue");
+  assert.deepEqual(value.cold.pending,[]);assert.deepEqual(value.coldJobs,[],"queue snapshot never starts recovery");
+  assert.deepEqual(value.pending.map(job=>job.id),["job-1","job-0"],"pending projection follows authoritative admission order");
+});
+await fixture(async()=>{
+  await worker.dispatchFetch("https://coordinator.test/native-memory-handoff").catch(()=>undefined);
+  let diagnostics;
+  for(let retry=0;retry<100;retry++){
+    diagnostics=await get("/platform-diagnostics");
+    if(diagnostics.coordinator.recovery)break;
+    await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  assert.equal(diagnostics.coordinator.recovery?.sealed,false,"native breaker sees the original rejected handoff");
+  assert.ok(diagnostics.coordinator.recovery.nextTime>Date.now(),"native breaker persists its recovery backoff after reset");
+  assert.equal((await get("/platform-schedules")).recover,1,"the rejected handoff retains one native wake");
+});
+await fixture(async()=>{
+  const value=await get("/native-wake");
+  assert.ok(value.initial,"startup installs the one durable native recovery job");
+  assert.equal(value.initial.singleflight,true);assert.equal(value.initial.recoveryLoop,true);
+  assert.equal(value.firstPasses,1);assert.equal(value.busyPasses,1);assert.equal(value.peak,1,"same-ID wake never overlaps detached recovery");
+  assert.ok(value.busyWake.time<=value.busyRequestedAt+1000,"wake while busy durably advances the existing heartbeat");
+  assert.ok(value.heartbeat,"busy dispatch leaves a durable heartbeat");
+  assert.equal(value.passes,2,"heartbeat runs a fresh pass after the handoff settles");
+  assert.equal(value.rolledBack,true,"admission and native wake retime roll back together");
+  assert.match(value.failure,/injected alarm rearm failure/);assert.ok(value.retained,"rearm failure preserves the native wake for retry");
 });
 await fixture(async()=>{const value=await get('/bounty-gate-scenario');assert.deepEqual(value.denied,['scope.names','scope.search','scope.preview','scope.import']);assert.deepEqual(Object.fromEntries(value.status.connections.map(c=>[c.platform,c.status])),{hackerone:'missing',intigriti:'missing',bugcrowd:'development',yeswehack:'development'});assert.deepEqual(value.unavailable,['bugcrowd:bounty.check','bugcrowd:scope.preview','bugcrowd:scope.import','yeswehack:bounty.check','yeswehack:scope.preview','yeswehack:scope.import']);});
 await fixture(async()=>{
@@ -110,7 +183,7 @@ await fixture(async () => {
   await get("/platform-backoff");
   await get("/repeat?id=job-0");
   await get("/recover");
-  assert.equal((await get("/attempt?id=job-0")).deliveries, 0, "Queue/API wakes honor the native backoff time");
+  assert.equal((await get("/attempt?id=job-0")).deliveries, 0, "Lifecycle/API wakes honor the native backoff time");
   assert.equal((await get("/snapshot")).records.find(row => row.key === "active"), undefined);
   await get("/end-platform-backoff");
   await new Promise(resolve => setTimeout(resolve, 100));
@@ -137,7 +210,7 @@ await fixture(async () => {
   assert.equal(held.records.find(row => row.key === "active").value.id, "job-0");
   const resolved = await get("/platform-memory?unresolved=0");
   assert.equal((await get(`/platform-rearm?at=${marker}`)).rearmed, true);
-  assert.equal((await get("/platform-schedules")).recover, 1, "explicit resume restores the single native recovery schedule");
+  assert.equal((await get("/platform-schedules")).recover, 1, "explicit resume restores the single native recovery job");
   assert.equal((await get("/platform-diagnostics")).coordinator.recovery, undefined);
   assert.equal((await get("/attempt?id=job-0")).deliveries, 1, "Coordinator resume preserves the separate Attempt seal");
   await get("/rpc-failure?id=job-0&enabled=false");
@@ -208,12 +281,19 @@ await fixture(async () => {
     0,
     "unbounded work has no 30-second execution deadline",
   );
+  // The persisted native wake, without a new API wake, resumes after eviction.
+  await get("/recovery-after-reset");
   // Abrupt reset represents deployment/eviction; graceful eviction waits for pending I/O.
   await worker
     .dispatchFetch("https://coordinator.test/abort")
     .catch(() => undefined);
-  await get("/recover");
-  const resumed = await get("/attempt?id=job-0");
+  let resumed;
+  for(let retry=0;retry<150;retry++){
+    resumed=await get("/attempt?id=job-0");
+    if(resumed.deliveries>=2)break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(resumed.deliveries,2,"persisted native heartbeat resumes the same owner after reset without an API wake");
   assert.deepEqual(
     resumed.input,
     first.input,
@@ -362,12 +442,6 @@ await fixture(async () => {
   await get("/fire");
   const baseline = (await get("/main?run=run-0")).head;
   const candidate = await get("/prepare?id=job-0");
-  const pushedEarly = await get("/reconcile?id=job-0");
-  assert.equal(
-    pushedEarly.pending,
-    true,
-    "push event cannot fence an unfinished local terminal publication",
-  );
   assert.equal(
     (await get("/snapshot")).jobs.find((job) => job.id === "job-0").status,
     "running",
@@ -520,6 +594,41 @@ await fixture(async () => {
   await get("/cancel?run=run-0");
 });
 await fixture(async () => {
+  const admitted = await Promise.all([
+    get("/create?id=concurrent-first&task=first"),
+    get("/create?id=concurrent-second&task=second"),
+  ]);
+  assert.notEqual(admitted[0].rootJob.id, admitted[1].rootJob.id);
+  const snapshot = await get("/snapshot");
+  const ordered = admitted.map(({run,rootJob}) => ({
+    runId: run.id, id: rootJob.id,
+    order: snapshot.records.find(row => row.key === "order:" + rootJob.id)?.value,
+  })).sort((a,b) => a.order - b.order);
+  assert.ok(ordered.every(job => Number.isSafeInteger(job.order)));
+  assert.ok(ordered[0].order < ordered[1].order, "distinct concurrent admissions commit unique FIFO positions");
+  await get("/recover");
+  const [first, second] = ordered;
+  assert.equal((await get("/snapshot")).records.find(row => row.key === "active").value.id, first.id);
+  assert.equal((await get("/attempt?id=" + first.id)).starts, 1, "first committed admission owns the physical execution");
+  assert.equal((await get("/attempt?id=" + second.id)).starts, 0);
+  await get("/cancel?run=" + first.runId);
+  await get("/recover");
+  assert.equal((await get("/snapshot")).records.find(row => row.key === "active").value.id, first.id);
+  assert.equal((await get("/attempt?id=" + second.id)).starts, 0, "cancellation cannot hand off before the first execution drains");
+  await get("/release?id=" + first.id);
+  let next;
+  for(let retry=0;retry<100;retry++) {
+    next=await get("/attempt?id=" + second.id);
+    if(next.starts===1)break;
+    await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  assert.equal(next.starts, 1, "the next committed admission starts after the physical owner drains");
+  assert.equal((await get("/snapshot")).records.find(row => row.key === "active").value.id, second.id);
+  assert.equal((await get("/attempt?id=" + first.id)).starts, 1);
+  await get("/cancel?run=" + second.runId);
+  await get("/release?id=" + second.id);
+});
+await fixture(async () => {
   const [first, second] = await Promise.all([
     get("/create?id=concurrent&task=same"),
     get("/create?id=concurrent&task=same"),
@@ -582,7 +691,7 @@ await fixture(async () => {
   await get("/release?id=" + created.rootJob.id);
 });
 await fixture(async () => {
-  for (const kind of ["roles", "template", "type"]) {
+  for (const kind of ["roles", "template", "missing-format", "type"]) {
     const rejected = await get("/invalid-settings?kind=" + kind, 500);
     assert.match(
       rejected.error,
@@ -602,5 +711,5 @@ await fixture(async()=>{
   assert.deepEqual(await get("/browser-auth-lifecycle"),{cancelled:true,completed:true,archived:true});
 });
 console.log(
-  "workerd coordinator: Queue/deadman/reset, cancellation drain/FIFO/capacity, continuation CAS, role/revision authority, real Git candidate validation and durable publication replay passed",
+  "workerd coordinator: Lifecycle heartbeat/handoff/deadman/reset, cancellation drain/FIFO/capacity, continuation CAS, role/revision authority, real Git candidate validation and durable publication replay passed",
 );

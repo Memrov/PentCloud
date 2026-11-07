@@ -11,8 +11,8 @@ func TestLoadReturnsRoleScopedPinnedTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := len(catalog.Tools); got != 45 {
-		t.Fatalf("tool count = %d, want 45", got)
+	if got := len(catalog.Tools); got != 43 {
+		t.Fatalf("tool count = %d, want 43", got)
 	}
 
 	primary, err := catalog.ToolsForRole(RolePrimary)
@@ -20,7 +20,7 @@ func TestLoadReturnsRoleScopedPinnedTools(t *testing.T) {
 		t.Fatalf("ToolsForRole(primary): %v", err)
 	}
 	names := toolNames(primary)
-	for _, required := range []string{"advice", "clef_audit", "coder", "done", "maintenance", "memorist", "pentester", "search", "yield", "revise_attempt", "file", "terminal"} {
+	for _, required := range []string{"advice", "clef_audit", "coder", "done", "maintenance", "memorist", "pentester", "search", "yield", "revise_attempt"} {
 		if !slices.Contains(names, required) {
 			t.Errorf("primary role missing %q", required)
 		}

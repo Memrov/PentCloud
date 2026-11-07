@@ -140,7 +140,7 @@ When writing the closing entry of `done`, translate the relevant prose from Engl
 ## OPERATIONAL PROTOCOLS
 
 1. **Task Analysis**
-   - Gather context with terminal/file operations BEFORE delegation
+   - Gather context with Computer file tools BEFORE delegation
    - Verify environment state independently when possible
    - Construct precise task descriptions based on complete understanding
 

@@ -27,6 +27,10 @@ func main() {
 	types := tools.GetToolTypeMapping()
 	names := make([]string, 0, len(definitions))
 	for name := range definitions {
+		// Native Computer grants replace these aliases outside the upstream catalog.
+		if name == "file" || name == "terminal" {
+			continue
+		}
 		names = append(names, name)
 	}
 	sort.Strings(names)

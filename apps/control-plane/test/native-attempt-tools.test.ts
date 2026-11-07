@@ -8,13 +8,12 @@ import {
   assertRoleWrite,
   catalogForRole,
   confinedRelative,
-  applyUnifiedDiff,
   redact,
   validateToolInput,
 } from "../src/native/tool-policy";
 
 describe("native attempt authority", () => {
-  it("retains original role tool separation and validates terminal payloads", () => {
+  it("retains role tool separation and validates result payloads", () => {
     expect(catalogForRole("reporter").map((t) => t.name)).toEqual([
       "report_result",
     ]);
@@ -34,6 +33,16 @@ describe("native attempt authority", () => {
         extra: 1,
       }),
     ).toThrow();
+  });
+  it("retires duplicate executable contracts without enabling remote aliases", () => {
+    for (const role of ["primary", "adviser", "reporter", "coder", "maintenance", "memorist", "pentester", "searcher"] as const) {
+      const names = catalogForRole(role, supportedOptionalTools(role)).map(tool => tool.name);
+      for (const name of ["file", "terminal", "workspace_javascript"]) {
+        expect(names).not.toContain(name);
+        expect(allowedRemoteTool(role, name)).toBe(false);
+        expect(() => validateToolInput(name, {})).toThrow("retired");
+      }
+    }
   });
   it("blocks git metadata, traversal, inherited state and source writes by read-only roles", () => {
     for (const path of [
@@ -55,7 +64,7 @@ describe("native attempt authority", () => {
     ).not.toThrow();
     expect(confinedRelative("/workspace/repo/src/app.ts")).toBe("src/app.ts");
   });
-  it("does not grant raw scanner MCP tools to roles without terminal authority", () => {
+  it("does not grant raw scanner MCP tools to roles without scanner authority", () => {
     expect(allowedRemoteTool("primary", "nmap_scan")).toBe(false);
     expect(allowedRemoteTool("adviser", "nmap_scan")).toBe(false);
     expect(allowedRemoteTool("reporter", "nmap_scan")).toBe(false);
@@ -63,7 +72,7 @@ describe("native attempt authority", () => {
     expect(allowedRemoteTool("memorist", "nmap_scan")).toBe(false);
     expect(allowedRemoteTool("searcher", "nmap_scan")).toBe(false);
   });
-  it("redacts secret values recursively and rejects mismatched diff context", () => {
+  it("redacts secret values recursively", () => {
     expect(
       redact(
         {
@@ -78,12 +87,7 @@ describe("native attempt authority", () => {
       output: "token [redacted]",
       nested: ["[redacted]"],
     });
-    expect(applyUnifiedDiff("a\nb\n", "@@ -1,2 +1,2 @@\n a\n-b\n+c\n")).toBe(
-      "a\nc\n",
-    );
-    expect(() =>
-      applyUnifiedDiff("a\nb\n", "@@ -1,2 +1,2 @@\n wrong\n-b\n+c\n"),
-    ).toThrow();
+
   });
   it("pins only implemented optional capabilities for each original role", () => {
     expect(supportedOptionalTools("memorist")).toEqual(["search_in_memory"]);

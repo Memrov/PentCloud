@@ -17,6 +17,7 @@ export const contracts = new Map<string, ToolContract>(
     t,
   ]),
 );
+export const retiredTools = new Set(["file", "terminal", "workspace_javascript"]);
 export const delegationTools = new Set([
   "advice",
   "coder",
@@ -89,6 +90,7 @@ export function validateToolInput(
   name: string,
   input: unknown,
 ): Record<string, unknown> {
+  if (retiredTools.has(name)) throw new Error(`Tool ${name} is retired; use the advertised computer_* tools with their current schemas`);
   const tool = contracts.get(name);
   if (!tool) throw new Error(`Unknown original tool ${name}`);
   const result = new Validator(tool.input_schema, "2020-12", false).validate(
@@ -103,12 +105,12 @@ export function validateToolInput(
     );
   return input as Record<string, unknown>;
 }
-/** Stock scanner authority is narrower than the upstream terminal permission. */
+/** Stock scanner tools remain limited to source-writing specialist roles. */
 export function allowedRemoteTool(role: Role, name: string): boolean {
   return (
     sourceWriters.has(role) &&
     /^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}$/.test(name) &&
-    !contracts.has(name)
+    !contracts.has(name) && !retiredTools.has(name)
   );
 }
 export interface ResultInspector {
@@ -359,36 +361,4 @@ export function redact(
       ]),
     );
   return value;
-}
-export function applyUnifiedDiff(originalText: string, patch: string): string {
-  const trailing = originalText.endsWith("\n");
-  const source = originalText.replace(/\n$/, "").split("\n");
-  const lines = patch.replace(/\n$/, "").split("\n");
-  const output: string[] = [];
-  let cursor = 0;
-  for (let i = 0; i < lines.length; ) {
-    const match = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(lines[i]!);
-    if (!match) throw new Error("Expected unified diff hunk header");
-    const start = Math.max(0, Number(match[1]) - 1);
-    if (start < cursor || start > source.length)
-      throw new Error("Invalid diff hunk start");
-    output.push(...source.slice(cursor, start));
-    cursor = start;
-    i++;
-    while (i < lines.length && !lines[i]!.startsWith("@@ ")) {
-      const line = lines[i++]!;
-      if (line === "\\ No newline at end of file") continue;
-      const text = line.slice(1);
-      if (line[0] === " " || line[0] === "-") {
-        if (source[cursor] !== text)
-          throw new Error(`Diff context does not match at line ${cursor + 1}`);
-        if (line[0] === " ") output.push(text);
-        cursor++;
-      } else if (line[0] === "+") output.push(text);
-      else throw new Error("Invalid diff line prefix");
-    }
-  }
-  return (
-    [...output, ...source.slice(cursor)].join("\n") + (trailing ? "\n" : "")
-  );
 }

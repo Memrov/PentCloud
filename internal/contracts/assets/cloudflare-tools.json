@@ -212,9 +212,7 @@
     "primary": [
       "clef_audit",
       "yield",
-      "revise_attempt",
-      "file",
-      "terminal"
+      "revise_attempt"
     ]
   }
 }

@@ -8,7 +8,7 @@ import {createServer, type ViteDevServer} from "vite";
 describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER !== "1")("run lifecycle in the browser", () => {
   let server: ViteDevServer, browser: Browser, origin: string;
   beforeAll(async () => {
-    server = await createServer({root: fileURLToPath(new URL("../", import.meta.url)), mode: "development", server: {host: "127.0.0.1", port: 0}});
+    server = await createServer({root: fileURLToPath(new URL("../", import.meta.url)), mode: "browser-fixture", server: {host: "127.0.0.1", port: 0}});
     await server.listen(); origin = server.resolvedUrls!.local[0]!;
     browser = await chromium.launch({channel: "chrome", headless: true});
   }, 30000);
