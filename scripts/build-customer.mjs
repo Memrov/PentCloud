@@ -8,13 +8,14 @@ import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 export function customerConfig(config,options={}){
 if(options.worker)config.name=options.worker;
-assert(/^[a-z0-9][a-z0-9-]{0,62}$/.test(config.name),'Choose a valid Worker name');
-config.artifacts[0].namespace=config.name;
-config.vars.ARTIFACTS_NAMESPACE=config.name;
+assert(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(config.name),'Choose a valid Worker name');
+const namespace=config.name.length===1?config.name+'_':config.name;
+config.artifacts[0].namespace=namespace;
+config.vars.ARTIFACTS_NAMESPACE=namespace;
 config.vars.PENTCLOUD_WORKER_NAME=config.name;
 if(/^[a-f0-9]{32}$/.test(options.accountId??''))config.vars.PENTCLOUD_ACCOUNT_ID=options.accountId;
 config.workflows[0].name=config.name;
-config.triggers.events[0].filter.namespace=config.name;
+config.triggers.events[0].filter.namespace=namespace;
 config.triggers.events[0].targets[0].workflow_name=config.name;
 return config;
 }

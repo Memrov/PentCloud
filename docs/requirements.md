@@ -195,7 +195,7 @@ included. [Target setup and network limitations](operations/onboarding.md#bounty
 Local source checks need Node **26.12.1 or compatible later 26.x**, npm, Git,
 Bash and Go **1.26.5**. Python **3.11+** is used by integration assertions.
 Cloudflare Workers Builds owns application build and deployment execution.
-The previous CLI installer is removed; the browser setup wizard is planned.
+The previous CLI installer is removed; the browser setup wizard is available at `/setup`.
 See [deployment status](deployment.md) before attempting a new installation.
 
 New installations use the eleven smaller tool packages and do not import Kali.
@@ -206,5 +206,5 @@ models** action makes a model request and can use allowance/credit. Obtain
 approval before model tests, target discovery or assessments. A budget alert is
 not a Cloudflare spending cap.
 
-Review [installation limits](deployment.md#limitations) before deployment.
+Review [installation limits](../README.md#know-the-boundaries) before deployment.
 Each account needs its own entitlement, human-login and model/scanner checks.

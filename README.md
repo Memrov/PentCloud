@@ -15,7 +15,7 @@ Review the evidence, understand the findings and decide what to fix next.
 
 **Open-source preview.** Review the documented installation and operational limits. Each installation
 belongs to one owner or a trusted team in their own Cloudflare account. See
-[installation limits](docs/deployment.md#limitations) before deployment.
+[installation limits](#know-the-boundaries) before deployment.
 
 [Website](https://pentcloud.dev/) · [Interactive demo](https://demo.storylane.com/share/y3kxnxrtlt7i) · [Get started](#get-started) · [How it works](#from-target-to-traceable-findings) ·
 [Architecture](docs/architecture.md) · [PentAGI comparison](#how-pentcloud-differs-from-pentagi)
@@ -161,7 +161,7 @@ See [attribution and distribution](docs/third-party-notices.md) and the [MIT lic
   allowlisting, proxies and private-network access yourself. PentCloud does not
   currently provision dedicated egress or promise anonymity.
 - **Cloud hosting has costs.** Cloudflare services and configured model providers
-  have their own charges. Kali starts when needed and has a 30-minute idle window;
+  have their own charges. Tool Containers incur charges while running;
   on-demand does not mean free. See [deployment](docs/deployment.md).
 - **One installation is a shared workspace.** Admitted operators share its data.
   Fresh installs start empty; this is not a shared public multi-tenant service.

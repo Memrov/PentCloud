@@ -2,7 +2,7 @@
 
 Start with the selected Cloudflare account, deployed Worker version and native
 Builds configuration. The previous CLI installer and its doctor command have
-been removed; the in-app setup wizard is not available yet.
+been removed; use the in-app setup wizard at `/setup` for first-run configuration.
 
 For platform failures, check current [Cloudflare documentation](https://developers.cloudflare.com/),
 [service status](https://www.cloudflarestatus.com/),
