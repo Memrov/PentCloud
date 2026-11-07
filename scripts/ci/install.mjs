@@ -12,7 +12,7 @@ import {withArtifactGit} from '../lib/artifact-state.mjs';
 import {REGCTL_VERSION} from '../lib/private-image.mjs';
 import {recipeIdentity} from './image-manifest.mjs';
 import {environment,client,validateAccount,waitRepo} from './artifacts.mjs';
-import {withInstallationAccess,waitForAccessReady} from '../lib/installation-verify.mjs';
+import {withInstallationAccess,waitForAccessReady,VERIFICATION_STAGES,PROBE_CHECKPOINTS} from '../lib/installation-verify.mjs';
 export {waitForProbeReady,waitForAccessReady,waitForWorkflowProof} from '../lib/installation-verify.mjs';
 
 const PACKS=['http','recon','nuclei','service','sqlmap','web-context','file-analysis','password','pcap','reference','metasploit'];
@@ -23,13 +23,13 @@ const ensure=(condition,code)=>{if(!condition)throw Error(code);};
 const same=(a,b,code)=>ensure(isDeepStrictEqual(a,b),code);
 const sha=value=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);
 const cliStages=['arguments','prerequisites','source','authorization','private-state','cleanup','images','setup','plan','install','upgrade','verification','release-receipt','doctor','uninstall','export','import-targets'];
-const verificationStages=['verification-prepare','probe-deploy','probe-readiness','access','artifacts','workflow','tool-packs','doctor'];
 function safeCustomerFailure(text){
   let value;try{value=JSON.parse(text);}catch{return;}
   if(!value||!/^PC_[A-Z_]{2,70}$/.test(value.error??'')||!cliStages.includes(value.stage))return;
   return {error:value.error,stage:value.stage,
-    ...(verificationStages.includes(value.check)?{check:value.check}:{}),
-    ...(Number.isInteger(value.httpStatus)&&value.httpStatus>=400&&value.httpStatus<=599?{httpStatus:value.httpStatus}:{}),
+    ...(VERIFICATION_STAGES.includes(value.check)?{check:value.check}:{}),
+    ...(PROBE_CHECKPOINTS.includes(value.checkpoint)?{checkpoint:value.checkpoint}:{}),
+    ...(Number.isInteger(value.httpStatus)&&value.httpStatus>=100&&value.httpStatus<=599?{httpStatus:value.httpStatus}:{}),
     ...(Array.isArray(value.providerCodes)&&value.providerCodes.length<=16&&value.providerCodes.every(code=>Number.isSafeInteger(code)&&code>=0&&code<=1_000_000_000)?{providerCodes:[...value.providerCodes]}:{})};
 }
 export function captureCustomerProcess(command,args,options={}){
@@ -56,6 +56,21 @@ export function customerCases(e,env=process.env){
     configFile:join(directory,label+'.json'),stateDirectory:join(directory,label+'-state'),cacheDirectory:join(directory,label+'-images')});
   const instance='pc-fresh-'+env.GITHUB_RUN_ID+'-'+env.GITHUB_RUN_ATTEMPT;ensure(instance.length<=38,'CI_CUSTOMER_INSTANCE_INVALID');
   return {directory,fresh:make('fresh',instance,instance+'.heflare.app'),retained:make('retained','pentcloud-customer','customer.heflare.app')};
+}
+
+export function customerRebuildMode(env=process.env){
+  const value=env.PENTCLOUD_CI_REBUILD_IMAGES??'0';
+  ensure(value==='0'||value==='1','CI_CUSTOMER_REBUILD_MODE_INVALID');
+  return value==='1';
+}
+export async function seedCustomerImageCaches({cases,migrated,retainedExists,rebuildFresh}){
+  ensure(typeof rebuildFresh==='boolean','CI_CUSTOMER_REBUILD_MODE_INVALID');
+  if(!migrated)return;
+  const installations=[...(!rebuildFresh?[cases.fresh]:[]),...(!retainedExists?[cases.retained]:[])];
+  for(const installation of installations){
+    await mkdir(installation.cacheDirectory,{recursive:true,mode:0o700});
+    await privateJson(join(installation.cacheDirectory,'image-ledger.json'),migrated);
+  }
 }
 
 export async function invokeCustomerCli({root,installation,command,extra=[],run=captureCustomerProcess}){
@@ -183,6 +198,7 @@ async function snapshotCustomer(installation,api,run){
 }
 
 export async function main({env=process.env,run=privateProcess,runCli=captureCustomerProcess}={}){
+  const rebuildFresh=customerRebuildMode(env);
   const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..'),journalPath=env.RUNNER_TEMP&&join(resolve(env.RUNNER_TEMP,'pentcloud-customer-ci'),'cleanup.json');
   if(process.argv.includes('--cleanup-only')&&(!journalPath||!await readJson(journalPath,null)))return;
   // Preserve existing scope guards without emitting account/email mask commands.
@@ -197,8 +213,8 @@ export async function main({env=process.env,run=privateProcess,runCli=captureCus
   stage='account';await validateAccount(api,e);await mkdir(cases.directory,{recursive:true,mode:0o700});ensure(!(await lstat(cases.directory)).isSymbolicLink(),'CI_CUSTOMER_DIRECTORY_UNSAFE');
   for(const installation of [cases.fresh,cases.retained])await privateJson(installation.configFile,installation.config);await privateJson(journalPath,journal);
   stage='retained-discovery';const retainedExists=Boolean(await api.request('/accounts/'+e.accountId+'/artifacts/namespaces/'+cases.retained.config.instance+'-setup/repos/installation',{missing:true}));
-  stage='image-cache-migration';const migrated=await oldImageCache({api,e,root,directory:cases.directory,run});
-  if(migrated)for(const installation of [cases.fresh,...(retainedExists?[]:[cases.retained])]){await mkdir(installation.cacheDirectory,{recursive:true,mode:0o700});await privateJson(join(installation.cacheDirectory,'image-ledger.json'),migrated);}
+  stage='image-cache-migration';const migrated=!rebuildFresh||!retainedExists?await oldImageCache({api,e,root,directory:cases.directory,run}):null;
+  await seedCustomerImageCaches({cases,migrated,retainedExists,rebuildFresh});
   const result=await proveCustomerLifecycle({cases,sourceCommit:e.sha,retainedExists,invoke,seed:installation=>seedCustomer(installation,api,run),snapshot:installation=>snapshotCustomer(installation,api,run)});
   stage='summary';if(env.GITHUB_STEP_SUMMARY)await appendFile(env.GITHUB_STEP_SUMMARY,'## Customer install and upgrade\n\nFresh public CLI install, native services and empty teardown passed. Retained target, Artifacts evidence and resource identities survived the candidate upgrade.\n\nSource: `'+result.sourceCommit+'`. Baseline: `'+result.baselineSourceCommit+'` ('+result.upgradeProof+'). Bundle proof: `'+result.bundleSha256+'`.\n\nHeadless service authentication verified; human owner login was not tested. Kali installs and model calls: zero. Private state and provider/account logs are not uploaded.\n');
   console.log(JSON.stringify(result));

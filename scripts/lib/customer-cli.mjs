@@ -13,7 +13,7 @@ import {createDeploymentRunner} from './deployment-runner.mjs';
 import {preparePackageImages,checkPackageBuildPrerequisites} from './package-images.mjs';
 import {PackageInstaller} from './package-install.mjs';
 import {openArtifactState} from './artifact-state.mjs';
-import {verifyPackageInstallation,cleanupInstallationVerification,withInstallationAccess,waitForAccessReady} from './installation-verify.mjs';
+import {verifyPackageInstallation,cleanupInstallationVerification,withInstallationAccess,waitForAccessReady,VERIFICATION_STAGES,PROBE_CHECKPOINTS} from './installation-verify.mjs';
 
 export const customerHelp=`PentCloud customer installer
 Usage: npm run pentcloud -- setup
@@ -68,11 +68,13 @@ export function installationCommand(command,prior){
 }
 export function customerFailure(error,stage){
   const code=typeof error?.code==='string'?error.code:typeof error?.message==='string'?error.message:'';
+  const help={PC_NODE_VERSION:'Use Node 26.12.1 or later 26.x.',PC_DEPENDENCIES:'Run npm ci in the source checkout.',PC_GIT_REQUIRED:'Install Git and make it available in PATH.',PC_GO_REQUIRED:'Install Go 1.26.5; set GO_BIN to its executable if needed.',PC_GO_VERSION:'Use Go 1.26.5; set GO_BIN to its executable if needed.',PC_PYTHON_REQUIRED:'Install Python 3.11 or later 3.x as python3.',PC_PYTHON_VERSION:'Use Python 3.11 or later 3.x as python3.',PC_ARCHIVE_READER:'Install libarchive/bsdtar with 7z support and make it available in PATH.',PC_SOURCE_DIRTY:'Use a clean committed source checkout before installation or upgrade.',PC_IMAGE_CACHE_OWNER:'Choose a separate image cache for each installation.'}[code];
   return {error:/^PC_[A-Z_]{2,70}$/.test(code)?code:'PC_INSTALLATION_FAILED',stage,
-    ...(Number.isInteger(error?.httpStatus)&&error.httpStatus>=400&&error.httpStatus<=599?{httpStatus:error.httpStatus}:{}),
+    ...(Number.isInteger(error?.httpStatus)&&error.httpStatus>=400&&error.httpStatus<=599?{httpStatus:error.httpStatus}:Number.isInteger(error?.probeStatus)&&error.probeStatus>=100&&error.probeStatus<=599?{httpStatus:error.probeStatus}:{}),
     ...(code==='PC_CLOUDFLARE_API'&&Array.isArray(error.providerCodes)?{providerCodes:error.providerCodes.filter(Number.isSafeInteger)}:{}),
-    ...(code==='PC_INSTALLATION_VERIFICATION'&&/^[a-z][a-z-]{0,40}$/.test(error.verificationStage??'')?{check:error.verificationStage}:{}),
-    help:'Retain private configuration and state. Reconcile interrupted operations before retrying; use doctor or cleanup for an existing installation.'};
+    ...(code==='PC_INSTALLATION_VERIFICATION'&&VERIFICATION_STAGES.includes(error.verificationStage)?{check:error.verificationStage}:{}),
+    ...(code==='PC_INSTALLATION_VERIFICATION'&&PROBE_CHECKPOINTS.includes(error.probeCheckpoint)?{checkpoint:error.probeCheckpoint}:{}),
+    help:help??'Retain private configuration and state. Reconcile interrupted operations before retrying; use doctor or cleanup for an existing installation.'};
 }
 async function sourceIdentity(run,changing){
   const settings={env:{PATH:process.env.PATH,HOME:process.env.HOME,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}};
@@ -101,6 +103,13 @@ async function applicationAccess(installer,{headless,temporaryDirectory},callbac
 async function lifecycle(installer,path,body){
   const response=await installer.probe(path,true,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   assert.equal(response.status,200,'PC_UPGRADE_NOT_READY');return response.json();
+}
+export async function uninstallCustomerInstallation({installer,options,headless,temporaryDirectory}){
+  const remove=()=>installer.uninstall(options);
+  // A recorded destructive teardown has already acquired its atomic fence.
+  // Its resume must work after the application or Access app has been removed.
+  if(options.data==='retain'||installer.state.removed||installer.state.packageUninstall)return remove();
+  return applicationAccess(installer,{headless,temporaryDirectory},remove);
 }
 export async function upgradePackageInstallation({installer,sourceCommit,headless,temporaryDirectory}){
   await installer.load({updateEmail:true});
@@ -217,7 +226,8 @@ export async function runCustomerCli({root,args=process.argv.slice(2),environmen
             if(options['--full']&&!options['--headless'])await installer.doctor({authenticate:true});
             result={...result,sourceCommit:installer.state.deployedRelease?.sourceCommit??null,ownerVerified:!options['--headless']};
           }
-          else result=await applicationAccess(installer,{headless:options['--headless'],temporaryDirectory},()=>command==='uninstall'?installer.uninstall({data:options['--data'],confirm:options['--confirm']}):command==='export'?installer.exportInstallation(resolve(options['--output'])):installer.importTargets(resolve(options['--input'])));
+          else if(command==='uninstall')result=await uninstallCustomerInstallation({installer,options:{data:options['--data'],confirm:options['--confirm']},headless:options['--headless'],temporaryDirectory});
+          else result=await applicationAccess(installer,{headless:options['--headless'],temporaryDirectory},()=>command==='export'?installer.exportInstallation(resolve(options['--output'])):installer.importTargets(resolve(options['--input'])));
         }
         output(publicInstallationResult(result));return result;
       }finally{await store.close();}

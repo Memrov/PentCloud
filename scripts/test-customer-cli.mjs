@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {parseCustomerArguments} from './lib/customer-cli-options.mjs';
 import {missingOrganizationFooter} from './lib/deployment-runner.mjs';
-import {upgradePackageInstallation,publicInstallationResult,customerFailure,withImageCacheLock,installationCommand} from './lib/customer-cli.mjs';
+import {upgradePackageInstallation,publicInstallationResult,customerFailure,withImageCacheLock,installationCommand,uninstallCustomerInstallation} from './lib/customer-cli.mjs';
 import {mkdtemp,rm,readdir,writeFile,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 
@@ -52,6 +52,15 @@ test('public output and failures exclude private metadata and assertion/provider
  assert.deepEqual(publicInstallationResult({status:'ok',sourceCommit:source,resources:{secret:'SECRET_MARKER'},config:{},checks:['private']}),{status:'ok',sourceCommit:source});
  assert.equal(customerFailure(Error('SECRET_MARKER'),'verification').error,'PC_INSTALLATION_FAILED');
  assert.equal(customerFailure(Error('PC_SOURCE_DIRTY'),'source').error,'PC_SOURCE_DIRTY');
+ const diagnostic=customerFailure(Object.assign(Error('private provider body'),{code:'PC_INSTALLATION_VERIFICATION',verificationStage:'native-browser',probeCheckpoint:'browser-navigate',probeStatus:302}),'verification');
+ assert.equal(diagnostic.check,'native-browser');assert.equal(diagnostic.checkpoint,'browser-navigate');assert.equal(diagnostic.httpStatus,302);assert(!JSON.stringify(diagnostic).includes('private provider body'));
+ const invalid=customerFailure(Object.assign(Error('private'),{code:'PC_INSTALLATION_VERIFICATION',verificationStage:'SECRET_MARKER',probeCheckpoint:'SECRET_MARKER',probeStatus:999}),'verification');assert(!JSON.stringify(invalid).includes('SECRET_MARKER'));assert(!invalid.httpStatus);
+});
+test('teardown resume and repeated removal do not need the already removed app or Access application',async()=>{
+ for(const state of [{removed:true},{packageUninstall:{authorized:true}}]){
+  let calls=0;const installer={state,uninstall:async options=>{calls++;assert.deepEqual(options,{data:'delete',confirm:'owned-install'});return {status:'removed'};}};
+  const result=await uninstallCustomerInstallation({installer,options:{data:'delete',confirm:'owned-install'},headless:true});assert.equal(result.status,'removed');assert.equal(calls,1);
+ }
 });
 test('shared image caches have one writer and release their lock on failure',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'pc-image-lock-'));

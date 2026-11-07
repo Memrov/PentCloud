@@ -17,6 +17,9 @@ import {PACK_CLASSES} from './package-install.mjs';
 import {privateJson} from './private-install.mjs';
 import {verificationOwner,verificationJournalPath,createVerificationJournal,saveCleanupJournal,cleanupInstallationVerification,deployProbe,probeHostname,withCIProbeAccess,createEvidenceRepository} from './owned-probe.mjs';
 export {cleanupInstallationVerification,withInstallationAccess} from './owned-probe.mjs';
+export const VERIFICATION_STAGES=Object.freeze(['verification-prepare','probe-deploy','probe-secret','probe-readiness','access','access-setup','api-runs','api-onboarding','api-lifecycle','no-kali','native-loader','native-markdown','native-browser','access-cleanup','artifacts','workflow','tool-packs','doctor']);
+export const PROBE_CHECKPOINTS=Object.freeze(['loader-create','loader-fetch','markdown-convert','markdown-result','browser-launch','browser-context','browser-access','browser-request','browser-redirect','browser-fulfill','browser-navigate','browser-content','pack-ready','pack-command','pack-stop']);
+const safeHttpStatus=value=>Number.isInteger(value)&&value>=100&&value<=599;
 
 export async function waitForProbeReady({request,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=120000,onStatus=()=>{}}){
   const deadline=now()+timeoutMs;
@@ -76,9 +79,11 @@ export async function waitForWorkflowProof({api,path,before,identity,now=Date.no
   }
 }
 export async function verifyPackageInstallation({installer,root,run,temporaryDirectory,sourceCommit,log=()=>{}}){
-  let stage='verification-prepare',journal,probeConfig,gitDirectory;
+  let stage='verification-prepare',journal,probeConfig,gitDirectory,probeStatus,probeCheckpoint;
   const {api,config}=installer,accountId=config.accountId,instance=config.instance;
   const report=(check,status,extra={})=>log({check,status,...extra});
+  const enter=value=>{stage=value;probeStatus=undefined;probeCheckpoint=undefined;};
+  const observed=(check,status)=>{if(safeHttpStatus(status))probeStatus=status;report(check,status);};
   try{
     assert.match(sourceCommit??'',/^[a-f0-9]{40}$/,'INSTALLATION_SOURCE_COMMIT_INVALID');
     assert.equal(typeof run,'function','INSTALLATION_RUN_REQUIRED');
@@ -93,7 +98,7 @@ export async function verifyPackageInstallation({installer,root,run,temporaryDir
     const proof={status:'verified-package-installation',checks:[],toolPacks:11,noKali:true,modelCalls:0};
     // The selected zone is fetched and verified by deployProbe before configuration
     // rendering; the unique hostname is never derived from the customer's app host.
-    stage='probe-deploy';
+    enter('probe-deploy');
     await deployProbe({api,journal,persist,zoneId:installer.profile.domain.zoneId,deploy:async()=>{
       await privateJson(probeConfig,{
         name:journal.probe.name,account_id:accountId,main:join(resolve(root),'scripts/lib/installation-probe-worker.mjs'),
@@ -106,34 +111,36 @@ export async function verifyPackageInstallation({installer,root,run,temporaryDir
       });
       await run('wrangler',['deploy','--config',probeConfig]);
     }});
-    await installer.workerSecret(journal.probe.name,'CI_PROBE_TOKEN',secret);
+    enter('probe-secret');await installer.workerSecret(journal.probe.name,'CI_PROBE_TOKEN',secret);
     const probeOrigin='https://'+probeHostname(journal);
     const requestProbe=(body,timeout=300000)=>fetch(probeOrigin,{method:'POST',headers:{Authorization:'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'manual',signal:AbortSignal.timeout(timeout)});
     const probe=async body=>{
+      probeStatus=undefined;probeCheckpoint=undefined;
       const response=await requestProbe(body),result=await response.json().catch(()=>null);
-      const allowed=['loader-create','loader-fetch','markdown-convert','markdown-result','browser-launch','browser-access','browser-navigate','browser-content','pack-ready','pack-command','pack-stop'];
-      report('native-'+body.action,response.status,{...(body.pack?{pack:body.pack}:{}),...(allowed.includes(result?.checkpoint)?{checkpoint:result.checkpoint}:{})});
+      probeStatus=safeHttpStatus(result?.httpStatus)?result.httpStatus:response.status;
+      if(PROBE_CHECKPOINTS.includes(result?.checkpoint))probeCheckpoint=result.checkpoint;
+      report('native-'+body.action,response.status,{...(body.pack?{pack:body.pack}:{}),...(probeCheckpoint?{checkpoint:probeCheckpoint}:{}),...(safeHttpStatus(result?.httpStatus)?{httpStatus:result.httpStatus}:{})});
       assert.equal(response.status,200,'INSTALLATION_NATIVE_PROBE_FAILED');
       assert(result&&!result.error,'INSTALLATION_NATIVE_PROBE_FAILED');
       if(body.action==='pack')assert(result.pack===body.pack&&result.status==='passed','INSTALLATION_NATIVE_PROBE_INVALID');
       else assert.equal(result[body.action],'passed','INSTALLATION_NATIVE_PROBE_INVALID');
       return result;
     };
-    stage='probe-readiness';
-    const ready=await waitForProbeReady({request:()=>requestProbe({action:'ready'},10000),onStatus:status=>report('probe-readiness',status)});
+    enter('probe-readiness');
+    const ready=await waitForProbeReady({request:()=>requestProbe({action:'ready'},10000),onStatus:status=>observed('probe-readiness',status)});
     assert.deepEqual(await ready.json(),{ready:'passed'},'INSTALLATION_PROBE_READINESS_INVALID');
-    stage='access';
+    enter('access-setup');
     await withCIProbeAccess({api,journal,persist,appId:installer.state.resources.access.id,origin:installer.state.appUrl},async({headers})=>{
       for(const [check,path]of [['api-runs','/v1/runs?view=all'],['api-onboarding','/v1/onboarding'],['api-lifecycle','/v1/lifecycle']]){
-        const result=await waitForAccessReady({origin:installer.state.appUrl,headers,path,onStatus:status=>report(check,status)});await result.body?.cancel();
+        enter(check);const result=await waitForAccessReady({origin:installer.state.appUrl,headers,path,onStatus:status=>observed(check,status)});await result.body?.cancel();
       }
       proof.checks.push('access-api-durable-objects');
-      const missing=await waitForAccessReady({origin:installer.state.appUrl,headers,path:'/v1/toolbox/status',expectedStatus:404,onStatus:status=>report('no-kali',status)});await missing.body?.cancel();proof.checks.push('no-kali');
-      for(const action of ['loader','markdown']){await probe({action});proof.checks.push(action);}
-      await probe({action:'browser',headers});proof.checks.push('browser-protected-app');
+      enter('no-kali');const missing=await waitForAccessReady({origin:installer.state.appUrl,headers,path:'/v1/toolbox/status',expectedStatus:404,onStatus:status=>observed('no-kali',status)});await missing.body?.cancel();proof.checks.push('no-kali');
+      for(const action of ['loader','markdown']){enter('native-'+action);await probe({action});proof.checks.push(action);}
+      enter('native-browser');await probe({action:'browser',headers});proof.checks.push('browser-protected-app');enter('access-cleanup');
     });
     assert(journal.access.policyRemoved&&journal.access.tokenRemoved,'INSTALLATION_ACCESS_CLEANUP_PENDING');
-    stage='artifacts';
+    enter('artifacts');
     const workflowPath='/accounts/'+accountId+'/workflows/'+encodeURIComponent(installer.names.workflow)+'/instances';
     const prior=await api.request(workflowPath+'?per_page=100&direction=desc');assert(Array.isArray(prior),'INSTALLATION_WORKFLOW_LIST_INVALID');
     const before=new Set(prior.map(row=>row.id));
@@ -150,16 +157,16 @@ export async function verifyPackageInstallation({installer,root,run,temporaryDir
     });
     assert.match(commit,/^[a-f0-9]{40}$/,'INSTALLATION_EVIDENCE_COMMIT_INVALID');
     await probe({action:'artifacts',repo,commit,expected:marker});proof.checks.push('artifacts-git-native-blob');
-    stage='workflow';
+    enter('workflow');
     await waitForWorkflowProof({api,path:workflowPath,before,identity:{namespace:installer.names.namespace,repo,ref,commit}});proof.checks.push('artifacts-workflow-exact-commit');
-    stage='tool-packs';
+    enter('tool-packs');
     for(const pack of Object.keys(PACK_CLASSES)){
       const expectedImage=installer.profile.images[pack];assert.equal(typeof expectedImage,'string','INSTALLATION_IMAGE_MISSING');
       await probe({action:'pack',pack,id,expectedImage});proof.checks.push('tool-pack-'+pack);
     }
-    stage='doctor';await installer.doctor({authenticate:false});proof.checks.push('doctor');
+    enter('doctor');await installer.doctor({authenticate:false});proof.checks.push('doctor');
     report('verification','passed');return proof;
-  }catch{report(stage,'failed');throw Object.assign(Error('INSTALLATION_VERIFICATION_FAILED'),{code:'PC_INSTALLATION_VERIFICATION',verificationStage:stage});}
+  }catch{report(stage,'failed');throw Object.assign(Error('INSTALLATION_VERIFICATION_FAILED'),{code:'PC_INSTALLATION_VERIFICATION',verificationStage:stage,...(PROBE_CHECKPOINTS.includes(probeCheckpoint)?{probeCheckpoint}:{}),...(safeHttpStatus(probeStatus)?{probeStatus}:{})});}
   finally{
     if(journal)await cleanupInstallationVerification({api,temporaryDirectory,accountId,instance});
     if(probeConfig)await rm(probeConfig,{force:true});

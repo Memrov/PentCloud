@@ -99,6 +99,7 @@ function validateClaims(installer, journal, mode) {
       assert.deepEqual({ ...recorded, ...(entry.identity.tag && !recorded.tag ? { tag: entry.identity.tag } : {}) }, entry.identity,
         key + ' ownership changed since uninstall authorization');
       check(['ready', 'delete-pending', 'deleted'].includes(entry.status), 'Invalid ' + key + ' deletion receipt');
+      check(entry.deleteAcknowledged === undefined || typeof entry.deleteAcknowledged === 'boolean', 'Invalid ' + key + ' deletion acknowledgement');
       check(claim.status === entry.status, key + ' deletion checkpoint disagrees with its ownership receipt');
       if (claim.status !== 'ready') check(entry.intent === true && ['delete-pending', 'deleted'].includes(claim.status), 'Missing exact ' + key + ' deletion intent');
     } else if (key === 'domain' && claim.status === 'deleted' && installer.state.packageRetain) {
@@ -239,7 +240,55 @@ function journalResources(snapshot, prior) {
   }]));
 }
 
-async function remove(installer, journal, key) {
+async function readDeletionTarget(installer, entry, key) {
+  if (key !== 'app' && key !== 'gateway') return installer.api.request(entry.path, { missing: true });
+  // Worker DELETE returns no object receipt. The script list exposes its immutable tag.
+  const workers = await installer.api.list('/accounts/' + segment(installer.config.accountId) + '/workers/scripts');
+  check(Array.isArray(workers), 'Worker deletion inventory unavailable');
+  const matching = workers.filter(worker => worker.id === entry.identity.id);
+  check(matching.length <= 1, key + ' Worker deletion identity is ambiguous');
+  return matching[0] ?? null;
+}
+
+function verifyDeletionTarget(key, current, entry) {
+  if (key === 'app' || key === 'gateway') check(!entry.identity.tag || current.tag === entry.identity.tag, key + ' Worker immutable tag changed');
+  else verifyObject(key, current, entry.identity);
+}
+
+async function confirmDeletion(installer, entry, key, { now, sleep, timeoutMs, pollIntervalMs }) {
+  const deadline = now() + timeoutMs;
+  const pending = () => new Error(key + ' deletion is still pending; retry uninstall to confirm absence; preserve the installation and review ownership');
+  let expired = false, timer;
+  const open = () => { if (expired || now() >= deadline) throw pending(); };
+  const poll = async () => {
+    for (;;) {
+      open();
+      let current, transition = false;
+      try { current = await readDeletionTarget(installer, entry, key); }
+      catch (error) {
+        // A structured 409 read is inconclusive, never proof of absence. In
+        // particular, Artifacts uses 409 while activation/deletion is in progress.
+        if (error?.code !== 'PC_CLOUDFLARE_API' || error.httpStatus !== 409) throw error;
+        transition = true;
+      }
+      open();
+      if (!transition) {
+        if (current === null) return;
+        verifyDeletionTarget(key, current, entry);
+      }
+      await sleep(Math.min(pollIntervalMs, deadline - now()));
+    }
+  };
+  try {
+    // The wall-clock deadline also bounds a read that never resolves. Once it
+    // expires, a late read cannot schedule another poll or update the journal.
+    await Promise.race([poll(), new Promise((_, reject) => {
+      timer = setTimeout(() => { expired = true; reject(pending()); }, timeoutMs);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function remove(installer, journal, key, verification) {
   const entry = journal.resources[key];
   if (entry.status === 'deleted') return;
   // Save before every DELETE, including retries after a lost response. An absent
@@ -247,19 +296,23 @@ async function remove(installer, journal, key) {
   entry.intent = true; entry.status = 'delete-pending';
   if (installer.state.resources[key]) installer.state.resources[key].status = 'delete-pending';
   await installer.save();
-  const current = key === 'app' || key === 'gateway'
-    ? (await installer.api.list('/accounts/' + segment(installer.config.accountId) + '/workers/scripts')).find(w => w.id === entry.identity.id)
-    : await installer.api.request(entry.path, { missing: true });
-  if (current) {
-    if (key === 'app' || key === 'gateway') check(!entry.identity.tag || current.tag === entry.identity.tag, key + ' Worker immutable tag changed');
-    else verifyObject(key, current, entry.identity);
-    if (key.startsWith('pack-')) await noActiveContainers(installer, entry.path);
-    if (key === 'namespace') {
-      const repos = await installer.api.list(entry.path + '/repos', { cursor: true });
-      check(Array.isArray(repos) && repos.length === 0, 'Artifacts namespace contains repositories');
+  if (!entry.deleteAcknowledged) {
+    const current = await readDeletionTarget(installer, entry, key);
+    if (current !== null) {
+      verifyDeletionTarget(key, current, entry);
+      if (key.startsWith('pack-')) await noActiveContainers(installer, entry.path);
+      if (key === 'namespace') {
+        const repos = await installer.api.list(entry.path + '/repos', { cursor: true });
+        check(Array.isArray(repos) && repos.length === 0, 'Artifacts namespace contains repositories');
+      }
+      await installer.api.request(entry.path, { method: 'DELETE', missing: true });
+      entry.deleteAcknowledged = true;
+      // A successful response acknowledges the request, not resource absence.
+      // Persist it so a resumed asynchronous deletion only reads, never resends.
+      await installer.save();
     }
-    await installer.api.request(entry.path, { method: 'DELETE', missing: true });
   }
+  if (entry.deleteAcknowledged) await confirmDeletion(installer, entry, key, verification);
   entry.status = 'deleted';
   if (installer.state.resources[key]) installer.state.resources[key].status = 'deleted';
   await installer.save();
@@ -289,9 +342,13 @@ function emptyLifecycle(status, allowOnboarding = false) {
  * operations with the installation lock. All provider API responses are already
  * unwrapped by api.request except explicit {envelope:true} instance inventories.
  */
-export async function uninstallPackage(installer, { data, confirm } = {}) {
+export async function uninstallPackage(installer, { data, confirm } = {}, verificationOptions = {}) {
   assert(['retain', 'delete'].includes(data), 'Choose --data retain or --data delete explicitly');
   assert.equal(confirm, installer.config.instance, '--confirm must match the installation name');
+  const verification = { now: () => performance.now(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)), timeoutMs: 60_000, pollIntervalMs: 1000, ...verificationOptions };
+  assert(typeof verification.now === 'function' && typeof verification.sleep === 'function' &&
+    Number.isFinite(verification.timeoutMs) && verification.timeoutMs > 0 && verification.timeoutMs <= 60_000 &&
+    Number.isFinite(verification.pollIntervalMs) && verification.pollIntervalMs > 0, 'Invalid deletion verification budget');
   await installer.load();
   check(installer.state.resources && installer.state.packageProfile, 'A package installation manifest is required');
   const mode = data, journalKey = mode === 'delete' ? 'packageUninstall' : 'packageRetain';
@@ -338,7 +395,7 @@ export async function uninstallPackage(installer, { data, confirm } = {}) {
   }
   await disableWorkerIngress(installer, snapshot);
   if (mode === 'retain') {
-    await remove(installer, journal, 'domain');
+    await remove(installer, journal, 'domain', verification);
     const workers = await installer.api.list('/accounts/' + segment(installer.config.accountId) + '/workers/scripts');
     const domains = await installer.api.list('/accounts/' + segment(installer.config.accountId) + '/workers/domains');
     const ownedWorkers = workers.filter(w => [installer.names.app, installer.names.gateway].includes(w.id));
@@ -353,7 +410,7 @@ export async function uninstallPackage(installer, { data, confirm } = {}) {
       warning: disabled ? 'Private Workers, Containers, Durable Object data, events and Artifacts remain installed' :
         'The owned domain and workers.dev/previews were disabled; other public routes exist or route inventory is incomplete. Private resources and data remain installed' };
   }
-  for (const key of expectedKeys(mode)) await remove(installer, journal, key);
+  for (const key of expectedKeys(mode)) await remove(installer, journal, key, verification);
   installer.state.removed = true;
   await installer.save();
   return { status: 'removed', data: 'deleted', manifestRetained: true, imagesRetained: true, accountResourcesRetained: true,

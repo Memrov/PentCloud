@@ -27,6 +27,29 @@ test('customer CI isolates fresh and retained configurations and image caches',a
   assert.throws(()=>customerCases(customerEnvironment,{...customerRun,GITHUB_RUN_ID:'../foreign'}));
 });
 
+test('cold-build dispatch withholds only the fresh image seed and preserves retained cache rules',async()=>{
+  const {customerCases,customerRebuildMode,seedCustomerImageCaches}=await import('./ci/install.mjs');
+  assert.equal(typeof customerRebuildMode,'function');assert.equal(typeof seedCustomerImageCaches,'function');
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-ci-cold-build-'));
+  const ledger={schemaVersion:2,accountId:customerEnvironment.accountId,recipes:{fixture:{image:'immutable fixture reference'}}};
+  try{
+    assert.equal(customerRebuildMode({}),false);
+    for(const invalid of ['','true','false','yes','2','01',1,true])assert.throws(()=>customerRebuildMode({PENTCLOUD_CI_REBUILD_IMAGES:invalid}),/CI_CUSTOMER_REBUILD_MODE_INVALID/);
+    for(const [mode,retainedExists,expected]of [
+      ['0',false,['fresh','retained']],['0',true,['fresh']],
+      ['1',false,['retained']],['1',true,[]],
+    ]){
+      const cases=customerCases(customerEnvironment,{...customerRun,RUNNER_TEMP:join(directory,mode+'-'+retainedExists)});
+      await seedCustomerImageCaches({cases,migrated:ledger,retainedExists,rebuildFresh:customerRebuildMode({PENTCLOUD_CI_REBUILD_IMAGES:mode})});
+      for(const label of ['fresh','retained']){
+        const path=join(cases[label].cacheDirectory,'image-ledger.json');
+        if(expected.includes(label))assert.deepEqual(JSON.parse(await readFile(path,'utf8')),ledger);
+        else await assert.rejects(readFile(path),{code:'ENOENT'});
+      }
+    }
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
 test('CI invokes the public headless CLI with private files and captures its result',async()=>{
   const {customerCases,invokeCustomerCli}=await import('./ci/install.mjs');assert.equal(typeof invokeCustomerCli,'function');
   const cases=customerCases(customerEnvironment,customerRun),calls=[];

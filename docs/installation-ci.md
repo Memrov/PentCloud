@@ -10,6 +10,12 @@ A trusted push to main/the validation branch, or a manual workflow dispatch, imp
 
 The public CLI builds or reuses the eleven package images from the pinned PentCloud-tools source revision. Each complete tool lock must match the installed npm SDK. Upstream archive/binary checksums and base-image pins are retained. The resulting immutable image digest and recipe identity are checkpointed in the private Artifacts ledger and verified before reuse. The identity includes source commit, pack, complete lock, platform, Go and regctl versions. A changed digest under the same recorded build identity requires investigation.
 
+For a deliberate empty-cache build proof, manually dispatch Installation test
+with `rebuild_package_images=true`. Only the fresh installation skips verified
+image-ledger seeding; it builds and prepares all eleven packages through the
+public CLI. The retained installation still restores its own ownership/cache
+receipts. Routine feature checks reuse immutable images after validating them.
+
 The job deploys the private ToolPackGateway and the app with its own Durable Objects, Loader, Browser Run, Workers AI, Artifacts namespace, results Workflow and event filter. The custom domain stays behind the installation's native Access application. Legacy Kali installations retain their pinned backend; this dedicated profile works with TOOL_PACKS and no TOOLBOX binding.
 
 The service checks cover protected API access, Durable Objects, Artifacts Git write/native binding read, an event reaching the results Workflow, Dynamic Worker execution, document conversion, Browser Run, and readiness/retirement of all eleven packages. A bounded HTTP package request uses only the testing hostname. No assessment or OpenCode inference starts automatically. This does not establish every scanner profile's coverage or acceptance of a real assessment result.
@@ -43,6 +49,14 @@ checks retire their owned package instances.
 The **Customer install and upgrade** job is one of the exact-commit checks required
 by the managed production deployment gate. Cloudflare Builds remains the production
 deployer; see [production shipping](operations/production-shipping.md).
+
+If a failed job leaves its empty fresh installation for reconciliation, dispatch
+the same workflow with its exact `cleanup_run_id` and `cleanup_attempt_id`.
+This runs **Remove owned fresh fixture**, a separate job name that cannot satisfy
+the shipping gate. It restores the instance's native ownership receipts and calls
+the public CLI's guarded empty-data uninstall, then verification cleanup. It never
+selects the retained customer fixture or production and never sweeps resources by
+prefix. Deletion must be confirmed absent before it is recorded complete.
 
 ## C3 / create-cloudflare
 

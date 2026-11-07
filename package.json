@@ -25,7 +25,7 @@
     "verify:gateway": "bash scripts/native-cloudflare-verify.sh --worker gateway",
     "verify:full": "bash scripts/native-cloudflare-verify.sh --full --worker all",
     "pentcloud": "node scripts/pentcloud.mjs",
-    "test:installer": "node --test scripts/test-private-install.mjs scripts/test-private-email.mjs scripts/test-native-auth.mjs scripts/test-package-install.mjs scripts/test-ci-install.mjs scripts/test-artifact-state.mjs scripts/test-customer-cli.mjs scripts/test-customer-config.mjs scripts/test-customer-setup.mjs scripts/test-installation-verify.mjs scripts/test-package-access.mjs scripts/test-package-images.mjs scripts/test-package-uninstall.mjs scripts/test-shipping-gate.mjs scripts/test-deploy-native-app.mjs"
+    "test:installer": "node --test scripts/test-private-install.mjs scripts/test-private-email.mjs scripts/test-native-auth.mjs scripts/test-package-install.mjs scripts/test-ci-install.mjs scripts/test-cleanup-installation.mjs scripts/test-artifact-state.mjs scripts/test-customer-cli.mjs scripts/test-customer-config.mjs scripts/test-customer-setup.mjs scripts/test-installation-verify.mjs scripts/test-package-access.mjs scripts/test-package-images.mjs scripts/test-package-uninstall.mjs scripts/test-shipping-gate.mjs scripts/test-deploy-native-app.mjs"
   },
   "engines": {
     "node": ">=26.12.1"

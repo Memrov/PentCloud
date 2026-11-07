@@ -494,3 +494,140 @@ test('legacy authorization or removed flags cannot bypass the package receipt', 
   const f = fixture(); f.changeManifest(s => { s.steps.deleteAuthorized = true; s.removed = true; });
   await refusesWithoutMutation(f, /completed package teardown receipt/);
 });
+
+function deletionClock(timeoutMs = 2500) {
+  let elapsed = 0;
+  const sleeps = [];
+  return { now: () => elapsed, sleep: async ms => { sleeps.push(ms); elapsed += ms; }, timeoutMs, pollIntervalMs: 1000,
+    elapsed: () => elapsed, advance: ms => { elapsed += ms; }, sleeps };
+}
+
+function deferNamespaceDeletion(f, observe) {
+  const path = base + '/artifacts/namespaces/' + names.namespace, request = f.installer.api.request;
+  let acknowledged = false;
+  f.installer.api.request = async function (p, options = {}) {
+    if (p === path && options.method === 'DELETE') {
+      const owned = clone(f.remote.namespace);
+      await request.call(this, p, options);
+      f.remote.namespace = owned; acknowledged = true;
+      return { status: 'deleting' }; // Accepted is not absence.
+    }
+    const value = await request.call(this, p, options);
+    if (p === path && (options.method ?? 'GET') === 'GET' && acknowledged) return observe(value);
+    return value;
+  };
+  return path;
+}
+
+test('an accepted async namespace deletion remains pending until identity-checked reads confirm absence', async () => {
+  const f = fixture(), clock = deletionClock(); let observations = 0;
+  const path = deferNamespaceDeletion(f, current => {
+    observations++;
+    assert.equal(f.durable().resources.namespace.status, 'delete-pending');
+    assert.equal(f.durable().packageUninstall.resources.namespace.status, 'delete-pending');
+    if (observations === 1) return { ...current, status: 'deleting' };
+    if (observations === 2) throw Object.assign(Error('transition'), { code: 'PC_CLOUDFLARE_API', httpStatus: 409 });
+    f.remote.namespace = null; return null;
+  });
+  assert.equal((await uninstallPackage(f.installer, options, clock)).status, 'removed');
+  assert.equal(observations, 3);
+  assert.deepEqual(clock.sleeps, [1000, 1000]);
+  assert.equal(deleteCalls(f.remote).filter(r => r.path === path).length, 1);
+  assert.equal(f.durable().resources.namespace.status, 'deleted');
+});
+
+test('persistent deletion status exhausts only its read budget and resumes without another DELETE', async () => {
+  const f = fixture(), clock = deletionClock(); let observations = 0, gone = false;
+  const path = deferNamespaceDeletion(f, current => { observations++; if (gone) { f.remote.namespace = null; return null; } return { ...current, status: 'deleting' }; });
+  await assert.rejects(uninstallPackage(f.installer, options, clock), /namespace deletion.*pending/);
+  assert.equal(clock.elapsed(), 2500); assert.deepEqual(clock.sleeps, [1000, 1000, 500]);
+  assert.equal(observations, 3);
+  assert.equal(f.durable().packageUninstall.resources.namespace.status, 'delete-pending');
+  assert.equal(f.durable().packageUninstall.resources.namespace.deleteAcknowledged, true);
+  assert.equal(f.durable().removed, undefined);
+  assert.equal(f.remote.access.id, 'owned-access-id');
+  gone = true;
+  assert.equal((await uninstallPackage(f.installer, options, deletionClock())).status, 'removed');
+  assert.equal(deleteCalls(f.remote).filter(r => r.path === path).length, 1);
+});
+
+test('a replacement Worker immutable tag after DELETE is neither deleted nor recorded as removed', async () => {
+  const f = fixture(), path = base + '/workers/scripts/' + names.app, request = f.installer.api.request;
+  f.installer.api.request = async function (p, options = {}) {
+    const result = await request.call(this, p, options);
+    if (p === path && options.method === 'DELETE') f.remote.workers.set(names.app, { id: names.app, tag: 'replacement-worker-tag', routes: [] });
+    return result;
+  };
+  await assert.rejects(uninstallPackage(f.installer, options, deletionClock()), /immutable tag changed/);
+  assert.equal(f.remote.workers.get(names.app).tag, 'replacement-worker-tag');
+  assert.equal(f.durable().packageUninstall.resources.app.status, 'delete-pending');
+  assert.equal(f.durable().resources.app.status, 'delete-pending');
+  assert.equal(f.durable().removed, undefined);
+  assert.equal(deleteCalls(f.remote).filter(r => r.path === path).length, 1);
+});
+
+test('replacement provider IDs during deletion confirmation fail closed before later deletions', async () => {
+  const f = fixture(), path = base + '/workflows/' + names.workflow, request = f.installer.api.request;
+  f.installer.api.request = async function (p, options = {}) {
+    const previous = clone(f.remote.workflow), result = await request.call(this, p, options);
+    if (p === path && options.method === 'DELETE') f.remote.workflow = { ...previous, id: 'replacement-workflow-id' };
+    return result;
+  };
+  await assert.rejects(uninstallPackage(f.installer, options, deletionClock()), /Workflow ownership changed/);
+  assert.equal(f.remote.workflow.id, 'replacement-workflow-id');
+  assert.equal(f.durable().packageUninstall.resources.workflow.status, 'delete-pending');
+  assert.equal(f.remote.containers.size, 11);
+  assert.equal(deleteCalls(f.remote).filter(r => r.path === path).length, 1);
+});
+
+test('nontransitional read failures are never retried or treated as confirmed deletion', async () => {
+  for (const failure of [
+    Object.assign(Error('denied'), { code: 'PC_CLOUDFLARE_API', httpStatus: 403 }),
+    Object.assign(Error('provider unavailable'), { code: 'PC_CLOUDFLARE_API', httpStatus: 500 }),
+    Error('Cloudflare GET failed (HTTP 409; unstructured)'),
+    Error('transport failure'),
+  ]) {
+    const f = fixture(), clock = deletionClock(); let observations = 0;
+    const path = deferNamespaceDeletion(f, () => { observations++; throw failure; });
+    await assert.rejects(uninstallPackage(f.installer, options, clock), error => error === failure);
+    assert.equal(observations, 1); assert.deepEqual(clock.sleeps, []);
+    assert.equal(f.durable().resources.namespace.status, 'delete-pending');
+    assert.equal(deleteCalls(f.remote).filter(r => r.path === path).length, 1);
+  }
+});
+
+test('a read that returns after the verification budget cannot mark the resource deleted', async () => {
+  const f = fixture(), clock = deletionClock();
+  deferNamespaceDeletion(f, () => { clock.advance(3000); f.remote.namespace = null; return null; });
+  await assert.rejects(uninstallPackage(f.installer, options, clock), /namespace deletion.*pending/);
+  assert.equal(f.durable().resources.namespace.status, 'delete-pending');
+  assert.equal(f.durable().removed, undefined);
+});
+
+test('a transitional 409 is never mistaken for absence when the whole read budget expires', async () => {
+  const f = fixture(), clock = deletionClock(); let observations = 0;
+  deferNamespaceDeletion(f, () => { observations++; throw Object.assign(Error('transition'), { code: 'PC_CLOUDFLARE_API', httpStatus: 409 }); });
+  await assert.rejects(uninstallPackage(f.installer, options, clock), /namespace deletion.*pending/);
+  assert.equal(observations, 3); assert.equal(clock.elapsed(), 2500);
+  assert.equal(f.durable().resources.namespace.status, 'delete-pending'); assert.equal(f.durable().removed, undefined);
+});
+
+test('only the explicit missing-resource null can confirm deletion, not malformed falsey responses', async () => {
+  for (const response of [undefined, false, 0, '']) {
+    const f = fixture();
+    deferNamespaceDeletion(f, () => response);
+    await assert.rejects(uninstallPackage(f.installer, options, deletionClock()), /Invalid namespace ownership response/);
+    assert.equal(f.durable().resources.namespace.status, 'delete-pending'); assert.equal(f.durable().removed, undefined);
+  }
+});
+
+test('a stalled confirmation GET has a real deadline and leaves durable deletion intent pending', async () => {
+  const f = fixture(); let observations = 0, finish;
+  deferNamespaceDeletion(f, () => { observations++; return new Promise(resolve => { finish = resolve; }); });
+  await assert.rejects(uninstallPackage(f.installer, options, { timeoutMs: 20, pollIntervalMs: 5 }), /namespace deletion.*pending/);
+  assert.equal(observations, 1);
+  finish(null); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(observations, 1);
+  assert.equal(f.durable().resources.namespace.status, 'delete-pending');
+  assert.equal(f.durable().removed, undefined);
+});

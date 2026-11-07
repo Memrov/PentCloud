@@ -5,7 +5,7 @@ const check=(ok,message)=>{if(!ok)throw Error(message);};
 export default {
   async fetch(request,env){
     if(!env.CI_PROBE_TOKEN||!/^\d{13}$/.test(env.CI_PROBE_EXPIRES_AT??'')||Date.now()>=Number(env.CI_PROBE_EXPIRES_AT)||request.headers.get('Authorization')!=='Bearer '+env.CI_PROBE_TOKEN)return new Response('Not found',{status:404});
-    let input={},checkpoint;
+    let input={},checkpoint,httpStatus;
     try{
       input=await request.json();
       if(input.action==='ready')return Response.json({ready:'passed'});
@@ -37,12 +37,13 @@ export default {
         checkpoint='browser-launch';
         const browser=await launch(env.BROWSER);
         try{
+          checkpoint='browser-context';
           const context=await browser.newContext({serviceWorkers:'block'});
           checkpoint='browser-access';
           const deadline=Date.now()+60000;
           for(;;){
             const access=await context.request.get(env.APP_ORIGIN+'/v1/runs',{headers:input.headers,maxRedirects:0,timeout:15000});
-            const status=access.status();await access.dispose();
+            const status=access.status();httpStatus=status;await access.dispose();
             if(status===200)break;
             check([302,303,401,403].includes(status)&&Date.now()<deadline,'Browser Access did not become ready');
             await new Promise(resolve=>setTimeout(resolve,2000));
@@ -52,12 +53,14 @@ export default {
             if(new URL(route.request().url()).origin!==env.APP_ORIGIN)return route.abort();
             // route.continue header overrides survive redirects. Fetch privately
             // without following redirects, then fulfill only the exact-origin response.
-            const response=await route.fetch({headers:{...route.request().headers(),...input.headers},maxRedirects:0,timeout:60000});
-            try{if(response.status()>=300&&response.status()<400)await route.abort();else await route.fulfill({response});}
+            checkpoint='browser-request';httpStatus=undefined;
+            const response=await route.fetch({headers:{...route.request().headers(),...input.headers},maxRedirects:0,timeout:60000});httpStatus=response.status();
+            try{if(response.status()>=300&&response.status()<400){checkpoint='browser-redirect';await route.abort();}else{checkpoint='browser-fulfill';await route.fulfill({response});}}
             finally{await response.dispose();}
           });
           checkpoint='browser-navigate';
           const result=await page.goto(env.APP_ORIGIN,{waitUntil:'networkidle',timeout:60000});
+          httpStatus=result?.status();
           check(result?.status()===200,'Protected app did not load in Browser Run');
           checkpoint='browser-content';
           check((await page.locator('body').innerText()).includes('PentCloud'),'Browser received a login page instead of PentCloud');
@@ -82,7 +85,7 @@ export default {
       return new Response('Not found',{status:404});
     }catch{
       const action=['ready','artifacts','loader','markdown','browser','pack'].includes(input?.action)?input.action:undefined;
-      return Response.json({error:'Installation probe failed',...(action?{action}:{}),...(packs.includes(input?.pack)?{pack:input.pack}:{}),...(checkpoint?{checkpoint}:{})},{status:500});
+      return Response.json({error:'Installation probe failed',...(action?{action}:{}),...(packs.includes(input?.pack)?{pack:input.pack}:{}),...(checkpoint?{checkpoint}:{}),...(Number.isInteger(httpStatus)&&httpStatus>=100&&httpStatus<=599?{httpStatus}:{})},{status:500});
     }
   },
 };

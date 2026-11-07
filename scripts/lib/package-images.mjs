@@ -21,16 +21,17 @@ async function executable(name,environment){
   return null;
 }
 async function prerequisites(run,environment){
+  const need=(condition,code,message)=>{if(!condition)throw Object.assign(Error(message),{code});};
   const env={...cleanEnvironment(environment),GOTOOLCHAIN:'local',GOENV:'off'};
   const git=await executable('git',env),go=await executable(environment.GO_BIN||'go',env),python=await executable('python3',env);
-  assert(git,'Package image preparation requires Git');assert(go,'Package image preparation requires Go 1.26.5');assert(python,'Package image preparation requires Python 3.11+');
+  need(git,'PC_GIT_REQUIRED','Package image preparation requires Git');need(go,'PC_GO_REQUIRED','Package image preparation requires Go 1.26.5');need(python,'PC_PYTHON_REQUIRED','Package image preparation requires Python 3.11+');
   await run(git,['--version'],{env});
-  assert.equal((await run(go,['env','GOVERSION'],{env})).toString().trim(),'go1.26.5','Package image preparation requires existing Go 1.26.5 (set GO_BIN)');
+  need((await run(go,['env','GOVERSION'],{env})).toString().trim()==='go1.26.5','PC_GO_VERSION','Package image preparation requires existing Go 1.26.5 (set GO_BIN)');
   const version=(await run(python,['--version'],{env})).toString().match(/^Python (\d+)\.(\d+)(?:\.\d+)?/);
-  assert(version&&Number(version[1])===3&&Number(version[2])>=11,'Package image preparation requires Python 3.11+');
+  need(version&&Number(version[1])===3&&Number(version[2])>=11,'PC_PYTHON_VERSION','Package image preparation requires Python 3.11+');
   let tar;
   for(const name of ['bsdtar','tar']){const path=await executable(name,env);if(!path)continue;try{if(/\bbsdtar\b/i.test((await run(path,['--version'],{env})).toString())){tar=path;break;}}catch{}}
-  assert(tar,'Package images require bsdtar with 7z support; install libarchive/bsdtar and retry');
+  need(tar,'PC_ARCHIVE_READER','Package images require bsdtar with 7z support; install libarchive/bsdtar and retry');
   return {git,go,python,tar,env};
 }
 export const checkPackageBuildPrerequisites=prerequisites;

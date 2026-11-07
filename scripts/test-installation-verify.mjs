@@ -107,7 +107,7 @@ test('shared cleanup rejects added principals on its token policy',async()=>fixt
 test('shared verifier reports bounded native checks and passes private exact image references',async()=>{
   const {verifyPackageInstallation}=await import('./lib/installation-verify.mjs');
   assert.equal(typeof verifyPackageInstallation,'function');
-  const directory=await mkdtemp(join(tmpdir(),'pentcloud-verifier-')),p=provider(),requests=[],logs=[],gitCommit='c'.repeat(40);let probeConfig,ref,doctorCalls=0,workflowRead=false;
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-verifier-')),p=provider(),requests=[],logs=[],gitCommit='c'.repeat(40);let probeConfig,ref,doctorCalls=0,workflowRead=false,failure;
   const images=Object.fromEntries(['recon','http','nuclei','sqlmap','service','web-context','pcap','file-analysis','password','reference','metasploit'].map(pack=>[pack,'registry.example/private/'+pack+':selected']));
   const installer={api:p.api,config:{accountId,instance},names:{namespace:'customer-work',gateway:'customer-packs',workflow:'customer-results'},profile:{domain:{zoneId,hostname:'app.customer.example'},images},state:{appUrl:'https://app.customer.example',resources:{access:{id:'app-owned'}}},async workerSecret(){},async doctor(options){assert.deepEqual(options,{authenticate:false});assert.equal(p.tokens.length,0);assert.equal(p.policies.length,1);doctorCalls++;}};
   const request=p.api.request.bind(p.api);p.api.request=async(path,options)=>{
@@ -127,8 +127,9 @@ test('shared verifier reports bounded native checks and passes private exact ima
     throw Error('Unexpected run kind');
   };
   const previousFetch=globalThis.fetch;globalThis.fetch=async(url,options={})=>{
-    const u=new URL(url);if(u.hostname==='app.customer.example')return new Response(null,{status:u.pathname==='/v1/toolbox/status'?404:200});
+    const u=new URL(url);if(u.hostname==='app.customer.example')return new Response(null,{status:failure?.path===u.pathname?500:u.pathname==='/v1/toolbox/status'?404:200});
     const input=JSON.parse(options.body);requests.push(input);if(input.action==='ready')return Response.json({ready:'passed'});
+    if(failure?.action===input.action)return Response.json({error:'PRIVATE_PROVIDER_BODY',checkpoint:failure.checkpoint,provider:'PRIVATE_PROVIDER_ID',status:999,httpStatus:failure.httpStatus},{status:502});
     if(input.action==='pack'){assert.equal(input.expectedImage,images[input.pack]);return Response.json({pack:input.pack,status:'passed'});}
     return Response.json({[input.action]:'passed'});
   };
@@ -140,6 +141,21 @@ test('shared verifier reports bounded native checks and passes private exact ima
     workflowRead=false;
     const second=await verifyPackageInstallation({installer,root,run,temporaryDirectory:directory,sourceCommit:'d'.repeat(40),log:value=>logs.push(value)});
     assert.deepEqual(second,result);assert.equal(doctorCalls,2);assert.equal(requests.filter(x=>x.action==='pack').length,22);assert.equal(p.repos.length,0);assert.equal(p.scripts.size,0);
+    for(const scenario of [
+      {path:'/v1/runs',stage:'api-runs'},{path:'/v1/onboarding',stage:'api-onboarding'},{path:'/v1/lifecycle',stage:'api-lifecycle'},{path:'/v1/toolbox/status',stage:'no-kali'},
+      {action:'loader',checkpoint:'loader-create',stage:'native-loader'},{action:'markdown',checkpoint:'markdown-result',stage:'native-markdown'},{action:'browser',checkpoint:'browser-navigate',stage:'native-browser'},
+      {action:'browser',checkpoint:'browser-access',httpStatus:403,stage:'native-browser'},
+      {action:'browser',checkpoint:'browser-request',httpStatus:999,stage:'native-browser'},
+      {action:'browser',checkpoint:'PRIVATE_PROVIDER_BODY',stage:'native-browser'},
+    ]){
+      failure=scenario;
+      await assert.rejects(verifyPackageInstallation({installer,root,run,temporaryDirectory:directory,sourceCommit:'d'.repeat(40),log:value=>logs.push(value)}),error=>{
+        assert.equal(error.code,'PC_INSTALLATION_VERIFICATION');assert.equal(error.verificationStage,scenario.stage);assert.equal(error.probeStatus,scenario.httpStatus===403?403:scenario.path?500:502);
+        assert.equal(error.probeCheckpoint,scenario.checkpoint==='PRIVATE_PROVIDER_BODY'?undefined:scenario.checkpoint);assert(!JSON.stringify(error).includes('PRIVATE_'));return true;
+      });
+      assert.equal(p.tokens.length,0);assert.equal(p.scripts.size,0);assert.equal(p.domains.length,0);
+    }
+    assert(!JSON.stringify(logs).includes('PRIVATE_'));
   }catch(error){error.message+=' '+JSON.stringify(logs);throw error;}
   finally{globalThis.fetch=previousFetch;await rm(directory,{recursive:true,force:true});}
 });
@@ -156,12 +172,12 @@ test('shared worker requires the selected pack image and always retires its runt
   }finally{await rm(directory,{recursive:true,force:true});}
 });
 test('Browser probe confines service credentials to exact-origin fetches and rejects redirects',async()=>{
-  const origin='https://app.customer.example',headers={'CF-Access-Client-Id':'private-client','CF-Access-Client-Secret':'private-secret'},events=[];let handler;
+  const origin='https://app.customer.example',headers={'CF-Access-Client-Id':'private-client','CF-Access-Client-Secret':'private-secret'},events=[];let handler,failFetch=false;
   const prior=globalThis.__installationProbeLaunch;
   globalThis.__installationProbeLaunch=async()=>({async newContext(options){
     assert.equal(options.extraHTTPHeaders,undefined);assert.equal(options.serviceWorkers,'block');
     return {request:{async get(url,options){assert.equal(url,origin+'/v1/runs');assert.equal(options.maxRedirects,0);assert.deepEqual(options.headers,headers);events.push('ready');return {status:()=>200,async dispose(){}};}},async route(pattern,callback){handler=callback;},async newPage(){return {async goto(){
-      for(const url of [origin,origin+'/redirect','https://foreign.invalid'])await handler({request:()=>({url:()=>url,headers:()=>({accept:'text/html'})}),async fetch(options){assert.equal(new URL(url).origin,origin);assert.equal(options.maxRedirects,0);assert.equal(options.headers['CF-Access-Client-Secret'],headers['CF-Access-Client-Secret']);events.push('fetch');return {status:()=>url.endsWith('/redirect')?302:200,async dispose(){events.push('dispose');}};},async fulfill(){events.push('fulfill');},async abort(){events.push('abort');},async continue(){throw Error('unsafe redirect propagation');}});
+      for(const url of [origin,origin+'/redirect','https://foreign.invalid'])await handler({request:()=>({url:()=>url,headers:()=>({accept:'text/html'})}),async fetch(options){assert.equal(new URL(url).origin,origin);assert.equal(options.maxRedirects,0);assert.equal(options.headers['CF-Access-Client-Secret'],headers['CF-Access-Client-Secret']);if(failFetch)throw Error('PRIVATE_FETCH_ERROR');events.push('fetch');return {status:()=>url.endsWith('/redirect')?302:200,async dispose(){events.push('dispose');}};},async fulfill(){events.push('fulfill');},async abort(){events.push('abort');},async continue(){throw Error('unsafe redirect propagation');}});
       return {status:()=>200};},locator:()=>({innerText:async()=>'PentCloud'})};}};
   },async close(){events.push('close');}});
   try{
@@ -170,5 +186,8 @@ test('Browser probe confines service credentials to exact-origin fetches and rej
     const {default:probe}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     const response=await probe.fetch(new Request('https://probe.invalid',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'browser',headers})}),{APP_ORIGIN:origin,CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)});
     assert.equal(response.status,200);assert.deepEqual(events,['ready','fetch','fulfill','dispose','fetch','abort','dispose','abort','close']);
+    failFetch=true;
+    const failed=await probe.fetch(new Request('https://probe.invalid',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'browser',headers})}),{APP_ORIGIN:origin,CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)});
+    assert.equal(failed.status,500);assert.deepEqual(await failed.json(),{error:'Installation probe failed',action:'browser',checkpoint:'browser-request'});
   }finally{if(prior===undefined)delete globalThis.__installationProbeLaunch;else globalThis.__installationProbeLaunch=prior;}
 });
