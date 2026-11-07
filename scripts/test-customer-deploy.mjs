@@ -13,7 +13,7 @@ test('deployment button has one complete account-independent Worker and all elev
 test('selected Worker names isolate Artifacts, Workflow and wizard metadata for each installation',async()=>{
   const {customerConfig}=await import('./build-customer.mjs'),source=await read('wrangler.jsonc');
   const first=customerConfig(structuredClone(source),{worker:'customer-one',accountId:'a'.repeat(32)}),second=customerConfig(structuredClone(source),{worker:'customer-two',accountId:'b'.repeat(32)});
-  for(const value of [first,second]){assert.equal(value.artifacts[0].namespace,value.name);assert.equal(value.workflows[0].name,value.name);assert.equal(value.vars.PENTCLOUD_WORKER_NAME,value.name);assert.equal(value.vars.ARTIFACTS_NAMESPACE,value.name);}
+  for(const value of [first,second]){assert.equal(value.artifacts[0].namespace,value.name);assert.equal(value.workflows[0].name,value.name);assert.equal(value.vars.PENTCLOUD_WORKER_NAME,value.name);assert.equal(value.vars.ARTIFACTS_NAMESPACE,value.name);assert.deepEqual(value.triggers.events,[{type:'cf.artifacts.repo.pushed',filter:{namespace:value.name},targets:[{type:'workflow',workflow_name:value.name}]}]);}
   assert.notEqual(first.artifacts[0].namespace,second.artifacts[0].namespace);assert.equal(second.vars.PENTCLOUD_ACCOUNT_ID,'b'.repeat(32));
 });
 

@@ -14,6 +14,8 @@ config.vars.ARTIFACTS_NAMESPACE=config.name;
 config.vars.PENTCLOUD_WORKER_NAME=config.name;
 if(/^[a-f0-9]{32}$/.test(options.accountId??''))config.vars.PENTCLOUD_ACCOUNT_ID=options.accountId;
 config.workflows[0].name=config.name;
+config.triggers.events[0].filter.namespace=config.name;
+config.triggers.events[0].targets[0].workflow_name=config.name;
 return config;
 }
 async function main(){

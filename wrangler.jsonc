@@ -161,6 +161,15 @@
       "class_name": "ResultValidation"
     }
   ],
+  "triggers": {
+    "events": [
+      {
+        "type": "cf.artifacts.repo.pushed",
+        "filter": { "namespace": "pentcloud" },
+        "targets": [{ "type": "workflow", "workflow_name": "pentcloud" }]
+      }
+    ]
+  },
   "vars": {},
   "rules": [
     {
