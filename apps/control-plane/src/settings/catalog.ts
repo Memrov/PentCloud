@@ -1,4 +1,5 @@
 import { specialistSources } from "../native/specialist-sources";
+import { DEFAULT_SEARCH_PROVIDER, isSearchProvider, type SearchProvider } from "../../../../shared/search-providers";
 
 export const ACTIVE_ROLES = ["primary", "adviser", "coder", "maintenance", "memorist", "pentester", "searcher"] as const;
 export type ActiveRole = typeof ACTIVE_ROLES[number];
@@ -7,6 +8,8 @@ export const REASONING_EFFORTS = ["default", "low", "medium", "high", "xhigh", "
 export type ReasoningEffort = typeof REASONING_EFFORTS[number];
 
 export interface RoleSettings {
+  /** Historical settings without a selection use TinyFish. */
+  searchProvider?: SearchProvider;
   /** Missing on historical settings: retain the original format when reading; new saves require Markdown. */
   promptFormat?: "markdown" | "pentagi-template";
   promptTemplate: string;
@@ -41,6 +44,7 @@ export async function defaultAgentSettings(model: string, reasoningEffort: Reaso
     ...managedRoleSettings(role),
     model,
     reasoningEffort,
+    searchProvider: DEFAULT_SEARCH_PROVIDER,
   }])) as Record<ActiveRole, RoleSettings>;
   return createAgentSettings(roles, "system", new Date(0));
 }
@@ -90,8 +94,9 @@ function validateAndNormalizeRoles(input: Record<ActiveRole, RoleSettings>): Rec
       throw new Error(`${role} model is invalid`);
     }
     if (!REASONING_EFFORTS.includes(value.reasoningEffort)) throw new Error(`${role} reasoning effort is invalid`);
+    if (value.searchProvider !== undefined && !isSearchProvider(value.searchProvider)) throw new Error(`${role} search provider is invalid`);
     if (value.model.startsWith("opencode-go:") && value.reasoningEffort !== "default") throw new Error(`${role} OpenCode Go requires default reasoning`);
-    return [role, { ...value }];
+    return [role, { ...value, searchProvider: value.searchProvider ?? DEFAULT_SEARCH_PROVIDER }];
   });
   if (totalBytes > 2 * 1024 * 1024) throw new Error("settings document is too large");
   return Object.fromEntries(entries) as Record<ActiveRole, RoleSettings>;

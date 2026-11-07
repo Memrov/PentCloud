@@ -1,3 +1,5 @@
+import type { SearchProvider } from "../../../../../shared/search-providers";
+
 export const SETTINGS_ROLES = [
   { id: "primary", label: "Primary", glyph: "P", description: "Plans the run and delegates specialist work." },
   { id: "adviser", label: "Adviser", glyph: "A", description: "Provides strategic guidance and technical review." },
@@ -13,6 +15,7 @@ export type UIReasoningEffort = "default" | "low" | "medium" | "high" | "xhigh" 
 export const UI_REASONING_EFFORTS: UIReasoningEffort[] = ["default", "low", "medium", "high", "xhigh", "max", "ultra"];
 
 export interface SettingsRoleValue {
+  searchProvider?: SearchProvider;
   promptFormat?: "markdown" | "pentagi-template";
   promptTemplate: string;
   upstreamPromptDigest: string;

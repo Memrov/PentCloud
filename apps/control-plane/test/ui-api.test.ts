@@ -120,6 +120,7 @@ describe("operator UI API client", () => {
       promptTemplate: `${id} prompt`, upstreamPromptDigest: "a".repeat(64), model: "openai/gpt-6-sol", reasoningEffort: "max",
     }])) as SettingsRoles;
     roles.primary.promptFormat = "pentagi-template";
+    roles.searcher.searchProvider = "exa";
     const settings = {
       settings: { schemaVersion: 1, revision: "b".repeat(64), upstreamManifestDigest: "c".repeat(64), savedAt: "2026-10-30T00:00:00.000Z", savedBy: "operator@example.com", roles },
       casRevision: 3,
@@ -140,6 +141,8 @@ describe("operator UI API client", () => {
     expect(historical.settings).toEqual(settings.settings);
     expect(historical.settings.roles.primary.promptFormat).toBe("pentagi-template");
     expect(historical.settings.roles.coder).not.toHaveProperty("promptFormat");
+    expect(historical.settings.roles.coder).not.toHaveProperty("searchProvider");
+    expect(historical.settings.roles.searcher.searchProvider).toBe("exa");
     await expect(listSettingsModels(true, fetcher)).resolves.toMatchObject({ models: [{ provider: "openai" }] });
     await expect(saveSettings(roles, 3, fetcher)).resolves.toMatchObject({ casRevision: 4 });
     expect(fetcher).toHaveBeenNthCalledWith(2, "/v1/ui/settings/models?refresh=1", {});
@@ -148,5 +151,15 @@ describe("operator UI API client", () => {
       headers: { "content-type": "application/json", "if-match": "3" },
       body: JSON.stringify({ roles }),
     }));
+  });
+  it("rejects unsupported per-role search providers in settings projections", async () => {
+    const roles = Object.fromEntries(SETTINGS_ROLES.map(({ id }) => [id, {
+      promptTemplate: `${id} prompt`, upstreamPromptDigest: "a".repeat(64), model: "opencode-go:deepseek-v4-pro", reasoningEffort: "default",
+      ...(id === "searcher" ? { searchProvider: "random" } : {}),
+    }]));
+    await expect(getSettings(vi.fn<typeof fetch>().mockResolvedValue(json({
+      settings: { schemaVersion: 1, revision: "b".repeat(64), upstreamManifestDigest: "c".repeat(64), savedAt: "2026-10-30T00:00:00.000Z", savedBy: "operator", roles },
+      casRevision: 1, locked: false, blockingRunIds: [], upstreamRoles: roles,
+    })))).rejects.toThrow("invalid searcher settings");
   });
 });

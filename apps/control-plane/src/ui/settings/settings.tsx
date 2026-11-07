@@ -10,6 +10,7 @@ import {
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { DEFAULT_SEARCH_PROVIDER, SEARCH_PROVIDERS } from "../../../../../shared/search-providers";
 
 import { APIError, getSettings, listRuns, listSettingsModels, saveSettings, type UIRun } from "../api";
 import {runLabel} from "../run-label";
@@ -192,7 +193,7 @@ export default function Settings({embedded=false}:{embedded?:boolean}={}) {
                     }}
                   />
                 </div>
-                <div className="settings-reasoning-field">
+                <div className="settings-reasoning-field grid gap-4">
                   <Select<SettingsRoles[SettingsRoleId]["reasoningEffort"]>
                     label="Reasoning effort"
                     description="OpenCode Go uses the model default"
@@ -200,6 +201,14 @@ export default function Settings({embedded=false}:{embedded?:boolean}={}) {
                     value={selected.reasoningEffort}
                     disabled={disabled}
                     onValueChange={(reasoningEffort) => { if (reasoningEffort) updateSelected({ reasoningEffort }); }}
+                  />
+                  <Select
+                    label="Web search provider"
+                    description="Used by this role in future runs"
+                    items={SEARCH_PROVIDERS.map(provider => ({ value: provider.id, label: provider.label }))}
+                    value={selected.searchProvider ?? DEFAULT_SEARCH_PROVIDER}
+                    disabled={disabled}
+                    onValueChange={searchProvider => { if (searchProvider) updateSelected({ searchProvider }); }}
                   />
                 </div>
               </div>

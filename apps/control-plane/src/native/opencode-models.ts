@@ -97,19 +97,16 @@ export function nativeProvider(model:OpenCodeModel,key:string):NativeProvider {
       limit:{context:model.contextLength??128000,output:model.outputLimit}}}};
 }
 /** Register the pinned provider in the embedded host, without a global catalog. */
-export function nativeModelPlugin(model:OpenCodeModel,key:string) {
+export function nativeModelPlugin(model:OpenCodeModel) {
   return Plugin.define({id:"pentcloud.pinned-model",async setup(ctx){
     await ctx.provider.transform(providers=>{
       for(const entry of providers.list())if(entry.provider.id!==model.provider)providers.remove(entry.provider.id);
       providers.update(model.provider,provider=>{
-        provider.name=model.connectionId?"OpenCode Console BYOK":model.route==="go"?"OpenCode Go":"OpenCode Console";provider.activation="enabled";
-        provider.package=model.package;provider.settings={baseURL:model.baseURL,apiKey:key,timeout:120000};
+        provider.activation="enabled";
       });
       providers.models.update(model.provider,model.modelId,item=>{
-        item.name=model.name;item.modelID=model.modelId as typeof item.modelID;item.type="chat";item.enabled=true;
-        item.compatibility=nativeCompatibility(model.compatibility);
-        item.capabilities={...item.capabilities,tools:true,input:model.inputModalities,output:model.outputModalities};
-        item.limit={...item.limit,context:model.contextLength??128000,output:model.outputLimit};
+        item.modelID=model.modelId as typeof item.modelID;item.type="chat";item.enabled=true;
+        item.capabilities={...item.capabilities,input:model.inputModalities,output:model.outputModalities};
       });
     });
   }});
@@ -121,7 +118,7 @@ export async function probeOpenCode(model:OpenCodeModel,key:string,storage:Durab
   const host=await open({storage,models:{fetch:false,snapshot:false},config:{default_agent:"connection-test",
     agents:{"connection-test":{mode:"primary",description:"Connection test",system:"Reply OK only. Do not use tools."}},
     providers:{[model.provider]:nativeProvider({...model,outputLimit:Math.min(model.outputLimit,8192)},key)}},
-    plugins:[nativeModelPlugin({...model,outputLimit:Math.min(model.outputLimit,8192)},key),Plugin.define({id:"pentcloud.connection-test",async setup(ctx){
+    plugins:[nativeModelPlugin({...model,outputLimit:Math.min(model.outputLimit,8192)}),Plugin.define({id:"pentcloud.connection-test",async setup(ctx){
       await ctx.agent.transform(agents=>{agents.update("connection-test",agent=>{
         agent.system="Reply OK only. Do not use tools.";
         agent.permissions=[{action:"*",resource:"*",effect:"deny"}];

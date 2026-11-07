@@ -72,6 +72,29 @@ allowance or privacy restriction needs its own correction. Do not bypass it by
 switching billing routes or enabling Extra Usage. Target API credentials retain
 their existing separate setup flow.
 
+## Web search providers
+
+In agent settings, choose **Web search provider** for each role: TinyFish, Exa,
+Firecrawl, Parallel or Tavily. Saved settings pin the choice for future runs;
+active and historical runs retain their revision. TinyFish is the default,
+including historical settings without a provider selection.
+
+Bind the corresponding encrypted runtime secret on the **app Worker**:
+`TINYFISH_API_KEY`, `EXA_API_KEY`,
+`FIRECRAWL_API_KEY`, `PARALLEL_API_KEY`, or `TAVILY_API_KEY`. Keys remain outside
+role settings. Only the selected provider's binding is required when a search
+runs; an unused provider's missing key does not block startup. TinyFish can run
+keyless when its binding is absent. Every other provider requires its key.
+
+The app's current `nodejs_compat` compatibility settings expose encrypted Worker
+secrets to OpenCode's native environment integrations. Use Worker runtime
+secrets (`secret_text`) for search, rather than Secrets Store getter bindings.
+OpenCode 2.2.5 owns the native search transport and authentication. Searches use
+the explicitly selected provider with no automatic fallback or billing-route
+switch. Provider rate limits and failures surface to the specialist. Provision
+only the search providers you intend to use; apply the same private Cloudflare
+secret-entry procedure described above.
+
 ## Target login and API secrets
 
 In **Targets → Network and login settings**, enable the needed options and copy

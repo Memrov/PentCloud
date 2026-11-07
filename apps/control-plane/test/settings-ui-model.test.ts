@@ -65,4 +65,14 @@ describe("settings UI model", () => {
       ],
     });
   });
+  it("tracks per-role search edits and preserves them when resetting instructions or applying a model", () => {
+    const saved = roles();
+    const draft = cloneRoles(saved);
+    draft.searcher.searchProvider = "exa";
+    expect(isRoleDirty(draft, saved, "searcher")).toBe(true);
+    expect(isRoleDirty(draft, saved, "primary")).toBe(false);
+    const reset = resetRole(draft, "searcher", { promptTemplate: "upstream", upstreamPromptDigest: "f".repeat(64) });
+    expect(applyModelToAll(reset, "opencode-go:deepseek-v4-pro").searcher.searchProvider).toBe("exa");
+    expect(saved.searcher.searchProvider).toBeUndefined();
+  });
 });
