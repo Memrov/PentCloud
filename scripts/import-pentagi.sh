@@ -80,8 +80,8 @@ import sys
 
 tools_path, roles_path = map(Path, sys.argv[1:])
 snapshot = json.loads(tools_path.read_text())
-if len(snapshot.get("tools", [])) != 42:
-    raise SystemExit(f"expected 42 tool schemas, found {len(snapshot.get('tools', []))}")
+if len(snapshot.get("tools", [])) != 40:
+    raise SystemExit(f"expected 40 tool schemas, found {len(snapshot.get('tools', []))}")
 names = [tool["name"] for tool in snapshot["tools"]]
 if names != sorted(names) or len(names) != len(set(names)):
     raise SystemExit("tool snapshot names must be sorted and unique")
@@ -116,10 +116,13 @@ optional = {
     "searcher": ["browser", "search_answer", "store_answer", "web_search"],
 }
 known = set(names)
-for role, offered in {**roles, **optional}.items():
-    unknown = sorted(set(offered) - known)
-    if unknown:
-        raise SystemExit(f"role {role} references unknown tools: {unknown}")
+# Preserve the upstream role lists above; Computer grants are native and separate.
+for grants in (roles, optional):
+    for role, offered in grants.items():
+        grants[role] = [name for name in offered if name not in {"file", "terminal"}]
+        unknown = sorted(set(grants[role]) - known)
+        if unknown:
+            raise SystemExit(f"role {role} references unknown tools: {unknown}")
 payload = {"roles": roles, "optional": optional}
 roles_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 PY
