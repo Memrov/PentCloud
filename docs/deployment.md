@@ -75,7 +75,14 @@ Existing unrelated Access policies are never overwritten.
 Hostname Access is deliberate: Cloudflare currently documents that
 [worker-level Access does not support WebSockets](https://developers.cloudflare.com/workers/configuration/cloudflare-access/#protect-one-worker).
 Keep protection on the hostname users will visit. Adding a custom domain later
-also requires protecting that hostname in the same Access application.
+also requires protecting that hostname in the same Access application. Keep the
+existing `workers.dev` hostname protected there too. For multi-hostname apps,
+Cloudflare’s native [Eager redirect cookie setting](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/)
+can be turned off under Access application > Advanced settings > Cookie settings.
+Access then sets cookies when each hostname is visited, so an unresolved new
+custom domain does not interrupt sign-in through the existing hostname. Custom
+Domains provision DNS and certificates natively; no DNS polling or repair code is
+needed in the wizard.
 
 Runtime services use native bindings, without a separate API token per service.
 Model keys use Worker Secrets. See [authentication](operations/authentication.md),
@@ -98,12 +105,17 @@ The hosted wizard created an owner-email Access policy, saved native Secrets,
 prepared Artifacts storage and reached the fresh Coordinator SQLite database.
 All eleven tool images passed hosted startup, SDK/image-pin validation and
 shutdown checks. Desktop and mobile hosted captures showed all three setup checks
-complete with a dummy model key. Setup tokens and temporary runtime probes were
-removed.
+complete with a dummy model key. Native Artifacts push events started the results
+Workflow and completed its Coordinator validation step for a synthetic unknown
+attempt, which was correctly ignored. A second Workers Build preserved the saved
+settings. Owner sign-in through Cloudflare SSO, all three wizard steps and
+**Open PentCloud** were exercised in Chrome through the existing `workers.dev`
+hostname, reaching the empty **Your targets** screen.
 
 A real model key, paid inference and a complete assessment are separate checks.
-The dummy key is removed after validation. Human owner SSO still needs its own
-interactive check; automated captures used temporary native Access service auth.
+The dummy key, setup tokens, temporary native Access service auth and runtime
+probes were removed after validation. Owner-only Access remains. A real OpenCode
+key is required before running models on the retained test installation.
 Production remains separate and this PR is not merged.
 
 Use the copied repository's Workers Builds connection for updates. Preserve its
