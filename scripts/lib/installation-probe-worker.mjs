@@ -1,9 +1,32 @@
 // Disposable installation probe; it has no model keys, public scanner interface or logs.
 import {launch} from '@cloudflare/playwright';
+import {Buffer} from 'node:buffer';
 const packs=['recon','http','nuclei','sqlmap','service','web-context','pcap','file-analysis','password','reference','metasploit'];
 const check=(ok,message)=>{if(!ok)throw Error(message);};
 const networkErrors=['ERR_ABORTED','ERR_FAILED','ERR_BLOCKED_BY_CLIENT','ERR_BLOCKED_BY_RESPONSE','ERR_CONNECTION_CLOSED','ERR_CONNECTION_RESET','ERR_CONNECTION_REFUSED','ERR_NAME_NOT_RESOLVED','ERR_TIMED_OUT','ERR_CERT_AUTHORITY_INVALID','ERR_HTTP_RESPONSE_CODE_FAILURE','ERR_CONTENT_DECODING_FAILED','ERR_INVALID_RESPONSE'];
 const runtimeErrors=['Error','TypeError','ReferenceError','SyntaxError','RangeError','SecurityError','AbortError'];
+const hopHeaders=['host','connection','keep-alive','proxy-authenticate','proxy-authorization','te','trailer','transfer-encoding','upgrade','content-length'];
+function relayHeaders(value){
+  const headers=new Headers(value),declared=(headers.get('connection')??'').split(',').map(name=>name.trim()).filter(Boolean);
+  for(const name of [...hopHeaders,...declared])headers.delete(name);
+  return headers;
+}
+export async function installationBrowserResponse(request,{origin,headers,fetcher=fetch}){
+  const target=new URL(request.url());
+  check(target.origin===origin&&!target.username&&!target.password,'Browser relay origin mismatch');
+  const outgoing=relayHeaders(request.headers());outgoing.delete('accept-encoding');
+  for(const [name,value]of Object.entries(headers))outgoing.set(name,value);
+  const method=request.method?.()??'GET',body=['GET','HEAD'].includes(method.toUpperCase())?null:request.postDataBuffer?.();
+  const response=await fetcher(request.url(),{method,headers:outgoing,...(body!==null&&body!==undefined?{body}:{}),redirect:'manual',signal:AbortSignal.timeout(60000)});
+  const bytes=Buffer.from(await response.arrayBuffer()),incoming=relayHeaders(response.headers);
+  // Reading a native Fetch body decodes gzip/br. Preserve upstream MIME/CSP/cookies,
+  // while supplying Chromium the decoded bytes and their correct length.
+  incoming.delete('content-encoding');incoming.set('content-length',String(bytes.length));
+  const result=Object.fromEntries(incoming);
+  const cookies=response.headers.getSetCookie?.()??response.headers.getAll?.('Set-Cookie')??[];
+  if(cookies.length)result['set-cookie']=cookies.join('\n');
+  return {status:response.status,headers:result,body:bytes};
+}
 export default {
   async fetch(request,env){
     if(!env.CI_PROBE_TOKEN||!/^\d{13}$/.test(env.CI_PROBE_EXPIRES_AT??'')||Date.now()>=Number(env.CI_PROBE_EXPIRES_AT)||request.headers.get('Authorization')!=='Bearer '+env.CI_PROBE_TOKEN)return new Response('Not found',{status:404});
@@ -61,18 +84,16 @@ export default {
           page.on('console',message=>{try{if(message.type()!=='error')return;const text=message.text(),key=/MIME type|strict MIME type checking/i.test(text)?'mimeMismatch':/unsafe-eval|Refused to evaluate a string as JavaScript|Evaluating a string as JavaScript violates/i.test(text)?'cspEval':/Refused to (?:load|execute).*script|script-src|Content Security Policy directive.*script/i.test(text)?'cspScript':'Other';increment(counts.consoleErrors,key);}catch{}});
           await context.route('**/*',async route=>{
             if(new URL(route.request().url()).origin!==env.APP_ORIGIN)return route.abort();
-            // route.continue header overrides survive redirects. Fetch privately
-            // without following redirects, then fulfill only the exact-origin response.
+            // Playwright APIRequest derives headers from node:http rawHeaders,
+            // which is empty in workerd. Native Fetch preserves the upstream MIME.
+            // Follow no redirects, and fulfill explicitly with decoded response bytes.
             checkpoint='browser-request';httpStatus=undefined;
-            const response=await route.fetch({headers:{...route.request().headers(),...input.headers},maxRedirects:0,timeout:60000});httpStatus=response.status();
+            const response=await installationBrowserResponse(route.request(),{origin:env.APP_ORIGIN,headers:input.headers});httpStatus=response.status;
             if(route.request().resourceType?.()==='script'){
-              try{const mime=(response.headers()['content-type']??'').split(';')[0].trim().toLowerCase();increment(counts.scriptMime,/^(?:text|application)\/(?:javascript|ecmascript|x-javascript)$/.test(mime)?'javascript':['text/html','application/xhtml+xml'].includes(mime)?'html':'other');}catch{}
-              // Observe only emptiness. Script bytes remain private and are never
-              // logged, returned or substituted into fulfillment by diagnostics.
-              try{increment(counts.scriptBodies,(await response.body()).length===0?'empty':'nonEmpty');}catch{}
+              const mime=(response.headers['content-type']??'').split(';')[0].trim().toLowerCase();increment(counts.scriptMime,/^(?:text|application)\/(?:javascript|ecmascript|x-javascript)$/.test(mime)?'javascript':['text/html','application/xhtml+xml'].includes(mime)?'html':'other');
+              increment(counts.scriptBodies,response.body.length===0?'empty':'nonEmpty');
             }
-            try{if(response.status()>=300&&response.status()<400){checkpoint='browser-redirect';await route.abort();}else{checkpoint='browser-fulfill';await route.fulfill({response});}}
-            finally{await response.dispose();}
+            if(response.status>=300&&response.status<400){checkpoint='browser-redirect';await route.abort();}else{checkpoint='browser-fulfill';await route.fulfill(response);}
           });
           checkpoint='browser-navigate';
           const result=await page.goto(env.APP_ORIGIN,{waitUntil:'networkidle',timeout:60000});

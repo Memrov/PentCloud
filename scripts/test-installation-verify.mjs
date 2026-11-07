@@ -4,8 +4,29 @@ import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {withNativeTestHarness} from './lib/native-test-harness.mjs';
+import {createServer} from 'node:http';
+import {gzipSync} from 'node:zlib';
 
 const root=resolve(import.meta.dirname,'..'),accountId='a'.repeat(32),zoneId='b'.repeat(32),instance='customer';
+test('native Browser relay preserves upstream MIME, decoded bytes and safe headers in real workerd',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-browser-headers-')),received=[];
+  const source='globalThis.fixtureLoaded=true;';
+  const upstream=createServer((request,response)=>{
+    let input='';request.on('data',part=>{input+=part;});request.on('end',()=>{received.push({method:request.method,headers:request.headers,body:input});const gzip=request.url.includes('gzip'),html=request.url.includes('html'),body=html?'<main>owned fixture</main>':source,bytes=gzip?gzipSync(body):Buffer.from(body);response.writeHead(200,{'Content-Type':html?'text/html':'text/javascript','Content-Length':String(bytes.length),'Content-Security-Policy':"script-src 'self'",'Set-Cookie':['fixture=owned; HttpOnly; SameSite=Strict','second=owned; Secure'],...(gzip?{'Content-Encoding':'gzip'}:{})});response.end(bytes);});
+  });
+  await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+upstream.address().port;
+  try{
+    await writeFile(join(directory,'worker.mjs'),`import {request} from ${JSON.stringify(join(root,'node_modules/@cloudflare/playwright/lib/index.js'))};import {installationBrowserResponse} from ${JSON.stringify(join(root,'scripts/lib/installation-probe-worker.mjs'))};import {get} from 'node:http';export default {async fetch(){const node=await new Promise(resolve=>get(${JSON.stringify(origin+'/fixture.js')},response=>{response.resume();resolve({type:response.headers['content-type']??null,rawCount:response.rawHeaders.length});}));const client=await request.newContext();try{const api=await client.get(${JSON.stringify(origin+'/fixture.js')});const collected=[];for(const path of ['/fixture.js','/fixture.js?gzip','/fixture.html']){const result=await installationBrowserResponse({url:()=>${JSON.stringify(origin)}+path,method:()=>path.includes('gzip')?'POST':'GET',headers:()=>({Host:'foreign.invalid','Content-Length':'999','Accept-Encoding':'fixture-unsupported',Connection:'x-fixture-hop','X-Fixture-Hop':'drop-me'}),postDataBuffer:()=>new TextEncoder().encode('owned request body')},{origin:${JSON.stringify(origin)},headers:{'CF-Access-Client-Id':'owned-id','CF-Access-Client-Secret':'owned-secret'}});collected.push({type:result.headers['content-type'],encoding:result.headers['content-encoding']??null,length:result.headers['content-length'],bytes:result.body.length,sourceMatches:result.body.toString()===${JSON.stringify(source)},htmlMatches:result.body.toString()==='<main>owned fixture</main>',csp:result.headers['content-security-policy']==="script-src 'self'",cookie:result.headers['set-cookie']?.includes('fixture=owned')===true&&result.headers['set-cookie']?.includes('second=owned')===true&&result.headers['set-cookie']?.split('\\n').length===2});}return Response.json({node,playwrightType:api.headers()['content-type']??null,collected});}finally{await client.dispose();}}};`);
+    await writeFile(join(directory,'wrangler.json'),JSON.stringify({name:'browser-headers-fixture',main:'worker.mjs',compatibility_date:'2026-10-30',compatibility_flags:['nodejs_compat']}));
+    await withNativeTestHarness({root:directory,workers:[{configPath:'wrangler.json'}]},async server=>{
+      const result=await (await server.fetch('https://fixture.test/')).json();assert.equal(result.node.type,'text/javascript');
+      assert([null,'text/javascript'].includes(result.playwrightType));
+      assert.equal(result.collected.length,3);
+      for(const [index,item]of result.collected.entries()){assert.equal(item.type,index===2?'text/html':'text/javascript');assert.equal(item.encoding,null);assert.equal(Number(item.length),item.bytes);assert.equal(item.csp,true);assert.equal(item.cookie,true);assert.equal(index===2?item.htmlMatches:item.sourceMatches,true);}
+    });
+    for(const request of received.slice(-3)){assert.notEqual(request.headers.host,'foreign.invalid');assert.equal(request.headers['x-fixture-hop'],undefined);assert.notEqual(request.headers['accept-encoding'],'fixture-unsupported');assert.equal(request.headers['cf-access-client-secret'],'owned-secret');if(request.method==='POST')assert.equal(request.body,'owned request body');else assert.equal(request.body,'');}
+  }finally{await new Promise(resolve=>upstream.close(resolve));await rm(directory,{recursive:true,force:true});}
+});
 async function fixture(check){
   const directory=await mkdtemp(join(tmpdir(),'pentcloud-verification-'));
   const shared=await import('./lib/owned-probe.mjs');
@@ -175,7 +196,8 @@ test('shared worker requires the selected pack image and always retires its runt
 });
 test('Browser probe waits for visible rendered root content while confining credentials and redirects',async()=>{
   const origin='https://app.customer.example',headers={'CF-Access-Client-Id':'private-client','CF-Access-Client-Secret':'private-secret'},events=[];let handler,failFetch=false,rendered=false;
-  const prior=globalThis.__installationProbeLaunch;
+  const prior=globalThis.__installationProbeLaunch,previousFetch=globalThis.fetch;
+  globalThis.fetch=async(url,options)=>{assert.equal(new URL(url).origin,origin);assert.equal(options.redirect,'manual');assert.equal(options.headers.get('CF-Access-Client-Secret'),headers['CF-Access-Client-Secret']);if(failFetch)throw Error('PRIVATE_FETCH_ERROR');events.push('fetch');return new Response('owned bytes',{status:String(url).endsWith('/redirect')?302:200,headers:{'content-type':'text/html'}});};
   globalThis.__installationProbeLaunch=async()=>({async newContext(options){
     assert.equal(options.extraHTTPHeaders,undefined);assert.equal(options.serviceWorkers,'block');
     return {request:{async get(url,options){assert.equal(url,origin+'/v1/runs');assert.equal(options.maxRedirects,0);assert.deepEqual(options.headers,headers);events.push('ready');return {status:()=>200,json:async()=>({runs:[]}),async dispose(){}};}},async route(pattern,callback){handler=callback;},async newPage(){return {async goto(){
@@ -187,11 +209,11 @@ test('Browser probe waits for visible rendered root content while confining cred
     const source=(await readFile(join(root,'scripts/lib/installation-probe-worker.mjs'),'utf8')).replace("import {launch} from '@cloudflare/playwright';",'const launch=globalThis.__installationProbeLaunch;');
     const {default:probe}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     const response=await probe.fetch(new Request('https://probe.invalid',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'browser',headers})}),{APP_ORIGIN:origin,CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)});
-    assert.equal(response.status,200);assert.equal((await response.json()).browserDiagnostics,undefined);assert.deepEqual(events,['ready','fetch','fulfill','dispose','fetch','abort','dispose','abort','visible','close']);
+    assert.equal(response.status,200);assert.equal((await response.json()).browserDiagnostics,undefined);assert.deepEqual(events,['ready','fetch','fulfill','fetch','abort','abort','visible','close']);
     failFetch=true;
     const failed=await probe.fetch(new Request('https://probe.invalid',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'browser',headers})}),{APP_ORIGIN:origin,CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)});
     assert.equal(failed.status,500);assert.deepEqual(await failed.json(),{error:'Installation probe failed',action:'browser',checkpoint:'browser-request',browserDiagnostics:{hasRoot:true,documentTitlePentCloud:true,hasRenderedPentCloud:false,browserApiJson:true,rootChildCount:0,scriptResponses:{ok:0,redirect:0,clientError:0,serverError:0},scriptMime:{javascript:0,html:0,other:0},scriptBodies:{empty:0,nonEmpty:0},consoleErrors:{mimeMismatch:0,cspScript:0,cspEval:0,Other:0},requestFailures:{},runtimeErrors:{}}});
-  }finally{if(prior===undefined)delete globalThis.__installationProbeLaunch;else globalThis.__installationProbeLaunch=prior;}
+  }finally{globalThis.fetch=previousFetch;if(prior===undefined)delete globalThis.__installationProbeLaunch;else globalThis.__installationProbeLaunch=prior;}
 });
 test('Browser diagnostics admit only fixed booleans, capped counts and known error categories',async()=>{
   const verifier=await import('./lib/installation-verify.mjs');assert.equal(typeof verifier.sanitizeBrowserDiagnostics,'function');
@@ -200,11 +222,12 @@ test('Browser diagnostics admit only fixed booleans, capped counts and known err
   assert.equal(verifier.sanitizeBrowserDiagnostics({url:'PRIVATE_URL'}),undefined);assert.equal(verifier.sanitizeBrowserDiagnostics(null),undefined);assert.equal(verifier.sanitizeBrowserDiagnostics([]),undefined);
 });
 test('Browser failure diagnostics cap script, network and runtime counts without forwarding private values',async()=>{
-  const prior=globalThis.__installationProbeLaunch,handlers={};let routeHandler;
+  const prior=globalThis.__installationProbeLaunch,previousFetch=globalThis.fetch,handlers={},pendingResponses=[];let routeHandler;
+  globalThis.fetch=async(url,options)=>{assert.equal(new URL(url).origin,'https://app.customer.example');assert.equal(options.redirect,'manual');const [mime,body]=pendingResponses.shift();return new Response(body,{headers:{'content-type':mime}});};
   globalThis.__installationProbeLaunch=async()=>({async newContext(){return {request:{async get(){return {status:()=>200,async dispose(){}};}},async route(pattern,callback){routeHandler=callback;},async newPage(){return {on(name,callback){handlers[name]=callback;},async goto(){
     for(let i=0;i<25;i++){handlers.response({request:()=>({resourceType:()=>'script'}),status:()=>200});handlers.pageerror({name:'TypeError',message:'PRIVATE_RUNTIME_MESSAGE'});}
     handlers.response({request:()=>({resourceType:()=>'script'}),status:()=>404});handlers.requestfailed({failure:()=>({errorText:'net::ERR_CONTENT_DECODING_FAILED https://PRIVATE_URL'})});handlers.requestfailed({failure:()=>({errorText:'PRIVATE_NETWORK_MESSAGE'})});handlers.pageerror({name:'PRIVATE_RUNTIME_NAME'});
-    for(const [mime,body]of [['text/javascript',''],['application/javascript; charset=utf-8','PRIVATE_SOURCE'],['text/html','PRIVATE_HTML'],['PRIVATE_MIME','']])await routeHandler({request:()=>({url:()=>'https://app.customer.example/private.js',resourceType:()=>'script',headers:()=>({})}),async fetch(){return {status:()=>200,headers:()=>({'content-type':mime}),body:async()=>Buffer.from(body),async dispose(){}};},async fulfill(options){assert.equal(Object.hasOwn(options,'body'),false);},async abort(){}});
+    for(const [mime,body]of [['text/javascript',''],['application/javascript; charset=utf-8','PRIVATE_SOURCE'],['text/html','PRIVATE_HTML'],['PRIVATE_MIME','']]){pendingResponses.push([mime,body]);await routeHandler({request:()=>({url:()=>'https://app.customer.example/private.js',resourceType:()=>'script',headers:()=>({})}),async fetch(){return {status:()=>200,headers:()=>({'content-type':mime}),body:async()=>Buffer.from(body),async dispose(){}};},async fulfill(options){assert.equal(options.headers['content-type'],mime);assert.equal(options.body.toString(),body);},async abort(){}});}
     for(let i=0;i<25;i++)handlers.console({type:()=>'error',text:()=>'Failed module MIME type PRIVATE_URL'});
     for(const message of ["Refused to load script violates script-src PRIVATE_URL","Refused to evaluate a string as JavaScript unsafe-eval PRIVATE_URL",'PRIVATE_CONSOLE_MESSAGE'])handlers.console({type:()=>'error',text:()=>message});return {status:()=>200};
   },locator(){return {first(){return this;},async waitFor(){throw Error('PRIVATE_TIMEOUT_MESSAGE');}};},async evaluate(){return {hasRoot:true,documentTitlePentCloud:true,hasRenderedPentCloud:false,isAccessLoginPage:false,hasCloudflareChallenge:true,rootChildCount:0,html:'PRIVATE_HTML'};}};}};},async close(){}});
@@ -213,5 +236,5 @@ test('Browser failure diagnostics cap script, network and runtime counts without
     const {default:probe}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     const result=await probe.fetch(new Request('https://probe.invalid',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'browser',headers:{'CF-Access-Client-Id':'private-id','CF-Access-Client-Secret':'private-secret'}})}),{APP_ORIGIN:'https://app.customer.example',CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)});
     assert.equal(result.status,500);const body=await result.json();assert(!JSON.stringify(body).includes('PRIVATE_'));assert.deepEqual(body.browserDiagnostics,{hasRoot:true,documentTitlePentCloud:true,hasRenderedPentCloud:false,isAccessLoginPage:false,hasCloudflareChallenge:true,browserApiJson:false,rootChildCount:0,scriptResponses:{ok:20,redirect:0,clientError:1,serverError:0},scriptMime:{javascript:2,html:1,other:1},scriptBodies:{empty:2,nonEmpty:2},consoleErrors:{mimeMismatch:20,cspScript:1,cspEval:1,Other:1},requestFailures:{ERR_CONTENT_DECODING_FAILED:1,Other:1},runtimeErrors:{TypeError:20,Other:1}});
-  }finally{if(prior===undefined)delete globalThis.__installationProbeLaunch;else globalThis.__installationProbeLaunch=prior;}
+  }finally{globalThis.fetch=previousFetch;if(prior===undefined)delete globalThis.__installationProbeLaunch;else globalThis.__installationProbeLaunch=prior;}
 });
