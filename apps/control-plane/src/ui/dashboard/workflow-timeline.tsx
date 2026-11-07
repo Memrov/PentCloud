@@ -18,7 +18,11 @@ export function connectWorkflowActivity(runId: string, handlers: {
     caughtUp = true;
     if (terminal) close(); else handlers.connection("live");
   });
-  source.onerror = () => handlers.connection(source.readyState === 2 ? "closed" : "reconnecting");
+  source.onopen = () => { caughtUp = false; };
+  source.onerror = () => {
+    caughtUp = false;
+    handlers.connection(source.readyState === 2 ? "closed" : "reconnecting");
+  };
   source.addEventListener("message", ((message: MessageEvent<string>) => {
     try {
       const event = parseActivityEvent(JSON.parse(message.data) as unknown);

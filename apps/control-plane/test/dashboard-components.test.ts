@@ -26,6 +26,23 @@ describe("workflow dashboard components", () => {
     send(3,"phase.started","other-run");expect(events).toHaveLength(3);
     send(4,"run.completed");expect(closed).toBe(1);expect(states.at(-1)).toBe("closed");stop();expect(closed).toBe(2);
   });
+  it("waits for a new replay tail when the same EventSource reconnects across completion and revision", () => {
+    const listeners=new Map<string,EventListener>(),events:import("../src/ui/presentation").UIActivityEvent[]=[],states:string[]=[];
+    let closed=0;
+    const source={readyState:1,addEventListener:(name:string,listener:EventListener)=>listeners.set(name,listener),close:()=>{closed++;}} as unknown as EventSource;
+    connectWorkflowActivity("run-1",{event:event=>events.push(event),connection:state=>states.push(state)},()=>source);
+    const send=(id:number,type:string)=>listeners.get("message")!({data:JSON.stringify({instanceId:"run-1",eventId:id,timestamp:id*100,type}),lastEventId:String(id)} as MessageEvent);
+    source.onopen?.(new Event("open"));send(0,"run.started");listeners.get("up-to-date")!({} as Event);
+    expect(states.at(-1)).toBe("live");
+    source.onerror?.(new Event("error"));expect(states.at(-1)).toBe("reconnecting");
+    source.onopen?.(new Event("open"));send(1,"run.completed");expect(closed).toBe(0);
+    send(2,"run.started");expect(closed).toBe(0);expect(states.at(-1)).not.toBe("live");
+    listeners.get("up-to-date")!({} as Event);
+    expect(states.at(-1)).toBe("live");expect(closed).toBe(0);expect(reduceWorkflowEvents(events,1000).status).toBe("running");
+    source.onerror?.(new Event("error"));source.onopen?.(new Event("open"));
+    send(3,"run.completed");expect(closed).toBe(0);
+    listeners.get("up-to-date")!({} as Event);expect(closed).toBe(1);expect(states.at(-1)).toBe("closed");
+  });
   it("closes completed history only after up-to-date, and closes empty history on native done", () => {
     const listeners=new Map<string,EventListener>();let closed=0;
     connectWorkflowActivity("run-1",{event:()=>{},connection:()=>{}},()=>({addEventListener:(name:string,listener:EventListener)=>listeners.set(name,listener),close:()=>{closed++;}} as unknown as EventSource));
