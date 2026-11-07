@@ -334,9 +334,8 @@ export class ProbeCoordinator extends Coordinator {
     this.trashGate={entered:reached,release};
     const pause=async()=>{if(!used){used=true;entered();await held;}};
     const internal=this as unknown as {start:()=>Promise<void>};
-    const start=internal.start.bind(this), cancel=this.queue.cancel.bind(this.queue);
+    const start=internal.start.bind(this);
     internal.start=async()=>{await pause();await start();};
-    this.queue.cancel=async (...args:Parameters<typeof cancel>)=>{await pause();return cancel(...args);};
   }
   async waitTrashGate() { await this.trashGate!.entered; }
   async releaseTrashGate() { this.trashGate!.release(); }
@@ -559,6 +558,7 @@ export class ProbeCoordinator extends Coordinator {
   }
   async seed(count = 2, role: "primary" | "coder" = "coder", notify = true) {
     await this.lifecycle.start();
+    await this.lifecycle.jobs.reschedule("pentcloud:recover",Date.now()+60000);
     const settings = {
       promptTemplate: "probe",
       upstreamPromptDigest: "b".repeat(64),
@@ -633,7 +633,7 @@ export class ProbeCoordinator extends Coordinator {
       this.write(`job:${id}`, job);
       this.write(`order:${id}`, index + 1);
       this.write("queue:sequence", index + 1);
-      if (notify) await this.queue.push("attempt", { id }, { id });
+      if (notify) await (this as unknown as {wake():Promise<unknown>}).wake();
     }
     return { seeded: count };
   }
@@ -844,8 +844,11 @@ export class ProbeCoordinator extends Coordinator {
     return { fired: true };
   }
   async recoverNow() {
-    const internal = this as unknown as { recover(): Promise<void> };
-    await internal.recover();
+    await this.lifecycle.start();
+    const internal = this as unknown as { wake(): Promise<unknown>; recovering?:Promise<void> };
+    await internal.wake();
+    await this.lifecycle.alarm();
+    await internal.recovering;
     return this.queueSnapshot();
   }
   async catalogRuntime(origin:string,redirect=false){
@@ -934,7 +937,63 @@ export class ProbeCoordinator extends Coordinator {
     await this.recoverNow();await this.recoverNow();
     return {snapshot:await this.snapshot(),attempt:await stub.inspect(),main:await this.mainHead(job.runId)};
   }
-  async platformRecoverySchedules() { return { recover: (await this.scheduler.list()).filter(schedule => schedule.callback === "recover").length }; }
+  async recoveryAfterReset() {
+    await this.lifecycle.jobs.reschedule("pentcloud:recover",Date.now()+1000);
+    return {armed:true};
+  }
+  async nativeMemoryHandoff() {
+    await this.lifecycle.start();
+    const internal=this as unknown as {wake():Promise<unknown>;recover():Promise<void>;recovering?:Promise<void>};
+    await internal.recovering;
+    internal.recover=async()=>{throw new Error("Durable Object's isolate exceeded its memory limit and was reset.");};
+    await internal.wake();
+    await this.lifecycle.alarm();
+    return {handedOff:true};
+  }
+  async readonlyQueueScenario() {
+    // Public snapshots must not start capabilities or create a recovery wake.
+    const cold=await this.queueSnapshot(), coldJobs=this.lifecycle.jobs.list();
+    await this.seed(2,"coder",false);
+    this.write("order:job-0",20);this.write("order:job-1",10);
+    const pending=(await this.queueSnapshot()).pending;
+    return {cold,coldJobs,pending};
+  }
+  async nativeWakeScenario() {
+    await this.lifecycle.start();
+    const internal=this as unknown as {wake():Promise<unknown>;recover():Promise<void>;recovering?:Promise<void>};
+    await internal.recovering;
+    const initial=this.lifecycle.jobs.get("pentcloud:recover");
+    if(!initial)return {initial:null};
+    let release!:()=>void, passes=0, concurrent=0, peak=0;
+    const held=new Promise<void>(resolve=>{release=resolve;}), recover=internal.recover.bind(this);
+    internal.recover=async()=>{passes++;peak=Math.max(peak,++concurrent);try{if(passes===1)await held;}finally{concurrent--;}};
+    await internal.wake();
+    await this.lifecycle.alarm();
+    const firstPasses=passes, busyRequestedAt=Date.now();
+    const pushedBusy=internal.wake();
+    const busyWake=this.lifecycle.jobs.get(initial.id);
+    await pushedBusy;
+    await this.lifecycle.alarm();
+    const busyPasses=passes;
+    release();await internal.recovering;
+    const heartbeat=this.lifecycle.jobs.get(initial.id);
+    await this.lifecycle.jobs.reschedule(initial.id,Date.now());
+    await this.lifecycle.alarm();await internal.recovering;
+    internal.recover=recover;
+    const future=Date.now()+60000;
+    await this.lifecycle.jobs.reschedule(initial.id,future);
+    let pushed:Promise<unknown>|undefined;
+    try{this.ctx.storage.transactionSync(()=>{this.write("probe:rollback",true);pushed=internal.wake();throw new Error("rollback admission");});}catch{}
+    await pushed;
+    const rolledBack=this.ctx.storage.sql.exec("SELECT key FROM native_records WHERE key='probe:rollback'").toArray().length===0&&this.lifecycle.jobs.get(initial.id)?.time===future;
+    const rearm=this.lifecycle.rearmAlarm.bind(this.lifecycle);
+    this.lifecycle.rearmAlarm=async()=>{throw new Error("injected alarm rearm failure");};
+    let failure="";try{await internal.wake();}catch(error){failure=String(error);}finally{this.lifecycle.rearmAlarm=rearm;}
+    const retained=this.lifecycle.jobs.get(initial.id);
+    await this.lifecycle.jobs.rearm();
+    return {initial,firstPasses,busyRequestedAt,busyWake,busyPasses,heartbeat,passes,peak,rolledBack,failure,retained};
+  }
+  async platformRecoverySchedules() { return { recover: this.lifecycle.jobs.list().filter(job => job.fn === "recover").length, legacy: (await this.scheduler.list()).filter(schedule => schedule.callback === "recover").length }; }
   async endPlatformBackoff() {
     const row = this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM native_records WHERE key=?", "platform:recovery").one();
     this.write("platform:recovery", { ...JSON.parse(row.value), nextTime: Date.now() - 1 });
@@ -952,7 +1011,7 @@ export class ProbeCoordinator extends Coordinator {
     };
   }
   async repeatDelivery(id: string) {
-    await this.queue.push("attempt", { id }, { id });
+    await (this as unknown as {wake():Promise<unknown>}).wake();
     await this.lifecycle.alarm();
     return { fired: true };
   }
@@ -990,6 +1049,10 @@ export default {
         return Response.json(await coordinator.diagnostics());
       }
       if (url.pathname === "/platform-diagnostics") return Response.json(await coordinator.diagnostics());
+      if (url.pathname === "/recovery-after-reset") return Response.json(await coordinator.recoveryAfterReset());
+      if (url.pathname === "/native-memory-handoff") return Response.json(await coordinator.nativeMemoryHandoff());
+      if (url.pathname === "/readonly-queue") return Response.json(await coordinator.readonlyQueueScenario());
+      if (url.pathname === "/native-wake") return Response.json(await coordinator.nativeWakeScenario());
       if (url.pathname === "/platform-schedules") return Response.json(await coordinator.platformRecoverySchedules());
       if (url.pathname === "/platform-backoff") { await coordinator.onAlarmMemoryLimit({ sealed: false, nextTime: Date.now() + 60000 }); return Response.json(await coordinator.diagnostics()); }
       if (url.pathname === "/end-platform-backoff") return Response.json(await coordinator.endPlatformBackoff());

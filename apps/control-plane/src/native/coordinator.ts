@@ -6,8 +6,7 @@ import {assertRecordedWorkAccess,recordedWorkPage,type RecordedWorkPage} from ".
 import { DurableObject } from "cloudflare:workers";
 import { Workspace, type DurableObjectStorageLike } from "@cloudflare/computer";
 import { createGitClient } from "@cloudflare/computer/git";
-import { Lifecycle, type MemoryLimitContext } from "agents/lifecycle";
-import { Queue } from "agents/queue";
+import { Lifecycle, type LifecycleJobContext, type LifecycleJobOutcome, type MemoryLimitContext } from "agents/lifecycle";
 import { Scheduler } from "agents/schedules";
 import {
   assertRoleWrite,
@@ -112,6 +111,8 @@ const delegateRoles: Record<string, Role> = {
   pentester: "pentester",
   search: "searcher",
 };
+const RECOVERY_JOB_ID = "pentcloud:recover";
+const RECOVERY_HEARTBEAT_MS = 15_000;
 const identity = { name: "PentCloud", email: "pentcloud@invalid" };
 
 /** One admission authority for the one shared toolbox; session data lives in attempts. */
@@ -155,11 +156,6 @@ export class Coordinator extends DurableObject<NativeEnv> {
     target:id=>this.onboarding.target(id),save:(id,revision,sources,actor)=>this.onboarding.saveSources(id,revision,sources,actor),
     assertOpen:()=>this.assertAdmissionOpen(),
   });
-  readonly queue = new Queue({
-    callbacks: { attempt: ({ id }: { id: string }) => this.process(id) },
-    retry: { maxAttempts: 3, baseDelayMs: 500, maxDelayMs: 5000 },
-    onError: (error) => this.queueError(error),
-  });
   readonly view: State<{
     revision: number;
     runs: ReturnType<typeof publicRun>[];
@@ -183,13 +179,9 @@ export class Coordinator extends DurableObject<NativeEnv> {
   readonly scheduler = new Scheduler({
     callbacks: {
       expireVerification: async () => { this.loginChallenges.expire();await this.scheduleVerificationExpiry(); },
-      recover: () => {
-        this.wake();
-      },
     },
   });
   readonly lifecycle = Lifecycle.install(this)
-    .use(this.queue)
     .use(this.scheduler)
     .use(this.view)
     .use(this.webSockets);
@@ -267,20 +259,42 @@ export class Coordinator extends DurableObject<NativeEnv> {
     await this.lifecycle.start();
   }
   async onStart() {
-    // A wake observes durable ownership; it never imposes an execution deadline.
-    if (!this.get<RuntimeRecovery>("platform:recovery")?.sealed)
-      await this.scheduler.every(15, "recover");
+    // Retire the old heartbeat through Scheduler's public migration surface.
+    for (const schedule of await this.scheduler.list())
+      if (schedule.callback === "recover") await this.scheduler.cancel(schedule.id);
+    // Preserve a pending native backoff across restart instead of pulling it forward.
+    if (!this.lifecycle.jobs.get(RECOVERY_JOB_ID)) await this.wake();
     await this.publish();
-    this.wake();
+  }
+  onJob({ job }: LifecycleJobContext): LifecycleJobOutcome {
+    if (job.id !== RECOVERY_JOB_ID || job.fn !== "recover") return;
+    const recovery = this.get<RuntimeRecovery>("platform:recovery");
+    if (recovery?.sealed) return;
+    if ((recovery?.nextTime ?? 0) > Date.now())
+      return { rescheduleAt: recovery!.nextTime! };
+    // Native singleflight ends at dispatch return. Keep only this in-memory
+    // guard for the long handoff; the native heartbeat survives its eviction.
+    if (!this.recovering) {
+      const work = this.recover();
+      this.recovering = work;
+      // Track the rejecting promise before diagnostic handling masks an OOM.
+      this.lifecycle.trackAlarmWork(work);
+      this.ctx.waitUntil(work.catch(error => {
+        try { this.activity("coordinator", "recovery.failed", undefined, undefined, this.safe(String(error))); }
+        catch { console.error("pentagi.native.recovery_failed"); }
+      }).finally(() => {
+        if (this.recovering === work) this.recovering = undefined;
+      }));
+    } else this.lifecycle.trackAlarmWork(this.recovering);
+    return { rescheduleAt: Date.now() + RECOVERY_HEARTBEAT_MS };
   }
   async onAlarmMemoryLimit(context: MemoryLimitContext): Promise<void> {
     const recovery = memoryRecovery(context, this.get<RuntimeRecovery>("platform:recovery"), Date.now(), runtimeVersion(this.env));
     this.put("platform:recovery", recovery);
     if (recovery.sealed) console.error("pentagi.native.coordinator_memory", recovery);
     else console.warn("pentagi.native.coordinator_memory", recovery);
-    if (recovery.sealed)
-      for (const schedule of await this.scheduler.list())
-        if (schedule.callback === "recover") await this.scheduler.cancel(schedule.id);
+    if (recovery.sealed) await this.lifecycle.jobs.cancel(RECOVERY_JOB_ID);
+    else if (recovery.nextTime !== undefined) await this.lifecycle.jobs.reschedule(RECOVERY_JOB_ID, recovery.nextTime);
     const active = this.activeReceipt();
     this.activity(active?.input.runId ?? "coordinator", recovery.sealed ? "platform.memory_recovery_sealed" : "platform.memory_recovery_backoff", undefined, active?.id);
   }
@@ -327,10 +341,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       });
     } else throw new Error("400: invalid platform recovery scope");
     await this.start();
-    if (!this.get<RuntimeRecovery>("platform:recovery")?.sealed)
-      await this.scheduler.every(15, "recover");
-    await this.lifecycle.rearmAlarm();
-    this.wake();
+    await this.wake();
     await this.publish();
     return { rearmed: true };
   }
@@ -356,7 +367,9 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.put("queue:sequence", sequence);
     this.put(`order:${job.id}`, sequence);
     this.put(`job:${job.id}`, job);
-    promises.push(this.queue.push("attempt", { id: job.id }, { id: job.id }));
+    // Agents 0.32 mutates its job row synchronously before awaiting alarm rearm,
+    // so this wake joins the admission transaction; the caller awaits after commit.
+    promises.push(this.wake());
   }
   private orderedJobs() {
     return this.jobs().sort(
@@ -373,23 +386,14 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.ctx.waitUntil(work);
   }
   private wake() {
-    if (recoveryPending(this.get<RuntimeRecovery>("platform:recovery"))) return;
-    if (this.recovering) return;
-    const work = this.recover()
-      .catch((error) => {
-        this.activity(
-          "coordinator",
-          "recovery.failed",
-          undefined,
-          undefined,
-          String(error),
-        );
-      })
-      .finally(() => {
-        if (this.recovering === work) this.recovering = undefined;
-      });
-    this.recovering = work;
-    this.track(work);
+    const recovery = this.get<RuntimeRecovery>("platform:recovery");
+    if (recovery?.sealed) return Promise.resolve();
+    // Always persist newer intent, including while a recovery handoff is busy.
+    return this.lifecycle.jobs.push({
+      id: RECOVERY_JOB_ID, fn: "recover",
+      time: Math.max(Date.now(), recovery?.nextTime ?? 0),
+      singleflight: true, recoveryLoop: true,
+    });
   }
   private async recover() {
     this.loginChallenges.expire();
@@ -554,7 +558,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
         case "discovery.acknowledge":{
           const id=identifier(value.runId),run=this.run(id);this.assertMutable(id);
           if(!run.activation||run.phase==="cancelled"||!run.discoveryDrained||this.activeReceipt()?.input.runId===id)throw new Error("409: Wait for discovery execution and remote outcomes to drain");
-          this.put("run:"+id,{...run,discoveryAcknowledged:true});this.activity(id,"discovery.acknowledged");await this.publish();this.wake();return {acknowledged:true};
+          this.put("run:"+id,{...run,discoveryAcknowledged:true});this.activity(id,"discovery.acknowledged");await this.publish();await this.wake();return {acknowledged:true};
         }
         case "model.test":return await this.onboarding.testModel(value.choice as Parameters<OnboardingStore["testModel"]>[0],identifier(value.requestId),actor);
         case "setup.save":{
@@ -790,7 +794,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       if(preparation)this.put("conversation:"+job.id,preparation);
       this.enqueue(job,pushes);
     });
-    await Promise.all(pushes);await this.ensureConversation(job.id);await this.publish();this.wake();return {run:publicRun(this.run(id)),rootJob:publicJob(this.job(job.id))};
+    await Promise.all(pushes);await this.ensureConversation(job.id);await this.publish();await this.wake();return {run:publicRun(this.run(id)),rootJob:publicJob(this.job(job.id))};
   }
   async assertEvidenceOwner(id:string):Promise<void> {
     await this.start();const job=this.job(id);
@@ -959,8 +963,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
       } finally {
         this.launched.delete(receipt.id);
         // Failed RPCs and publication attempts retain ownership and wait for the
-        // existing 15-second durable schedule; waking here would hot-loop on OOM.
-        if (completed) this.wake();
+        // existing 15-second durable heartbeat; waking here would hot-loop on OOM.
+        if (completed) await this.wake();
       }
     })();
     this.track(work);
@@ -1337,7 +1341,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       const cleared=await this.env.TOOLBOX.clear();
       if(!("state" in cleared) || cleared.state!=="stopped")throw new Error("503: scanner scratch cleanup is pending; retry deletion");
     }else if(!this.env.TOOL_PACKS)throw new Error("503: scanner backend is unavailable; retry deletion after restoring its binding");
-    for(const job of jobs){await this.queue.cancel(job.id);await this.attempt(job.id).purge(id);}
+    for(const job of jobs)await this.attempt(job.id).purge(id);
     this.browserAuth.clear(id);
     this.loginChallenges.clear(id);
     await this.workspace.artifacts.delete(run.repo);
@@ -1378,11 +1382,11 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return {version:1,runId,jobId,commit:job.outputCommit!,...(bundle?{bundle}:{})};
   }
   async queueSnapshot() {
-    await this.start();
     return {
       concurrency: 1,
       maxOutstanding: 3,
-      pending: await this.queue.list(),
+      pending: this.orderedJobs().filter(job => job.status === "created" && this.run(job.runId).phase !== "cancelled" && (this.run(job.runId).lifecycle ?? "active") === "active")
+        .map(job => ({ id: job.id, callback: "attempt", payload: { id: job.id }, createdAt: Math.floor(job.createdAt / 1000) })),
       jobs: this.jobs().map(this.presentJob),
     };
   }
@@ -1941,15 +1945,6 @@ export class Coordinator extends DurableObject<NativeEnv> {
     await this.start();
     return this.contextFor(id);
   }
-  private process(_id: string) {
-    // Queue owns durable delivery, not the lifetime of an unbounded model/scanner.
-    // Even overlapping SDK deadman alarms can only claim the one SQLite owner.
-    const next = this.orderedJobs().find(j => j.status === "created" && this.assessmentReady(j) && this.run(j.runId).phase !== "cancelled" && (this.run(j.runId).lifecycle ?? "active")==="active");
-    if (!next?.materialUploadIds?.length && !this.get("input:preparing")) this.claimNext();
-    // An active owner already has its completion path and durable recovery wake.
-    // A concurrent inspection here could relaunch an immediately failing RPC.
-    if (!this.activeReceipt()) this.wake();
-  }
   async accept(
     result: AttemptResult,
   ): Promise<{ accepted: boolean; duplicate?: boolean }> {
@@ -2104,7 +2099,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     });
     await this.projectAccepted(run.id);
     await this.publish();
-    this.wake();
+    await this.wake();
     return { accepted: true };
   }
   private validateTerminal(job: AttemptRecord, result: AttemptResult) {
@@ -2241,7 +2236,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     // the pinned attempt after eviction and obtains its exact durable result.
     const execution = await this.attempt(job.id).execution();
     if (!execution.result) {
-      this.wake();
+      await this.wake();
       return { pending: true };
     }
     if (execution.result.outputCommit !== commit) return { ignored: true };
@@ -2351,38 +2346,25 @@ export class Coordinator extends DurableObject<NativeEnv> {
       await Promise.all(pushes);
     }
   }
-  private queueError(error: unknown) {
-    this.activity(
-      "coordinator",
-      "queue.failed",
-      undefined,
-      undefined,
-      String(error),
-    );
-    this.wake();
-  }
   // Called inside the same synchronous transaction as a lifecycle fence.
   private markRunCancelled(id: string) {
-    const cancelled: string[] = [];
     let owner: string | undefined;
     const run = this.run(id);
     this.put(`run:${id}`, { ...run, phase: "cancelled", status: "interrupted" });
     for (const job of this.jobs(id)) {
       if (terminal(job.status)) continue;
       this.put(`job:${job.id}`, { ...job, status: "interrupted", finishedAt: Date.now(), revision: job.revision + 1 });
-      cancelled.push(job.id);
     }
     const active = this.activeReceipt();
     if (active?.input.runId === id && this.job(active.id).status === "interrupted") owner = active.id;
-    return { cancelled, owner };
+    return { owner };
   }
-  private async finishRunCancellation(id: string, capture: {cancelled:string[];owner:string|undefined}) {
+  private async finishRunCancellation(id: string, capture: {owner:string|undefined}) {
     await this.start();
-    await Promise.all(capture.cancelled.map((jobId) => this.queue.cancel(jobId)));
     const hosts=new Set([...(capture.owner?[capture.owner]:[]),...this.jobs(id).filter(job=>this.get("conversation:"+job.id)).map(job=>job.id)]);
     await Promise.all([...hosts].map(id=>this.get("conversation:"+id)?this.stopConversation(id):this.attempt(id).cancel()));
     this.activity(id, "run.interrupted");
-    this.wake();
+    await this.wake();
     await this.publish();
     return { cancelled: true, draining: !!capture.owner };
   }
@@ -2406,9 +2388,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
       });
       owner = this.activeReceipt()?.id === id;
     });
-    await this.queue.cancel(id);
     if (owner||this.get("conversation:"+id)) await this.attempt(id).cancel();
-    this.wake();
+    await this.wake();
     await this.publish();
     return { interrupted: true, draining: owner };
   }
@@ -2416,11 +2397,11 @@ export class Coordinator extends DurableObject<NativeEnv> {
     await this.start();
     const job = this.job(id);
     if (this.activeReceipt()?.id === id) {
-      this.wake();
+      await this.wake();
       return { reconciling: true, alreadyDrained: false };
     }
     if (terminal(job.status)) {
-      this.wake();
+      await this.wake();
       return { reconciling: true, alreadyDrained: true };
     }
     throw new Error("409: attempt does not hold the global execution slot");

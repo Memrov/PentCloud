@@ -19,7 +19,7 @@ const deadline = (promise, ms) =>
     promise,
     new Promise((_, reject) => {
       const timer = setTimeout(
-        () => reject(new Error("Queue alarm waited for unbounded Attempt.run")),
+        () => reject(new Error("Lifecycle alarm waited for unbounded Attempt.run")),
         ms,
       );
       timer.unref();
@@ -33,6 +33,51 @@ const fixture = async (run) => withNativeTestHarness({
   // local ports, isolated storage, diagnostics and deterministic shutdown.
   worker = {dispatchFetch: server.fetch};
   await run(url);
+});
+await fixture(async()=>{
+  await get("/seed");await get("/fire");
+  assert.equal((await get("/attempt?id=job-0")).deliveries,1);
+  await get("/recovery-after-reset");
+  await worker.dispatchFetch("https://coordinator.test/abort").catch(()=>undefined);
+  // Finish only the remote attempt: its old coordinator completion RPC was lost.
+  await get("/release?id=job-0");
+  let next;
+  for(let retry=0;retry<150;retry++){
+    next=await get("/attempt?id=job-1");
+    if(next.deliveries===1)break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(next.deliveries,1,"durable heartbeat reconciles a lost completion then admits FIFO after drain");
+  assert.equal((await get("/attempt?id=job-0")).starts,1,"recovery consumes the settled receipt without restarting work");
+  await get("/cancel?run=run-0");await get("/cancel?run=run-1");await get("/release?id=job-1");
+});
+await fixture(async()=>{
+  const value=await get("/readonly-queue");
+  assert.deepEqual(value.cold.pending,[]);assert.deepEqual(value.coldJobs,[],"queue snapshot never starts recovery");
+  assert.deepEqual(value.pending.map(job=>job.id),["job-1","job-0"],"pending projection follows authoritative admission order");
+});
+await fixture(async()=>{
+  await worker.dispatchFetch("https://coordinator.test/native-memory-handoff").catch(()=>undefined);
+  let diagnostics;
+  for(let retry=0;retry<100;retry++){
+    diagnostics=await get("/platform-diagnostics");
+    if(diagnostics.coordinator.recovery)break;
+    await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  assert.equal(diagnostics.coordinator.recovery?.sealed,false,"native breaker sees the original rejected handoff");
+  assert.ok(diagnostics.coordinator.recovery.nextTime>Date.now(),"native breaker persists its recovery backoff after reset");
+  assert.equal((await get("/platform-schedules")).recover,1,"the rejected handoff retains one native wake");
+});
+await fixture(async()=>{
+  const value=await get("/native-wake");
+  assert.ok(value.initial,"startup installs the one durable native recovery job");
+  assert.equal(value.initial.singleflight,true);assert.equal(value.initial.recoveryLoop,true);
+  assert.equal(value.firstPasses,1);assert.equal(value.busyPasses,1);assert.equal(value.peak,1,"same-ID wake never overlaps detached recovery");
+  assert.ok(value.busyWake.time<=value.busyRequestedAt+1000,"wake while busy durably advances the existing heartbeat");
+  assert.ok(value.heartbeat,"busy dispatch leaves a durable heartbeat");
+  assert.equal(value.passes,2,"heartbeat runs a fresh pass after the handoff settles");
+  assert.equal(value.rolledBack,true,"admission and native wake retime roll back together");
+  assert.match(value.failure,/injected alarm rearm failure/);assert.ok(value.retained,"rearm failure preserves the native wake for retry");
 });
 await fixture(async()=>{const value=await get('/bounty-gate-scenario');assert.deepEqual(value.denied,['scope.names','scope.search','scope.preview','scope.import']);assert.deepEqual(Object.fromEntries(value.status.connections.map(c=>[c.platform,c.status])),{hackerone:'missing',intigriti:'missing',bugcrowd:'development',yeswehack:'development'});assert.deepEqual(value.unavailable,['bugcrowd:bounty.check','bugcrowd:scope.preview','bugcrowd:scope.import','yeswehack:bounty.check','yeswehack:scope.preview','yeswehack:scope.import']);});
 await fixture(async()=>{
@@ -110,7 +155,7 @@ await fixture(async () => {
   await get("/platform-backoff");
   await get("/repeat?id=job-0");
   await get("/recover");
-  assert.equal((await get("/attempt?id=job-0")).deliveries, 0, "Queue/API wakes honor the native backoff time");
+  assert.equal((await get("/attempt?id=job-0")).deliveries, 0, "Lifecycle/API wakes honor the native backoff time");
   assert.equal((await get("/snapshot")).records.find(row => row.key === "active"), undefined);
   await get("/end-platform-backoff");
   await new Promise(resolve => setTimeout(resolve, 100));
@@ -137,7 +182,7 @@ await fixture(async () => {
   assert.equal(held.records.find(row => row.key === "active").value.id, "job-0");
   const resolved = await get("/platform-memory?unresolved=0");
   assert.equal((await get(`/platform-rearm?at=${marker}`)).rearmed, true);
-  assert.equal((await get("/platform-schedules")).recover, 1, "explicit resume restores the single native recovery schedule");
+  assert.equal((await get("/platform-schedules")).recover, 1, "explicit resume restores the single native recovery job");
   assert.equal((await get("/platform-diagnostics")).coordinator.recovery, undefined);
   assert.equal((await get("/attempt?id=job-0")).deliveries, 1, "Coordinator resume preserves the separate Attempt seal");
   await get("/rpc-failure?id=job-0&enabled=false");
@@ -208,12 +253,19 @@ await fixture(async () => {
     0,
     "unbounded work has no 30-second execution deadline",
   );
+  // The persisted native wake, without a new API wake, resumes after eviction.
+  await get("/recovery-after-reset");
   // Abrupt reset represents deployment/eviction; graceful eviction waits for pending I/O.
   await worker
     .dispatchFetch("https://coordinator.test/abort")
     .catch(() => undefined);
-  await get("/recover");
-  const resumed = await get("/attempt?id=job-0");
+  let resumed;
+  for(let retry=0;retry<150;retry++){
+    resumed=await get("/attempt?id=job-0");
+    if(resumed.deliveries>=2)break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(resumed.deliveries,2,"persisted native heartbeat resumes the same owner after reset without an API wake");
   assert.deepEqual(
     resumed.input,
     first.input,
@@ -602,5 +654,5 @@ await fixture(async()=>{
   assert.deepEqual(await get("/browser-auth-lifecycle"),{cancelled:true,completed:true,archived:true});
 });
 console.log(
-  "workerd coordinator: Queue/deadman/reset, cancellation drain/FIFO/capacity, continuation CAS, role/revision authority, real Git candidate validation and durable publication replay passed",
+  "workerd coordinator: Lifecycle heartbeat/handoff/deadman/reset, cancellation drain/FIFO/capacity, continuation CAS, role/revision authority, real Git candidate validation and durable publication replay passed",
 );

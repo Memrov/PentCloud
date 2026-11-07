@@ -25,12 +25,12 @@ Kali retains direct Internet access without network scope enforcement. [Capabili
 
 ## Separate conversations, shared accepted work
 
-![Coordinator and native queue track separate OpenCode sessions and workspaces. Agents read accepted Git work and use role-dependent capabilities. Only one mutating attempt runs at a time; Kali is shared.](../media/agents.light.png)
+![Coordinator and native Lifecycle track separate OpenCode sessions and workspaces. Agents read accepted Git work and use role-dependent capabilities. Only one mutating attempt runs at a time; Kali is shared.](../media/agents.light.png)
 
 The roles shown are examples, not simultaneous scanning lanes. Each revision gets
 a fresh native session/workspace. Coordinator SQLite is the live run/settings and
-admission authority; one native queue allows one mutating attempt and at most two
-waiting. Role-dependent tools reach Worker capabilities, Browser Run and one
+admission authority; its durable admission order allows one mutating attempt and
+at most two waiting. Role-dependent tools reach Worker capabilities, Browser Run and one
 shared stock Kali Container. Separate sessions do not provide network confinement.
 
 ## Evidence with a history
@@ -57,6 +57,15 @@ uses recorded state and operation receipts; unknown mutations keep their safety
 ownership until reconciled. Captured evidence may finish a data-only checkpoint
 while an owner drains, but this does not resume scanning/model work or accept a
 result. Purge waits for safe drain. See [operations](operations.md).
+
+Coordinator uses one native Lifecycle job, `pentcloud:recover`, to inspect that
+SQLite authority. Admissions persist the wake in the same transaction as the job
+record. The job returns a 15-second heartbeat while recovery work is handed to
+`trackAlarmWork`; one in-memory promise prevents overlapping recovery passes.
+A wake received during a pass remains durable, and a restarted object resumes
+from its active receipt. Native memory backoff and the persisted recovery seal
+also govern API wakes. Scheduler remains responsible for verification expiry;
+startup retires its former recovery schedules through public list/cancel calls.
 
 ## Source is context, not the work repository
 
