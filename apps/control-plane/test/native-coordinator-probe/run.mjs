@@ -572,6 +572,41 @@ await fixture(async () => {
   await get("/cancel?run=run-0");
 });
 await fixture(async () => {
+  const admitted = await Promise.all([
+    get("/create?id=concurrent-first&task=first"),
+    get("/create?id=concurrent-second&task=second"),
+  ]);
+  assert.notEqual(admitted[0].rootJob.id, admitted[1].rootJob.id);
+  const snapshot = await get("/snapshot");
+  const ordered = admitted.map(({run,rootJob}) => ({
+    runId: run.id, id: rootJob.id,
+    order: snapshot.records.find(row => row.key === "order:" + rootJob.id)?.value,
+  })).sort((a,b) => a.order - b.order);
+  assert.ok(ordered.every(job => Number.isSafeInteger(job.order)));
+  assert.ok(ordered[0].order < ordered[1].order, "distinct concurrent admissions commit unique FIFO positions");
+  await get("/recover");
+  const [first, second] = ordered;
+  assert.equal((await get("/snapshot")).records.find(row => row.key === "active").value.id, first.id);
+  assert.equal((await get("/attempt?id=" + first.id)).starts, 1, "first committed admission owns the physical execution");
+  assert.equal((await get("/attempt?id=" + second.id)).starts, 0);
+  await get("/cancel?run=" + first.runId);
+  await get("/recover");
+  assert.equal((await get("/snapshot")).records.find(row => row.key === "active").value.id, first.id);
+  assert.equal((await get("/attempt?id=" + second.id)).starts, 0, "cancellation cannot hand off before the first execution drains");
+  await get("/release?id=" + first.id);
+  let next;
+  for(let retry=0;retry<100;retry++) {
+    next=await get("/attempt?id=" + second.id);
+    if(next.starts===1)break;
+    await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  assert.equal(next.starts, 1, "the next committed admission starts after the physical owner drains");
+  assert.equal((await get("/snapshot")).records.find(row => row.key === "active").value.id, second.id);
+  assert.equal((await get("/attempt?id=" + first.id)).starts, 1);
+  await get("/cancel?run=" + second.runId);
+  await get("/release?id=" + second.id);
+});
+await fixture(async () => {
   const [first, second] = await Promise.all([
     get("/create?id=concurrent&task=same"),
     get("/create?id=concurrent&task=same"),
