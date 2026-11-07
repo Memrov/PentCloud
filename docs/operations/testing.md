@@ -71,9 +71,11 @@ Required secret names are declared for generated types; their values stay bound.
 Keep actual API keys in bound Worker secrets; the JSON must contain
 configuration metadata only. Never upload the generated config or deployment
 logs as public CI artifacts. Use the existing app deploy helper to preserve the
-prebuilt module catalog and source maps. Protect `main` with passing GitHub
-checks; Cloudflare's push-triggered build does not wait for GitHub environment
-approvals.
+prebuilt module catalog and source maps. Managed default-config app deployments
+also enforce the [production shipping checks](production-shipping.md) for the
+exact checked-out `main` commit before invoking Wrangler. Protect `main` with
+passing GitHub checks; Cloudflare's push-triggered build does not wait for GitHub
+environment approvals.
 
 ## Prompt sources
 

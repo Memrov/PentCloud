@@ -1,0 +1,243 @@
+#!/usr/bin/env node
+// This journal contains ownership metadata only. Credentials stay in process memory.
+import {readFile,rm,mkdir,chmod} from 'node:fs/promises';
+import {join,resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {randomBytes} from 'node:crypto';
+import {isDeepStrictEqual} from 'node:util';
+import {privateJson,CloudflareApi} from './private-install.mjs';
+
+const fail=code=>{throw Error(code);};
+const ensure=(value,code)=>{if(!value)fail(code);};
+const identifier=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(value);
+const validHostname=value=>typeof value==='string'&&value.length<=253&&value.split('.').length>=2&&value.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
+export const verificationJournalPath=directory=>join(resolve(directory),'owned-verification.json');
+export function verificationOwner(accountId,instance,operationId=Date.now()+'-'+randomBytes(6).toString('hex')){
+  ensure(/^[a-f0-9]{32}$/.test(accountId??'')&&typeof instance==='string'&&/^[a-z][a-z0-9-]{0,47}$/.test(instance)&&/^\d{13}-[a-f0-9]{12}$/.test(operationId??''),'INSTALLATION_VERIFICATION_OWNER_INVALID');
+  return {accountId,instance,operationId};
+}
+function validateVerificationJournal(journal,expected=journal?.owner){
+  ensure(journal?.schemaVersion===2&&Object.keys(journal).length===6&&Object.keys(journal).every(key=>['schemaVersion','owner','probe','domain','access','evidence'].includes(key)),'INSTALLATION_VERIFICATION_JOURNAL_INVALID');
+  const owner=verificationOwner(journal.owner?.accountId,journal.owner?.instance,journal.owner?.operationId);
+  ensure(Object.keys(journal.owner).length===3&&expected&&Object.entries(expected).every(([key,value])=>owner[key]===value),'INSTALLATION_VERIFICATION_OWNER_MISMATCH');
+  const prefix='pc-verify-'+owner.operationId;
+  ensure(journal.probe?.name===prefix+'-probe'&&journal.access?.name===prefix+'-access','INSTALLATION_VERIFICATION_NAME_MISMATCH');
+  for(const [record,keys]of [[journal.probe,['name','attempted','removed']],[journal.access,['name','appId','tokenId','policyId','tokenAttempted','policyAttempted','tokenRemoved','policyRemoved']]]){
+    ensure(record&&Object.keys(record).length===keys.length&&Object.keys(record).every(key=>keys.includes(key)),'INSTALLATION_VERIFICATION_JOURNAL_INVALID');
+    for(const [key,value]of Object.entries(record))if(key.endsWith('Id'))ensure(value===null||identifier(value),'INSTALLATION_VERIFICATION_JOURNAL_INVALID');else if(key!=='name')ensure(typeof value==='boolean','INSTALLATION_VERIFICATION_JOURNAL_INVALID');
+  }
+  const domain=journal.domain,evidence=journal.evidence;
+  ensure(domain&&Object.keys(domain).length===5&&Object.keys(domain).every(key=>['zoneId','zoneName','id','attempted','removed'].includes(key)),'INSTALLATION_VERIFICATION_JOURNAL_INVALID');
+  ensure((domain.zoneId===null||/^[a-f0-9]{32}$/.test(domain.zoneId))&&(domain.zoneName===null||validHostname(domain.zoneName))&&(domain.id===null||identifier(domain.id))&&typeof domain.attempted==='boolean'&&typeof domain.removed==='boolean','INSTALLATION_VERIFICATION_JOURNAL_INVALID');
+  ensure((!domain.attempted||journal.probe.attempted&&domain.zoneId!==null&&domain.zoneName!==null)&&(!domain.id||domain.attempted)&&(!domain.removed||domain.attempted)&&(!journal.probe.removed||!domain.attempted||domain.removed),'INSTALLATION_VERIFICATION_JOURNAL_INVALID');
+  ensure(evidence&&Object.keys(evidence).length===8&&Object.keys(evidence).every(key=>['namespace','name','description','id','attempted','removed','absentBeforeCreate','namespaceId'].includes(key)),'INSTALLATION_VERIFICATION_JOURNAL_INVALID');
+  ensure(identifier(evidence.namespace)&&evidence.namespaceId===evidence.namespace&&evidence.name===prefix+'-evidence'&&evidence.description==='PentCloud installation verification '+owner.operationId&&(evidence.id===null||identifier(evidence.id))&&['attempted','removed','absentBeforeCreate'].every(key=>typeof evidence[key]==='boolean')&&(!evidence.attempted||evidence.absentBeforeCreate)&&(!evidence.id||evidence.attempted)&&(!evidence.removed||evidence.attempted),'INSTALLATION_VERIFICATION_JOURNAL_INVALID');
+  return journal;
+}
+export async function createVerificationJournal({temporaryDirectory,owner,namespace}){
+  const path=verificationJournalPath(temporaryDirectory);
+  ensure(!await readCleanupJournal(path,owner),'INSTALLATION_VERIFICATION_PENDING');
+  await mkdir(temporaryDirectory,{recursive:true,mode:0o700});await chmod(temporaryDirectory,0o700);
+  const prefix='pc-verify-'+owner.operationId;
+  const journal={schemaVersion:2,owner,probe:{name:prefix+'-probe',attempted:false,removed:false},domain:{zoneId:null,zoneName:null,id:null,attempted:false,removed:false},access:{name:prefix+'-access',appId:null,tokenId:null,policyId:null,tokenAttempted:false,policyAttempted:false,tokenRemoved:false,policyRemoved:false},evidence:{namespace,namespaceId:namespace,name:prefix+'-evidence',description:'PentCloud installation verification '+owner.operationId,id:null,attempted:false,removed:false,absentBeforeCreate:false}};
+  await saveCleanupJournal(path,journal);return journal;
+}
+const evidencePath=journal=>`${base(journal)}/artifacts/namespaces/${encodeURIComponent(journal.evidence.namespace)}/repos/${encodeURIComponent(journal.evidence.name)}`;
+function ownedEvidence(journal,repo){
+  if(!repo)return null;
+  const evidence=journal.evidence;
+  ensure(repo.name===evidence.name&&repo.description===evidence.description&&identifier(repo.id)&&(!evidence.id||repo.id===evidence.id)&&evidence.absentBeforeCreate,'INSTALLATION_EVIDENCE_OWNERSHIP_CHANGED');
+  return repo;
+}
+export async function createEvidenceRepository({api,journal,persist}){
+  validate(journal);ensure(journal.schemaVersion===2&&!journal.evidence.attempted,'INSTALLATION_EVIDENCE_PENDING');
+  const path=evidencePath(journal);
+  ensure(await api.request(path,{missing:true})===null,'INSTALLATION_EVIDENCE_NAME_COLLISION');
+  journal.evidence.absentBeforeCreate=true;journal.evidence.attempted=true;await persist();
+  const repo=ownedEvidence(journal,await api.request(path.slice(0,path.lastIndexOf('/')),{method:'POST',body:{name:journal.evidence.name,description:journal.evidence.description}}));
+  ensure(repo,'INSTALLATION_EVIDENCE_CREATE_INVALID');journal.evidence.id=repo.id;await persist();return repo;
+}
+async function removeEvidence({api,journal,persist,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=120000}){
+  const evidence=journal.evidence;if(!evidence.attempted||evidence.removed)return;
+  const path=evidencePath(journal),repo=ownedEvidence(journal,await api.request(path,{missing:true}));
+  if(repo){evidence.id=repo.id;await persist();const current=ownedEvidence(journal,await api.request(path,{missing:true}));if(current){const receipt=await api.request(path,{method:'DELETE',missing:true});ensure(!receipt||receipt.id===evidence.id,'INSTALLATION_EVIDENCE_DELETE_ID_MISMATCH');}}
+  // Artifacts DELETE is asynchronous (202). Retry only reads, and keep checking
+  // the exact nonce/ID while waiting; a replacement repository is never deleted.
+  const deadline=now()+timeoutMs;
+  for(;;){
+    const remaining=ownedEvidence(journal,await api.request(path,{missing:true}));if(!remaining)break;
+    ensure(now()<deadline,'INSTALLATION_EVIDENCE_CLEANUP_PENDING');await sleep(Math.min(2000,deadline-now()));
+  }
+  evidence.removed=true;await persist();
+}
+export async function cleanupInstallationVerification({api,temporaryDirectory,accountId,instance}){
+  try{
+    const path=verificationJournalPath(temporaryDirectory),journal=await readCleanupJournal(path,{accountId,instance});
+    if(!journal)return;
+    ensure(journal.schemaVersion===2,'INSTALLATION_VERIFICATION_JOURNAL_INVALID');
+    await cleanupOwnedResources({api,journal,persist:()=>saveCleanupJournal(path,journal)});await rm(path);
+  }catch{fail('INSTALLATION_VERIFICATION_CLEANUP_UNCONFIRMED');}
+}
+export async function withInstallationAccess({installer,temporaryDirectory,log=()=>{}},check){
+  const {api,config,state}=installer;
+  await cleanupInstallationVerification({api,temporaryDirectory,accountId:config.accountId,instance:config.instance});
+  const journal=await createVerificationJournal({temporaryDirectory,owner:verificationOwner(config.accountId,config.instance),namespace:installer.names.namespace}),path=verificationJournalPath(temporaryDirectory),persist=()=>saveCleanupJournal(path,journal);
+  try{
+    const result=await withCIProbeAccess({api,journal,persist,appId:state.resources.access.id,origin:state.appUrl},check);
+    log({check:'temporary-access',status:'removed'});return result;
+  }catch{fail('INSTALLATION_ACCESS_FAILED');}
+  finally{await cleanupInstallationVerification({api,temporaryDirectory,accountId:config.accountId,instance:config.instance});}
+}
+export function cleanupPath(env=process.env){ensure(typeof env.RUNNER_TEMP==='string'&&env.RUNNER_TEMP.length>0,'CI_CLEANUP_DIRECTORY_MISSING');return join(env.RUNNER_TEMP,'pentcloud-ci-cleanup.json');}
+export function cleanupOwner(accountId,env=process.env){
+  const owner={repository:env.GITHUB_REPOSITORY,accountId,runId:env.GITHUB_RUN_ID,attempt:env.GITHUB_RUN_ATTEMPT};
+  ensure(owner.repository==='Memrov/PentCloud'&&/^[a-f0-9]{32}$/.test(owner.accountId??'')&&/^\d{1,20}$/.test(owner.runId??'')&&/^\d{1,6}$/.test(owner.attempt??''),'CI_CLEANUP_OWNER_INVALID');
+  return owner;
+}
+function validate(journal,expected=journal?.owner){
+  if(journal?.schemaVersion===2)return validateVerificationJournal(journal,expected);
+  ensure(journal?.schemaVersion===1&&Object.keys(journal).every(key=>['schemaVersion','owner','nonce','probe','domain','access'].includes(key)),'CI_CLEANUP_JOURNAL_INVALID');
+  const owner=cleanupOwner(journal.owner?.accountId,{GITHUB_REPOSITORY:journal.owner?.repository,GITHUB_RUN_ID:journal.owner?.runId,GITHUB_RUN_ATTEMPT:journal.owner?.attempt});
+  ensure(Object.keys(journal.owner).length===4&&Object.keys(owner).every(key=>owner[key]===expected?.[key]),'CI_CLEANUP_OWNER_MISMATCH');
+  ensure(typeof journal.nonce==='string'&&/^[a-f0-9]{12}$/.test(journal.nonce),'CI_CLEANUP_JOURNAL_INVALID');
+  const prefix=`pentcloud-ci-${owner.runId}-${owner.attempt}-${journal.nonce}`;
+  ensure(journal.probe?.name===prefix+'-probe'&&journal.access?.name===prefix+'-access','CI_CLEANUP_NAME_MISMATCH');
+  for(const [record,keys] of [[journal.probe,['name','attempted','removed']],[journal.access,['name','appId','tokenId','policyId','tokenAttempted','policyAttempted','tokenRemoved','policyRemoved']]]){
+    ensure(Object.keys(record).every(key=>keys.includes(key)),'CI_CLEANUP_JOURNAL_INVALID');
+    for(const [key,value] of Object.entries(record))if(key.endsWith('Id'))ensure(value===null||identifier(value),'CI_CLEANUP_JOURNAL_INVALID');else if(key!=='name')ensure(typeof value==='boolean','CI_CLEANUP_JOURNAL_INVALID');
+  }
+  const domain=journal.domain;
+  ensure(domain&&Object.keys(domain).length===4&&Object.keys(domain).every(key=>['zoneId','id','attempted','removed'].includes(key)),'CI_CLEANUP_JOURNAL_INVALID');
+  ensure((domain.zoneId===null||/^[a-f0-9]{32}$/.test(domain.zoneId??''))&&(domain.id===null||identifier(domain.id))&&typeof domain.attempted==='boolean'&&typeof domain.removed==='boolean','CI_CLEANUP_JOURNAL_INVALID');
+  ensure((!domain.attempted||journal.probe.attempted&&domain.zoneId!==null)&&(!domain.id||domain.attempted)&&(!domain.removed||domain.attempted)&&(!journal.probe.removed||!domain.attempted||domain.removed),'CI_CLEANUP_JOURNAL_INVALID');
+  ensure(journal.probe.name.length<=63,'CI_CLEANUP_NAME_INVALID');
+  return journal;
+}
+export async function readCleanupJournal(path,owner){
+  let raw;try{raw=await readFile(path,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
+  let journal;try{journal=JSON.parse(raw);}catch{fail('CI_CLEANUP_JOURNAL_INVALID');}
+  return validate(journal,owner);
+}
+export async function saveCleanupJournal(path,journal){await privateJson(path,validate(journal));}
+export async function createCleanupJournal(path,owner,nonce=randomBytes(6).toString('hex')){
+  ensure(!await readCleanupJournal(path,owner),'CI_CLEANUP_PENDING');
+  const prefix=`pentcloud-ci-${owner.runId}-${owner.attempt}-${nonce}`;
+  const journal={schemaVersion:1,owner,nonce,probe:{name:prefix+'-probe',attempted:false,removed:false},domain:{zoneId:null,id:null,attempted:false,removed:false},access:{name:prefix+'-access',appId:null,tokenId:null,policyId:null,tokenAttempted:false,policyAttempted:false,tokenRemoved:false,policyRemoved:false}};
+  await saveCleanupJournal(path,journal);return journal;
+}
+const base=journal=>'/accounts/'+journal.owner.accountId;
+const inventory=(api,path)=>api.list?api.list(path):api.request(path);
+export function probeHostname(journal){validate(journal);ensure(journal.schemaVersion===1||journal.domain.zoneName,'INSTALLATION_PROBE_ZONE_MISSING');return journal.probe.name+'.'+(journal.schemaVersion===1?'heflare.app':journal.domain.zoneName);}
+async function probeDomains(api,journal){
+  const rows=await inventory(api,`${base(journal)}/workers/domains`);
+  ensure(Array.isArray(rows),'CI_PROBE_DOMAIN_LIST_INVALID');return rows;
+}
+function ownedProbeDomain(journal,rows){
+  const hostname=probeHostname(journal),known=journal.domain.id,matches=rows.filter(value=>value.hostname===hostname),byId=known?rows.find(value=>value.id===known):undefined;
+  ensure(matches.length<=1&&(!byId||byId.hostname===hostname)&&(!known||!matches.length||matches[0].id===known),'CI_PROBE_DOMAIN_OWNERSHIP_CHANGED');
+  const domain=known?byId:matches[0];
+  if(domain)ensure(identifier(domain.id)&&domain.service===journal.probe.name&&domain.zone_id===journal.domain.zoneId&&(domain.environment??'production')==='production','CI_PROBE_DOMAIN_OWNERSHIP_CHANGED');
+  return domain;
+}
+export async function deployProbe({api,journal,persist,deploy,zoneId}){
+  validate(journal);
+  ensure(/^[a-f0-9]{32}$/.test(zoneId??''),'CI_PROBE_ZONE_INVALID');
+  ensure(!journal.probe.attempted&&!journal.domain.attempted,'CI_PROBE_DEPLOY_PENDING');
+  const zone=await api.request('/zones/'+zoneId);
+  ensure(zone?.id===zoneId&&(journal.schemaVersion===1?zone.name==='heflare.app':validHostname(zone.name))&&zone.status==='active'&&zone.account?.id===journal.owner.accountId,'CI_PROBE_ZONE_MISMATCH');
+  if(journal.schemaVersion===2){journal.domain.zoneId=zoneId;journal.domain.zoneName=zone.name;await persist();}
+  const found=await api.request(`${base(journal)}/workers/scripts/${journal.probe.name}/settings`,{missing:true});
+  ensure(found===null,'CI_PROBE_NAME_COLLISION');
+  const hostname=probeHostname(journal);
+  ensure(!(await probeDomains(api,journal)).some(value=>value.hostname===hostname),'CI_PROBE_DOMAIN_COLLISION');
+  const dns=await api.request('/zones/'+zoneId+'/dns_records?name='+encodeURIComponent(hostname)+'&per_page=100',{envelope:true});
+  ensure(Array.isArray(dns?.result)&&dns.result.length===0,'CI_PROBE_DNS_COLLISION');
+  // The intent is durable before Wrangler can create anything, including on a lost response.
+  journal.probe.attempted=true;journal.domain.zoneId=zoneId;journal.domain.attempted=true;
+  await persist();await deploy();
+  const domain=ownedProbeDomain(journal,await probeDomains(api,journal));
+  ensure(domain,'CI_PROBE_DOMAIN_MISSING');journal.domain.id=domain.id;await persist();
+}
+async function removeProbeDomain({api,journal,persist}){
+  if(!journal.domain.attempted||journal.domain.removed)return;
+  const path=`${base(journal)}/workers/domains`;
+  const domain=ownedProbeDomain(journal,await probeDomains(api,journal));
+  if(domain){
+    journal.domain.id=domain.id;await persist();
+    const current=await api.request(path+'/'+domain.id,{missing:true});
+    if(current){ensure(ownedProbeDomain(journal,[current]),'CI_PROBE_DOMAIN_OWNERSHIP_CHANGED');await api.request(path+'/'+domain.id,{method:'DELETE',missing:true});}
+  }
+  ensure(!ownedProbeDomain(journal,await probeDomains(api,journal)),'CI_PROBE_DOMAIN_CLEANUP_PENDING');
+  journal.domain.removed=true;await persist();
+}
+async function removeAccess({api,journal,persist},kind){
+  const token=kind==='token',access=journal.access;
+  if(!access[kind+'Attempted']||access[kind+'Removed'])return;
+  ensure(identifier(access.appId),'CI_ACCESS_APP_MISSING');
+  // Uninstall may already have removed the exact application whose ID was verified
+  // before policy creation. Only this known application's 404 proves its policies gone.
+  if(!token&&await api.request(`${base(journal)}/access/apps/${access.appId}`,{missing:true})===null){access.policyRemoved=true;await persist();return;}
+  const path=token?`${base(journal)}/access/service_tokens`:`${base(journal)}/access/apps/${access.appId}/policies`;
+  const rows=await inventory(api,path);ensure(Array.isArray(rows),'CI_ACCESS_LIST_INVALID');
+  const known=access[kind+'Id'],matches=rows.filter(value=>value.name===access.name),byId=known?rows.find(value=>value.id===known):undefined;
+  ensure(matches.length<=1&&(!byId||byId.name===access.name)&&(!known||!matches.length||matches[0].id===known),'CI_ACCESS_OWNERSHIP_CHANGED');
+  const resource=known?byId:matches[0];
+  if(resource){
+    ensure(identifier(resource.id),'CI_ACCESS_ID_INVALID');
+    if(journal.schemaVersion===2&&!token){
+      const exactPolicy=value=>value?.id===resource.id&&value.name===access.name&&value.decision==='non_identity'&&isDeepStrictEqual(value.include,[{service_token:{token_id:access.tokenId}}])&&isDeepStrictEqual(value.require,[])&&isDeepStrictEqual(value.exclude,[]);
+      ensure(exactPolicy(resource),'INSTALLATION_ACCESS_OWNERSHIP_CHANGED');
+      const current=await api.request(path+'/'+resource.id,{missing:true});
+      ensure(!current||exactPolicy(current),'INSTALLATION_ACCESS_OWNERSHIP_CHANGED');
+    }
+    await api.request(path+'/'+resource.id,{method:'DELETE',missing:true});
+    const remaining=await inventory(api,path);ensure(Array.isArray(remaining)&&!remaining.some(value=>value.id===resource.id||value.name===access.name),'CI_ACCESS_CLEANUP_PENDING');
+  }
+  access[kind+'Removed']=true;await persist();
+}
+export async function cleanupOwnedResources({api,journal,persist,includeProbe=true,now,sleep,timeoutMs}){
+  validate(journal);let pending=false;
+  // Keep attempting independent cleanup even if a provider request loses its response.
+  for(const kind of ['policy','token'])try{await removeAccess({api,journal,persist},kind);}catch{pending=true;}
+  if(includeProbe&&journal.probe.attempted&&!journal.probe.removed)try{
+    // A changed domain association blocks Worker deletion as well as domain deletion.
+    await removeProbeDomain({api,journal,persist});
+    const path=`${base(journal)}/workers/scripts/${journal.probe.name}`;
+    await api.request(path,{method:'DELETE',missing:true});
+    ensure(await api.request(path+'/settings',{missing:true})===null,'CI_PROBE_CLEANUP_PENDING');
+    journal.probe.removed=true;await persist();
+  }catch{pending=true;}
+  if(includeProbe&&journal.schemaVersion===2)try{await removeEvidence({api,journal,persist,now,sleep,timeoutMs});}catch{pending=true;}
+  ensure(!pending,'CI_CLEANUP_UNCONFIRMED');
+}
+export async function withCIProbeAccess({api,journal,persist,appId,origin},check){
+  validate(journal);ensure(identifier(appId),'CI_ACCESS_APP_INVALID');
+  const app=await api.request(`${base(journal)}/access/apps/${appId}`),url=new URL(origin);
+  ensure(url.protocol==='https:'&&url.origin===origin&&app?.type==='self_hosted'&&app.domain===url.host,'CI_ACCESS_APP_MISMATCH');
+  journal.access.appId=appId;await persist();
+  const tokenPath=`${base(journal)}/access/service_tokens`,policyPath=`${base(journal)}/access/apps/${appId}/policies`;
+  const tokens=await inventory(api,tokenPath),policies=await inventory(api,policyPath);
+  ensure(Array.isArray(tokens)&&Array.isArray(policies)&&!tokens.some(value=>value.name===journal.access.name)&&!policies.some(value=>value.name===journal.access.name),'CI_ACCESS_NAME_COLLISION');
+  try{
+    journal.access.tokenAttempted=true;await persist();
+    const credential=await api.request(tokenPath,{method:'POST',body:{name:journal.access.name,duration:'60m'}});
+    ensure(identifier(credential?.id)&&typeof credential.client_id==='string'&&typeof credential.client_secret==='string','CI_ACCESS_TOKEN_INVALID');
+    journal.access.tokenId=credential.id;await persist();
+    journal.access.policyAttempted=true;await persist();
+    const policy=await api.request(policyPath,{method:'POST',body:{name:journal.access.name,decision:'non_identity',precedence:Math.max(0,...policies.map(value=>Number.isSafeInteger(value.precedence)?value.precedence:0))+1,include:[{service_token:{token_id:credential.id}}],require:[],exclude:[]}});
+    ensure(identifier(policy?.id),'CI_ACCESS_POLICY_INVALID');journal.access.policyId=policy.id;await persist();
+    return await check({headers:{'CF-Access-Client-Id':credential.client_id,'CF-Access-Client-Secret':credential.client_secret}});
+  }finally{await cleanupOwnedResources({api,journal,persist,includeProbe:false});}
+}
+export async function main(env=process.env){
+  const path=cleanupPath(env);
+  // An always() step can run before installation or npm ci has started.
+  let raw;try{raw=await readFile(path,'utf8');}catch(error){if(error.code==='ENOENT')return;throw error;}
+  let accountId;try{accountId=env.PENTCLOUD_INSTALL_CONFIG?JSON.parse(env.PENTCLOUD_INSTALL_CONFIG).accountId:env.CLOUDFLARE_ACCOUNT_ID;}catch{fail('CI_CLEANUP_CONFIG_INVALID');}
+  const owner=cleanupOwner(accountId,env),journal=validate(JSON.parse(raw),owner);
+  ensure(env.CLOUDFLARE_API_TOKEN,'CI_CLEANUP_TOKEN_MISSING');
+  const api=new CloudflareApi(env.CLOUDFLARE_API_TOKEN);
+  await cleanupOwnedResources({api,journal,persist:()=>saveCleanupJournal(path,journal)});await rm(path);
+  console.log(JSON.stringify({stage:'cleanup',status:'removed'}));
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)await main().catch(()=>{console.error(JSON.stringify({stage:'cleanup',error:'CI_CLEANUP_FAILED'}));process.exitCode=1;});

@@ -64,6 +64,8 @@ import type {
   AttemptRecord,
   AttemptResult,
   NativeEnv,
+  PrepareUpgradeInput,
+  UpgradeOperation,
   Role,
   RunRecord,
 } from "./types";
@@ -136,6 +138,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   });
   private readonly definitionMaterials=new MaterialStore({ownerKind:"target-definition",fs:this.workspace.fs,get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value)});
   private definitionBusy=0;
+  private onboardingBusy=0;
   private readonly definitions=new TargetDefinitions({
     get:<T>(key:string)=>this.get<T>(key),put:(key,value)=>this.put(key,value),materials:this.definitionMaterials,runMaterials:this.materials,
     read:async path=>this.workspace.fs.readFile(path),
@@ -213,6 +216,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   private readonly subscribers = new Set<Subscriber>();
   private readonly uploads = new Map<string, number>();
   private readonly purges = new Map<string, Promise<{runId:string;deleted:true}>>();
+  private readonly draftDiscards = new Map<string, Promise<{runId:string;deleted:true}>>();
   constructor(ctx: DurableObjectState, env: NativeEnv) {
     super(ctx, env);
     ctx.storage.sql.exec(
@@ -375,6 +379,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.ctx.waitUntil(work);
   }
   private wake() {
+    if(this.get("lifecycle:quiesced")||this.get("lifecycle:maintenance"))return;
     if (recoveryPending(this.get<RuntimeRecovery>("platform:recovery"))) return;
     if (this.recovering) return;
     const work = this.recover()
@@ -394,6 +399,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.track(work);
   }
   private async recover() {
+    if(this.get("lifecycle:quiesced")||this.get("lifecycle:maintenance"))return;
     this.loginChallenges.expire();
     this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key LIKE 'target-auth:%' OR (key LIKE 'browser-auth:%' AND json_extract(value,'$.expiresAt')<=?)",Date.now());
     if (recoveryPending(this.get<RuntimeRecovery>("platform:recovery"))) return;
@@ -469,9 +475,16 @@ export class Coordinator extends DurableObject<NativeEnv> {
       ...(run ? {run:publicRun(run),draft,definition:run.definition??(run.target?.kind==="api"?this.definitions.current(run.target.id):undefined),discovery:this.jobs(run.id).filter(j=>j.execution).map(this.presentJob),
         apiTested,readiness:{modelsTested,apiTested,discoverySettled:run.phase==="setup"&&this.activeReceipt()?.input.runId!==run.id&&!this.jobs(run.id).some(j=>!terminal(j.status))}} : {})};
   }
-  async modelCatalog(route:OpenCodeRoute="go",refresh=false){return this.onboarding.catalog(route,refresh);}
+  async modelCatalog(route:OpenCodeRoute="go",refresh=false){
+    this.assertAdmissionOpen();this.onboardingBusy++;
+    try{return await this.onboarding.catalog(route,refresh);}finally{this.onboardingBusy--;}
+  }
   /** Explicit authenticated application actions, never a raw storage/secret RPC proxy. */
   async onboardingAction(action:string,value:Record<string,unknown>,actor:string):Promise<unknown> {
+    this.assertAdmissionOpen();this.onboardingBusy++;
+    try{return await this.performOnboardingAction(action,value,actor);}finally{this.onboardingBusy--;}
+  }
+  private async performOnboardingAction(action:string,value:Record<string,unknown>,actor:string):Promise<unknown> {
     const revision=typeof value.revision==="number"?value.revision:null;
     this.assertAdmissionOpen();
     try {
@@ -858,11 +871,13 @@ export class Coordinator extends DurableObject<NativeEnv> {
     };
   }
   private claimNext() {
+    if(this.get("lifecycle:quiesced")||this.get("lifecycle:maintenance"))return;
     if (recoveryPending(this.get<RuntimeRecovery>("platform:recovery"))) return;
     // A durable purge owns the shared scanner until scratch cleanup completes.
     if (this.list<PurgeIntent>("purge:").length) return;
     let claimed: ActiveReceipt | undefined;
     this.ctx.storage.transactionSync(() => {
+      if(this.get("lifecycle:quiesced")||this.get("lifecycle:maintenance"))return;
       if (this.activeReceipt()) return;
       const job = this.orderedJobs().find(
         (j) =>
@@ -1143,6 +1158,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     revision: number,
     actor: string,
   ) {
+    this.assertAdmissionOpen();
     await this.start();
     const before = await this.settings();
     if (before.locked) throw new Error("409: settings locked by active runs");
@@ -1199,6 +1215,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       }
     }
     this.ctx.storage.transactionSync(() => {
+      this.assertAdmissionOpen();
       const current = this.get<{ revision: number }>("settings:current");
       if (
         current?.revision !== revision ||
@@ -1227,6 +1244,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   }
   private assertAdmissionOpen() {
     if(this.get("lifecycle:quiesced"))throw new Error("409: installation is quiesced for uninstall");
+    if(this.get("lifecycle:maintenance"))throw new Error("409: installation is in maintenance for upgrade");
   }
   private assertMutable(id:string) {
     this.assertAdmissionOpen();
@@ -1247,17 +1265,73 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const pendingPublications=this.list<Publication|null>("publication:").filter(Boolean).length;
     const stagedUploads=this.list<unknown>("material:upload:").length+this.list<unknown>("material:target-definition:").length;
     const ownedProjects=this.list<{runId:string;repo:string}>("project:owned:").length;
-    const preparingInput=!!this.get("input:preparing") || !!this.preparingMaterials || !!this.preparingConversations.size || !!this.uploads.size || !!this.initializing.size || !!this.creations.size || !!ownedProjects || this.definitionBusy>0;
+    const preparingInput=!!this.get("input:preparing") || !!this.preparingMaterials || !!this.preparingConversations.size || !!this.uploads.size || !!this.initializing.size || !!this.creations.size || !!this.draftDiscards.size || !!ownedProjects || this.definitionBusy>0 || this.onboardingBusy>0;
     const targetCount=this.onboarding.targets().length,credentialCount=this.onboarding.credentials().filter(c=>!c.id.startsWith("bound-")).length;
     const libraryUploads=this.list<unknown>("material:target-definition:").length;
     const activeAttempt=!!this.activeReceipt();
     const pendingPurges=this.list<PurgeIntent>("purge:").length;
-    return {runs,activeAttempt,pendingPublications,preparingInput,pendingPurges,stagedUploads,ownedProjects,quiesced:!!this.get("lifecycle:quiesced"),
+    const maintenance=this.get<UpgradeOperation&{startedAt:number}>("lifecycle:maintenance");
+    return {runs,activeAttempt,pendingPublications,preparingInput,pendingPurges,stagedUploads,ownedProjects,quiesced:!!this.get("lifecycle:quiesced"),maintenance:!!maintenance,
+      ...(maintenance?{maintenanceOperation:{operationId:maintenance.operationId,sourceCommit:maintenance.sourceCommit}}:{}),
       ...((targetCount||credentialCount||libraryUploads)?{onboarding:{targets:targetCount,credentials:credentialCount,definitionUploads:libraryUploads},canDeleteOnboarding:runs.total===0&&!this.jobs().length&&stagedUploads===libraryUploads&&!activeAttempt&&!pendingPublications&&!preparingInput&&!pendingPurges}:{}),
       safeToUninstall:!targetCount && !credentialCount && runs.total===0 && this.jobs().length===0 && !stagedUploads && !activeAttempt && !pendingPublications && !preparingInput && !pendingPurges && !this.acceptances.size && !this.projections.size};
   }
+  private validateUpgrade(input:PrepareUpgradeInput,prepare:boolean) {
+    if(!input || typeof input!=="object" || Array.isArray(input) ||
+      !Object.keys(input).every(key=>["operationId","sourceCommit",...(prepare?["previousSourceCommit"]:[])].includes(key)) ||
+      typeof input.operationId!=="string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(input.operationId) ||
+      typeof input.sourceCommit!=="string" || !/^[a-f0-9]{40}$/.test(input.sourceCommit) ||
+      (input.previousSourceCommit!==undefined&&(typeof input.previousSourceCommit!=="string"||!/^[a-f0-9]{40}$/.test(input.previousSourceCommit))))
+      throw new Error("400: valid upgrade operation and immutable source commit are required");
+  }
+  async prepareUpgrade(input:PrepareUpgradeInput) {
+    this.validateUpgrade(input,true);
+    return this.ctx.storage.transactionSync(()=>{
+      if(this.get("lifecycle:quiesced"))throw new Error("409: installation is quiesced for uninstall");
+      const current=this.get<UpgradeOperation&{startedAt:number}>("lifecycle:maintenance");
+      if(current){
+        if(current.operationId!==input.operationId)throw new Error("409: another maintenance operation owns this installation");
+        if(current.sourceCommit!==input.sourceCommit){
+          if(input.previousSourceCommit!==current.sourceCommit)throw new Error("409: maintenance retarget requires the current source commit");
+          this.put("lifecycle:maintenance",{...current,sourceCommit:input.sourceCommit});
+        }
+        return this.lifecycleSnapshot();
+      }
+      const completed=this.get<UpgradeOperation>("lifecycle:upgrade:"+input.operationId);
+      if(completed){
+        if(completed.sourceCommit!==input.sourceCommit)throw new Error("409: completed upgrade identity was reused with another source commit");
+        return {...this.lifecycleSnapshot(),completed:true};
+      }
+      const status=this.lifecycleSnapshot();
+      const pendingCreation=this.list<{input:{run_id:string}}>("onboarding:creation:").some(receipt=>!this.get("run:"+receipt.input.run_id));
+      const pendingConversation=this.list<ConversationPreparation>("conversation:").some(receipt=>receipt.status==="pending");
+      if(status.activeAttempt || status.pendingPublications || status.preparingInput || status.pendingPurges ||
+        this.acceptances.size || this.projections.size || this.purges.size || pendingCreation || pendingConversation ||
+        this.list<RunRecord>("run:").some(run=>!["completed","cancelled"].includes(run.phase)) || this.jobs().some(job=>!terminal(job.status)))
+        throw new Error("409: drain active runs and pending work before upgrade maintenance");
+      // The fence and readiness decision commit together. Retained run, onboarding,
+      // material and Artifacts records are deliberately outside this mutation.
+      this.put("lifecycle:maintenance",{operationId:input.operationId,sourceCommit:input.sourceCommit,startedAt:Date.now()});
+      return this.lifecycleSnapshot();
+    });
+  }
+  async finishUpgrade(input:UpgradeOperation) {
+    this.validateUpgrade(input,false);
+    return this.ctx.storage.transactionSync(()=>{
+      if(this.get("lifecycle:quiesced"))throw new Error("409: installation is quiesced for uninstall");
+      const current=this.get<UpgradeOperation>("lifecycle:maintenance");
+      const completed=this.get<UpgradeOperation>("lifecycle:upgrade:"+input.operationId);
+      if(current){
+        if(current.operationId!==input.operationId||current.sourceCommit!==input.sourceCommit)throw new Error("409: upgrade operation does not own this maintenance release");
+        this.put("lifecycle:upgrade:"+input.operationId,{...input,completedAt:Date.now()});
+        this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?","lifecycle:maintenance");
+      }else if(!completed||completed.sourceCommit!==input.sourceCommit)throw new Error("409: matching upgrade maintenance or completion receipt is required");
+      return {...this.lifecycleSnapshot(),completed:true};
+    });
+  }
   async prepareUninstall(deleteOnboarding=false) {
     const status=this.ctx.storage.transactionSync(()=>{
+      if(this.get("lifecycle:maintenance"))throw new Error("409: installation is in maintenance for upgrade");
       const current=this.lifecycleSnapshot();
       if(!current.safeToUninstall&&!(deleteOnboarding&&current.canDeleteOnboarding))throw new Error("409: Purge runs and drain owned work before uninstall; saved targets/keys require explicit deletion");
       this.put("lifecycle:quiesced",true);return current;
@@ -1283,6 +1357,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     });
   }
   async archiveRun(id:string) {
+    this.assertAdmissionOpen();
     const run=this.run(id);
     if((run.lifecycle ?? "active")!=="active")throw new Error("409: only active runs can be archived");
     if(this.activeReceipt()?.input.runId===id || this.jobs(id).some(job=>!terminal(job.status)) || this.get(`publication:${id}`) || this.get<InputPreparation>("input:preparing")?.runId===id)
@@ -1290,6 +1365,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     this.changeLifecycle(id,"archived");await this.stopConversations(id);await this.publish();return this.getRun(id);
   }
   async trashRun(id:string) {
+    this.assertAdmissionOpen();
     const cancellation = this.ctx.storage.transactionSync(() => {
       const run=this.run(id);
       if(run.lifecycle==="purging")throw new Error("409: permanent purge is in progress");
@@ -1311,6 +1387,13 @@ export class Coordinator extends DurableObject<NativeEnv> {
     await this.publish();return this.getRun(id);
   }
   async discardDraft(id:string) {
+    this.assertAdmissionOpen();
+    identifier(id);
+    const preceding=this.draftDiscards.get(id);if(preceding)return preceding;
+    const work=this.performDiscardDraft(id).finally(()=>this.draftDiscards.delete(id));
+    this.draftDiscards.set(id,work);return work;
+  }
+  private async performDiscardDraft(id:string):Promise<{runId:string;deleted:true}> {
     identifier(id);
     if(this.get(`run:${id}`) || this.creations.has(id) || this.initializing.has(id) || this.uploads.get(id))throw new Error("409: draft belongs to a run or upload is still in progress");
     // Fence late uploads/create requests before the first asynchronous deletion.
@@ -1328,6 +1411,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     await this.publish();return {runId:id,deleted:true};
   }
   async purgeRun(id:string,confirm:string):Promise<{runId:string;deleted:true}> {
+    this.assertAdmissionOpen();
     identifier(id);
     if(confirm!==id)throw new Error("400: permanent deletion requires the exact run id");
     if(this.get(`purged:run:${id}`))return {runId:id,deleted:true};
@@ -2269,6 +2353,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return this.accept(execution.result);
   }
   private async advance() {
+    if(this.get("lifecycle:quiesced")||this.get("lifecycle:maintenance"))return;
     for (const expected of this.list<RunRecord>("run:").sort(
       (a, b) => a.createdAt - b.createdAt,
     )) {
@@ -2352,6 +2437,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
         ),
         pushes: Promise<unknown>[] = [];
       this.ctx.storage.transactionSync(() => {
+        if(this.get("lifecycle:quiesced")||this.get("lifecycle:maintenance"))return;
         const run = this.run(expected.id);
         if (
           canonical(run) !== canonical(expected) ||
@@ -2408,14 +2494,17 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return { cancelled: true, draining: !!capture.owner };
   }
   async cancelRun(id: string) {
+    this.assertAdmissionOpen();
     await this.start();
-    const capture = this.ctx.storage.transactionSync(() => this.markRunCancelled(id));
+    const capture = this.ctx.storage.transactionSync(() => {this.assertAdmissionOpen();return this.markRunCancelled(id);});
     return this.finishRunCancellation(id, capture);
   }
   async interrupt(id: string) {
+    this.assertAdmissionOpen();
     await this.start();
     let owner = false;
     this.ctx.storage.transactionSync(() => {
+      this.assertAdmissionOpen();
       const job = this.job(id);
       if (terminal(job.status))
         throw new Error("409: attempt already finished");

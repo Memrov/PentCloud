@@ -1,0 +1,174 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {withNativeTestHarness} from './lib/native-test-harness.mjs';
+
+const root=resolve(import.meta.dirname,'..'),accountId='a'.repeat(32),zoneId='b'.repeat(32),instance='customer';
+async function fixture(check){
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-verification-'));
+  const shared=await import('./lib/owned-probe.mjs');
+  const owner={accountId,instance,operationId:'1762452000000-0123456789ab'};
+  const path=shared.verificationJournalPath(directory);
+  try{const journal=await shared.createVerificationJournal({temporaryDirectory:directory,owner,namespace:'customer-work'});await check({shared,directory,path,journal,persist:()=>shared.saveCleanupJournal(path,journal)});}
+  finally{await rm(directory,{recursive:true,force:true});}
+}
+function provider(){
+  const scripts=new Set(),domains=[],dns=[],tokens=[],policies=[{id:'owner-policy',name:'Owner',decision:'allow'}],repos=[],deletes=[];
+  let appRemoved=false;
+  const api={async request(path,{method='GET',body,envelope=false}={}){
+    const url=new URL(path,'https://fixture.invalid'),p=url.pathname;
+    if(p==='/zones/'+zoneId)return {id:zoneId,name:'customer.example',status:'active',account:{id:accountId}};
+    if(p==='/zones/'+zoneId+'/dns_records')return envelope?{result:dns}:{...dns};
+    if(p.endsWith('/workers/domains'))return domains.map(x=>({...x}));
+    if(p.includes('/workers/domains/')){const i=domains.findIndex(x=>x.id===p.split('/').at(-1));if(method==='DELETE'){domains.splice(i,1);deletes.push(p);return null;}return i<0?null:{...domains[i]};}
+    const worker=p.match(/\/workers\/scripts\/([^/]+)(?:\/settings)?$/);
+    if(worker){if(method==='DELETE'){scripts.delete(worker[1]);deletes.push(p);return null;}return scripts.has(worker[1])?{name:worker[1]}:null;}
+    if(p.endsWith('/access/apps/app-owned'))return appRemoved?null:{id:'app-owned',type:'self_hosted',domain:'app.customer.example'};
+    const isRepo=p.includes('/repos'),list=isRepo?repos:p.includes('/access/service_tokens')?tokens:policies;
+    const collection=p.endsWith('/repos')||p.endsWith('/service_tokens')||p.endsWith('/policies');
+    if(method==='GET')return collection?list.map(x=>({...x})):list.find(x=>x.name===p.split('/').at(-1)||x.id===p.split('/').at(-1))??null;
+    if(method==='POST'){const value={...body,id:isRepo?'repo-owned':body.decision?'policy-owned':'token-owned',client_id:'PRIVATE_CLIENT',client_secret:'PRIVATE_SECRET'};list.push(value);return value;}
+    if(method==='DELETE'){const id=p.split('/').at(-1),i=list.findIndex(x=>x.id===id||x.name===id);if(i>=0)list.splice(i,1);deletes.push(p);return null;}
+    throw Error('Unexpected fixture request');
+  }};
+  api.list=path=>api.request(path);
+  return {api,scripts,domains,dns,tokens,policies,repos,deletes,removeApp(){appRemoved=true;policies.length=0;}};
+}
+test('shared probe uses the selected customer zone and records intent before deployment',async()=>fixture(async({shared,journal,path,persist})=>{
+  const p=provider();await shared.deployProbe({api:p.api,journal,persist,zoneId,deploy:async()=>{
+    const disk=JSON.parse(await readFile(path));assert(disk.probe.attempted&&disk.domain.attempted);
+    p.scripts.add(journal.probe.name);p.domains.push({id:'domain-owned',hostname:shared.probeHostname(journal),service:journal.probe.name,zone_id:zoneId,environment:'production'});
+  }});
+  assert(shared.probeHostname(journal).endsWith('.customer.example'));assert.equal(journal.domain.id,'domain-owned');
+  await shared.cleanupOwnedResources({api:p.api,journal,persist});assert.equal(p.scripts.size,0);assert.equal(p.domains.length,0);
+  assert(p.deletes[0].endsWith('/workers/domains/domain-owned'));
+}));
+test('shared evidence reconciles a lost create response and removes only its exact nonce and ID',async()=>fixture(async({shared,journal,persist})=>{
+  const p=provider();p.repos.push({id:'foreign',name:'user-data',description:'User evidence'});
+  const request=p.api.request.bind(p.api);p.api.request=async(path,options)=>{const result=await request(path,options);if(options?.method==='POST'&&path.endsWith('/repos'))throw Error('PRIVATE_PROVIDER_ERROR');return result;};
+  await assert.rejects(shared.createEvidenceRepository({api:p.api,journal,persist}));assert(journal.evidence.attempted&&journal.evidence.absentBeforeCreate);
+  await shared.cleanupOwnedResources({api:p.api,journal,persist});assert.deepEqual(p.repos.map(x=>x.name),['user-data']);assert(journal.evidence.removed);
+}));
+test('shared evidence collisions are not adopted and changed receipts block deletion',async()=>{
+  for(const mode of ['collision','id','description'])await fixture(async({shared,journal,persist})=>{
+    const p=provider();if(mode==='collision')p.repos.push({id:'foreign',name:journal.evidence.name,description:journal.evidence.description});
+    if(mode==='collision'){await assert.rejects(shared.createEvidenceRepository({api:p.api,journal,persist}));await shared.cleanupOwnedResources({api:p.api,journal,persist});}
+    else{await shared.createEvidenceRepository({api:p.api,journal,persist});p.repos[0][mode]='foreign';await assert.rejects(shared.cleanupOwnedResources({api:p.api,journal,persist}));}
+    assert.equal(p.deletes.length,0);assert.equal(p.repos.length,1);
+  });
+});
+test('shared evidence cleanup waits for an accepted asynchronous delete without repeating mutation',async()=>fixture(async({shared,journal,persist})=>{
+  const p=provider();await shared.createEvidenceRepository({api:p.api,journal,persist});
+  const request=p.api.request.bind(p.api);let pending=0,deleteCalls=0,time=0;
+  p.api.request=async(path,options)=>{
+    if(path.includes('/repos/')&&options?.method==='DELETE'){deleteCalls++;pending=2;return {id:'repo-owned'};}
+    if(path.includes('/repos/')&&pending&&!--pending)p.repos.length=0;
+    return request(path,options);
+  };
+  await shared.cleanupOwnedResources({api:p.api,journal,persist,now:()=>time,sleep:async ms=>{time+=ms;}});
+  assert.equal(deleteCalls,1);assert.equal(p.repos.length,0);assert(journal.evidence.removed);assert(time>0);
+}));
+test('shared cleanup rejects a journal from a different installation',async()=>fixture(async({shared,directory})=>{
+  const p=provider();await assert.rejects(shared.cleanupInstallationVerification({api:p.api,temporaryDirectory:directory,accountId,instance:'foreign'}));assert.equal(p.deletes.length,0);
+}));
+test('headless Access preserves Owner and removes exact token even when uninstall deletes its app',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-access-')),p=provider();
+  const {withInstallationAccess}=await import('./lib/owned-probe.mjs');
+  const installer={api:p.api,config:{accountId,instance},state:{appUrl:'https://app.customer.example',resources:{access:{id:'app-owned'}}},names:{namespace:'customer-work'}};
+  try{
+    const result=await withInstallationAccess({installer,temporaryDirectory:join(directory,'verification')},async({headers})=>{assert.equal(headers['CF-Access-Client-Secret'],'PRIVATE_SECRET');assert(p.policies.some(x=>x.name==='Owner'));p.removeApp();return 'done';});
+    assert.equal(result,'done');assert.equal(p.tokens.length,0);assert(!p.deletes.some(x=>x.includes('owner-policy')));
+    await assert.rejects(readFile(join(directory,'verification','owned-verification.json')),/ENOENT/);
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+test('headless Access failures expose a bounded code and never persist credentials',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-access-private-')),p=provider();
+  const {withInstallationAccess}=await import('./lib/owned-probe.mjs');
+  const installer={api:p.api,config:{accountId,instance},state:{appUrl:'https://app.customer.example',resources:{access:{id:'app-owned'}}},names:{namespace:'customer-work'}};
+  try{await assert.rejects(withInstallationAccess({installer,temporaryDirectory:directory},async()=>{throw Error('PRIVATE_PROVIDER_ERROR');}),error=>!String(error).includes('PRIVATE'));assert.equal(p.tokens.length,0);}
+  finally{await rm(directory,{recursive:true,force:true});}
+});
+test('a new operation reconciles the previous exact evidence repository before creating Access credentials',async()=>fixture(async({shared,directory,journal,persist})=>{
+  const p=provider();await shared.createEvidenceRepository({api:p.api,journal,persist});
+  const installer={api:p.api,config:{accountId,instance},state:{appUrl:'https://app.customer.example',resources:{access:{id:'app-owned'}}},names:{namespace:'customer-work'}};
+  await shared.withInstallationAccess({installer,temporaryDirectory:directory},async()=>{assert.equal(p.repos.length,0);assert.equal(p.tokens.length,1);});
+  assert.equal(p.tokens.length,0);assert.deepEqual(p.policies.map(x=>x.name),['Owner']);
+}));
+test('shared cleanup preserves a temporary policy whose exact token rule changed',async()=>fixture(async({shared,journal,persist})=>{
+  const p=provider();await assert.rejects(shared.withCIProbeAccess({api:p.api,journal,persist,appId:'app-owned',origin:'https://app.customer.example'},async()=>{p.policies.find(x=>x.id==='policy-owned').include=[{everyone:{}}];}));
+  assert(p.policies.some(x=>x.id==='policy-owned'));assert(!p.deletes.some(x=>x.endsWith('/policy-owned')));
+}));
+test('shared cleanup rejects added principals on its token policy',async()=>fixture(async({shared,journal,persist})=>{
+  const p=provider();await assert.rejects(shared.withCIProbeAccess({api:p.api,journal,persist,appId:'app-owned',origin:'https://app.customer.example'},async()=>{p.policies.find(x=>x.id==='policy-owned').include[0].everyone={};}));
+  assert(!p.deletes.some(x=>x.endsWith('/policy-owned')));
+}));
+test('shared verifier reports bounded native checks and passes private exact image references',async()=>{
+  const {verifyPackageInstallation}=await import('./lib/installation-verify.mjs');
+  assert.equal(typeof verifyPackageInstallation,'function');
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-verifier-')),p=provider(),requests=[],logs=[],gitCommit='c'.repeat(40);let probeConfig,ref,doctorCalls=0,workflowRead=false;
+  const images=Object.fromEntries(['recon','http','nuclei','sqlmap','service','web-context','pcap','file-analysis','password','reference','metasploit'].map(pack=>[pack,'registry.example/private/'+pack+':selected']));
+  const installer={api:p.api,config:{accountId,instance},names:{namespace:'customer-work',gateway:'customer-packs',workflow:'customer-results'},profile:{domain:{zoneId,hostname:'app.customer.example'},images},state:{appUrl:'https://app.customer.example',resources:{access:{id:'app-owned'}}},async workerSecret(){},async doctor(options){assert.deepEqual(options,{authenticate:false});assert.equal(p.tokens.length,0);assert.equal(p.policies.length,1);doctorCalls++;}};
+  const request=p.api.request.bind(p.api);p.api.request=async(path,options)=>{
+    if(path.includes('/workflows/')){
+      if(path.includes('?per_page=')){if(!workflowRead){workflowRead=true;return [];}return [{id:'synthetic-event',trigger_source:'event'}];}
+      return {status:'complete',params:{type:'cf.artifacts.repo.pushed',source:{type:'artifacts.repo',namespace:'customer-work',repoName:p.repos[0].name},payload:{ref,after:gitCommit}},trigger:{source:'event'},steps:[{type:'step',name:'validate committed result',success:true}]};
+    }
+    if(path.endsWith('/tokens')&&options?.method==='POST')return {id:'git-token',plaintext:'private-git-token'};
+    if(path.endsWith('/tokens/git-token'))return null;
+    const result=await request(path,options);if(path.includes('/repos/')&&result&&!Array.isArray(result))return {...result,remote:`https://${accountId}.artifacts.cloudflare.net/git/customer-work/${result.name}.git`};return result;
+  };
+  const run=async(kind,args)=>{
+    if(kind==='wrangler'){
+      probeConfig=JSON.parse(await readFile(args[args.indexOf('--config')+1]));p.scripts.add(probeConfig.name);p.domains.push({id:'domain-owned',hostname:probeConfig.routes[0].pattern,service:probeConfig.name,zone_id:zoneId});return Buffer.alloc(0);
+    }
+    if(kind==='git'){if(args.includes('push'))ref=args.at(-1).split(':')[1];if(args.includes('rev-parse'))return Buffer.from(gitCommit+'\n');return Buffer.alloc(0);}
+    throw Error('Unexpected run kind');
+  };
+  const previousFetch=globalThis.fetch;globalThis.fetch=async(url,options={})=>{
+    const u=new URL(url);if(u.hostname==='app.customer.example')return new Response(null,{status:u.pathname==='/v1/toolbox/status'?404:200});
+    const input=JSON.parse(options.body);requests.push(input);if(input.action==='ready')return Response.json({ready:'passed'});
+    if(input.action==='pack'){assert.equal(input.expectedImage,images[input.pack]);return Response.json({pack:input.pack,status:'passed'});}
+    return Response.json({[input.action]:'passed'});
+  };
+  try{
+    const result=await verifyPackageInstallation({installer,root,run,temporaryDirectory:directory,sourceCommit:'d'.repeat(40),log:value=>logs.push(value)});
+    assert.equal(result.status,'verified-package-installation');assert.equal(result.toolPacks,11);assert.equal(result.noKali,true);assert.equal(result.modelCalls,0);assert.equal(doctorCalls,1);assert.equal(requests.filter(x=>x.action==='pack').length,11);
+    assert.equal(probeConfig.workers_dev,false);assert.equal(probeConfig.preview_urls,false);assert.deepEqual(probeConfig.observability,{enabled:false});assert(probeConfig.routes[0].pattern.endsWith('.customer.example'));
+    assert.equal(p.scripts.size,0);assert.equal(p.domains.length,0);assert.equal(p.repos.length,0);assert(!JSON.stringify(logs).includes('registry.example'));assert(!JSON.stringify(result).includes(accountId));
+    workflowRead=false;
+    const second=await verifyPackageInstallation({installer,root,run,temporaryDirectory:directory,sourceCommit:'d'.repeat(40),log:value=>logs.push(value)});
+    assert.deepEqual(second,result);assert.equal(doctorCalls,2);assert.equal(requests.filter(x=>x.action==='pack').length,22);assert.equal(p.repos.length,0);assert.equal(p.scripts.size,0);
+  }catch(error){error.message+=' '+JSON.stringify(logs);throw error;}
+  finally{globalThis.fetch=previousFetch;await rm(directory,{recursive:true,force:true});}
+});
+test('shared worker requires the selected pack image and always retires its runtime',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-image-probe-'));
+  try{
+    await writeFile(join(directory,'worker.mjs'),`import probe from ${JSON.stringify(join(root,'scripts/lib/installation-probe-worker.mjs'))};let stops=0;export default {fetch(request){if(new URL(request.url).pathname==='/stops')return Response.json({stops});return probe.fetch(request,{CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000),TOOL_PACKS:{ready:async()=>({image:'registry.example/private:wrong',instance:'private-instance'}),stop:async()=>{stops++;return {stopped:true}}}})}};`);
+    await writeFile(join(directory,'wrangler.json'),JSON.stringify({name:'image-probe-fixture',main:'worker.mjs',compatibility_date:'2026-10-30',compatibility_flags:['nodejs_compat']}));
+    await withNativeTestHarness({root:directory,workers:[{configPath:'wrangler.json'}]},async server=>{
+      const r=await server.fetch('https://probe.test/',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'pack',pack:'recon',id:'owned',expectedImage:'registry.example/private:expected'})});
+      assert.equal(r.status,500);const body=await r.text();assert(!body.includes('registry.example'));assert(!body.includes('private-instance'));assert.match(body,/pack-ready/);
+      assert.deepEqual(await (await server.fetch('https://probe.test/stops')).json(),{stops:1});
+    });
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+test('Browser probe confines service credentials to exact-origin fetches and rejects redirects',async()=>{
+  const origin='https://app.customer.example',headers={'CF-Access-Client-Id':'private-client','CF-Access-Client-Secret':'private-secret'},events=[];let handler;
+  const prior=globalThis.__installationProbeLaunch;
+  globalThis.__installationProbeLaunch=async()=>({async newContext(options){
+    assert.equal(options.extraHTTPHeaders,undefined);assert.equal(options.serviceWorkers,'block');
+    return {request:{async get(url,options){assert.equal(url,origin+'/v1/runs');assert.equal(options.maxRedirects,0);assert.deepEqual(options.headers,headers);events.push('ready');return {status:()=>200,async dispose(){}};}},async route(pattern,callback){handler=callback;},async newPage(){return {async goto(){
+      for(const url of [origin,origin+'/redirect','https://foreign.invalid'])await handler({request:()=>({url:()=>url,headers:()=>({accept:'text/html'})}),async fetch(options){assert.equal(new URL(url).origin,origin);assert.equal(options.maxRedirects,0);assert.equal(options.headers['CF-Access-Client-Secret'],headers['CF-Access-Client-Secret']);events.push('fetch');return {status:()=>url.endsWith('/redirect')?302:200,async dispose(){events.push('dispose');}};},async fulfill(){events.push('fulfill');},async abort(){events.push('abort');},async continue(){throw Error('unsafe redirect propagation');}});
+      return {status:()=>200};},locator:()=>({innerText:async()=>'PentCloud'})};}};
+  },async close(){events.push('close');}});
+  try{
+    // Replace only the external Browser Run dependency; exercise the shipped handler.
+    const source=(await readFile(join(root,'scripts/lib/installation-probe-worker.mjs'),'utf8')).replace("import {launch} from '@cloudflare/playwright';",'const launch=globalThis.__installationProbeLaunch;');
+    const {default:probe}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+    const response=await probe.fetch(new Request('https://probe.invalid',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'browser',headers})}),{APP_ORIGIN:origin,CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)});
+    assert.equal(response.status,200);assert.deepEqual(events,['ready','fetch','fulfill','dispose','fetch','abort','dispose','abort','close']);
+  }finally{if(prior===undefined)delete globalThis.__installationProbeLaunch;else globalThis.__installationProbeLaunch=prior;}
+});

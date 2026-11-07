@@ -82,7 +82,7 @@ export class CloudflareApi {
     catch { throw new Error(`Cloudflare ${method} returned HTTP ${response.status} without a valid envelope`); }
     if (!response.ok || data.success === false) {
       // Provider errors may echo request fields (including write-only secrets).
-      throw new Error(`Cloudflare ${method} failed (HTTP ${response.status}; codes ${(data.errors ?? []).map((item) => Number(item.code)).join(',')})`);
+      throw Object.assign(new Error(`Cloudflare ${method} failed (HTTP ${response.status}; codes ${(data.errors ?? []).map((item) => Number(item.code)).join(',')})`),{code:'PC_CLOUDFLARE_API',httpStatus:response.status,providerCodes:(data.errors??[]).map(item=>Number(item.code)).filter(Number.isSafeInteger)});
     }
     return envelope ? data : data.result;
   }
@@ -210,7 +210,7 @@ export class Installer {
       await this.run('node', [join(this.root, 'scripts/build-native-app.mjs'), '--config', config, '--output', output]);
       await this.run('node', [join(this.root, 'scripts/deploy-native-app.mjs'), '--config', config, '--output', output]);
     }
-    this.state.resources[key] = { status: 'ready', id: this.names[key] }; await this.save();
+    this.state.resources[key] = { ...this.state.resources[key], status: 'ready', id: this.names[key] }; await this.save();
     if (key === 'gateway') await this.recordContainer();
   }
   async recordContainer({ optional = false } = {}) {

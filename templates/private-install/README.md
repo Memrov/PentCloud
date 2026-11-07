@@ -1,23 +1,21 @@
 # Installation configuration
 
-These templates describe the resources generated for a self-hosted PentCloud
-installation. Start with [deployment](../../docs/deployment.md),
-[requirements and costs](../../docs/requirements.md), and
-[Cloudflare/OpenCode setup](../../docs/cloudflare-setup.md).
+Run `npm run pentcloud -- setup` for guided account/domain/owner selection.
+See [deployment](../../docs/deployment.md) and [requirements](../../docs/requirements.md).
 
-Copy [pentcloud.example.json](pentcloud.example.json) outside Git. Set your
-Cloudflare account ID, unique instance name, Access team domain and allowed
-operator emails. The CLI writes generated Worker configs and ownership state
-to the directory selected with `--state`.
+For explicit setup, copy [pentcloud.example.json](pentcloud.example.json) outside
+Git and select your account, active zone, unused hostname, existing Access team
+and operator emails. New schema-2 installs build the eleven pinned tool packages
+in your own registry. Keep configuration, ownership state and image cache outside Git.
 
 ```sh
 cp templates/private-install/pentcloud.example.json ../my-pentcloud.json
-# Edit the copied configuration before running these commands.
-node scripts/pentcloud.mjs plan --config ../my-pentcloud.json
-node scripts/pentcloud.mjs install --config ../my-pentcloud.json --state ../my-pentcloud-state --apply
+# Edit the private configuration.
+npm run pentcloud -- plan --config ../my-pentcloud.json
+npm run pentcloud -- install --config ../my-pentcloud.json --state ../my-pentcloud-state --apply
 ```
 
-`app.json` and `gateway.json` are base templates, not standalone deployment
-configs. The installer fills account-local resource bindings, Access settings
-and the prepared Kali image. Keep generated state outside Git and reuse it for
-recovery, upgrades and scoped deletion. Never add credentials to these templates.
+`app.json` is a rendering base. `gateway.json` is retained for existing legacy
+installations; new installs render the package gateway from `infra/tool-packs`.
+Neither is a standalone production configuration. Native Artifacts checkpoints
+installation ownership for recovery; no credentials belong in these templates.

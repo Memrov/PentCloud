@@ -2,15 +2,6 @@ name: Installation test
 on:
   push:
     branches: [main, codex/artifacts-install-ci]
-    paths:
-      - 'apps/**'
-      - 'infra/tool-packs/**'
-      - 'shared/**'
-      - 'scripts/**'
-      - 'templates/private-install/**'
-      - 'ci/**'
-      - 'package*.json'
-      - '.github/workflows/installation-test.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,12 +10,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   install:
-    name: Native Artifacts package installation
+    name: Customer install and upgrade
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     environment: installation-test
     env:
       WRANGLER_SEND_METRICS: 'false'
+      CF_SEND_TELEMETRY: 'false'
+      DO_NOT_TRACK: '1'
       CREATE_CLOUDFLARE_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,19 +36,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PENTCLOUD_INSTALL_CONFIG: ${{ secrets.PENTCLOUD_INSTALL_CONFIG }}
         run: node scripts/ci/prepare-source.mjs
-      - name: Check out pinned tool image recipes
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: Memrov/PentCloud-tools
-          ref: ce1849dce533120307d13c0ab86df919c71787be
-          path: tool-source
-          persist-credentials: false
       - name: Install locked application dependencies
         working-directory: ${{ steps.artifacts.outputs.source }}
         run: npm ci
       - name: Verify package installation guards
         working-directory: ${{ steps.artifacts.outputs.source }}
-        run: node --test scripts/test-package-install.mjs scripts/test-ci-install.mjs
+        run: node --test scripts/test-package-install.mjs scripts/test-ci-install.mjs scripts/test-customer-cli.mjs scripts/test-customer-config.mjs scripts/test-customer-setup.mjs
       - name: Prepare archive reader for pinned pack recipes
         run: |
           sudo apt-get update -qq
@@ -63,14 +49,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/pentcloud-archive-bin"
           ln -s /usr/bin/bsdtar "$RUNNER_TEMP/pentcloud-archive-bin/tar"
           echo "$RUNNER_TEMP/pentcloud-archive-bin" >> "$GITHUB_PATH"
-      - name: Build or reuse verified tool-pack images
-        working-directory: ${{ steps.artifacts.outputs.source }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PENTCLOUD_INSTALL_CONFIG: ${{ secrets.PENTCLOUD_INSTALL_CONFIG }}
-          PENTCLOUD_TOOLS_DIRECTORY: ${{ github.workspace }}/tool-source
-        run: node scripts/ci/images.mjs
-      - name: Install and test native services without Kali
+      - name: Prove fresh customer install and retained upgrade
         working-directory: ${{ steps.artifacts.outputs.source }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -78,9 +57,10 @@ jobs:
         run: node scripts/ci/install.mjs
       - name: Reconcile task-owned temporary resources
         if: always()
+        working-directory: ${{ steps.artifacts.outputs.source || github.workspace }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PENTCLOUD_INSTALL_CONFIG: ${{ secrets.PENTCLOUD_INSTALL_CONFIG }}
-        run: node scripts/ci/cleanup.mjs
+        run: node scripts/ci/install.mjs --cleanup-only
       # Deliberately no account-log, trace, auth-cache or installation-state upload.
 

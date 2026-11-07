@@ -9,6 +9,8 @@ import type { SavedTarget, ModelRole } from "./onboarding";
 import type { PinnedModel } from "./opencode-models";
 export type NativeExecution = {kind:"discovery";url:string;profile:"whatweb-polite-v1"|"whatweb-stealthy-v2"};
 export interface NewRunInput {run_id:string;task:string;launch_time?:string;upload_ids?:string[];target_id?:string;target_revision?:number;authorized?:boolean;actor?:string;}
+export interface UpgradeOperation {operationId:string;sourceCommit:string;}
+export interface PrepareUpgradeInput extends UpgradeOperation {previousSourceCommit?:string;}
 
 export type Role =
   | "primary"
@@ -152,4 +154,4 @@ export interface CoordinatorAPI {
   getContext(id: string): Promise<Record<string, unknown>>;
 }
 /** Bindings and required secret names are generated from Wrangler. */
-export type NativeEnv = Omit<Cloudflare.Env, "TOOLBOX"|"OPENCODE_BYOK_PROVIDERS"> & { TOOL_PACKS?: ToolPackService; TOOLBOX?: ToolboxService; ARTIFACTS_NAMESPACE?: string; LEGACY_STATE_COMMIT?: string; OPENCODE_BYOK_PROVIDERS?:string; PENTCLOUD_VERIFICATION_EMAIL?:string; PENTCLOUD_AGENTMAIL_INBOX?:string; AGENTMAIL_API_KEY?:string|{get():Promise<string>}; PENTCLOUD_HACKERONE_USERNAME?:string; PENTCLOUD_HACKERONE_API_TOKEN?:string|{get():Promise<string>}; PENTCLOUD_INTIGRITI_API_TOKEN?:string|{get():Promise<string>} };
+export type NativeEnv = Omit<Cloudflare.Env, "TOOLBOX"|"OPENCODE_BYOK_PROVIDERS"> & { PENTCLOUD_RELEASE_SHA?:string; PENTCLOUD_INSTALLER_SCHEMA?:string; TOOL_PACKS?: ToolPackService; TOOLBOX?: ToolboxService; ARTIFACTS_NAMESPACE?: string; LEGACY_STATE_COMMIT?: string; OPENCODE_BYOK_PROVIDERS?:string; PENTCLOUD_VERIFICATION_EMAIL?:string; PENTCLOUD_AGENTMAIL_INBOX?:string; AGENTMAIL_API_KEY?:string|{get():Promise<string>}; PENTCLOUD_HACKERONE_USERNAME?:string; PENTCLOUD_HACKERONE_API_TOKEN?:string|{get():Promise<string>}; PENTCLOUD_INTIGRITI_API_TOKEN?:string|{get():Promise<string>} };

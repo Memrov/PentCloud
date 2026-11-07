@@ -2,7 +2,9 @@
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {Installer, configuration, privateJson, readJson} from './private-install.mjs';
-import {emailBindings} from './private-email.mjs';
+import {emailBindings,configureEmail} from './private-email.mjs';
+import {ensurePackageAccess} from './package-access.mjs';
+import {uninstallPackage} from './package-uninstall.mjs';
 
 export const PACK_CLASSES={
   recon:'ReconRunner',http:'HttpRunner',nuclei:'NucleiRunner',sqlmap:'SqlmapRunner',
@@ -25,10 +27,13 @@ export function packageProfile(config,value){
 }
 
 export class PackageInstaller extends Installer {
-  constructor({profile,checkpoint=async()=>{},...options}){
+  constructor({profile,accessBootstrap,sourceCommit,checkpoint=async()=>{},...options}){
     super({...options,importImage:async()=>{throw Error('Kali image import is forbidden in the package profile')}});
     this.profile=packageProfile(this.config,profile);
     this.checkpoint=checkpoint;
+    this.accessBootstrap=accessBootstrap;
+    if(sourceCommit!==undefined)assert.match(sourceCommit,/^[a-f0-9]{40}$/,'PC_SOURCE_COMMIT');
+    this.sourceCommit=sourceCommit;
     this.names={app:this.config.instance+'-app',gateway:this.config.instance+'-tools',namespace:this.config.instance+'-work',workflow:this.config.instance+'-results',access:this.config.instance+'-operators'};
   }
   async save(){await super.save();await this.checkpoint(this);}
@@ -42,9 +47,9 @@ export class PackageInstaller extends Installer {
   }
   async preflight(){
     await this.api.request(this.base);
-    const team=await this.api.request(this.base+'/access/organizations');
+    await configureEmail(this.api,this.config,this.names.app);
+    const {organization:team}=await ensurePackageAccess(this,this.accessBootstrap);
     assert.equal('https://'+team.auth_domain,this.config.accessTeamDomain,'Access team belongs to a different account');
-    assert((await this.api.list(this.base+'/access/identity_providers')).length,'Configure a Zero Trust login method');
     const zone=await this.api.request('/zones/'+this.profile.domain.zoneId);
     assert.equal(zone.account?.id,this.config.accountId,'Domain belongs to another account');
     assert.equal(zone.status,'active','Domain zone must be active');
@@ -59,6 +64,7 @@ export class PackageInstaller extends Installer {
     }
     const scripts=await this.api.list(this.base+'/workers/scripts');
     for(const key of ['gateway','app'])assert(!scripts.some(x=>x.id===this.names[key])||this.state.resources[key]?.status==='ready','Refusing to overwrite an existing or uncertain '+key+' Worker');
+    for(const key of ['gateway','app'])if(this.state.resources[key]?.tag)assert.equal(scripts.find(x=>x.id===this.names[key])?.tag,this.state.resources[key].tag,'Owned Worker immutable identity changed');
     const workflows=await this.api.list(this.base+'/workflows');
     assert(!workflows.some(x=>x.name===this.names.workflow)||this.state.resources.app?.status==='ready','Workflow name is already in use');
     const containers=await this.api.request(this.base+'/containers/applications');
@@ -84,6 +90,7 @@ export class PackageInstaller extends Installer {
       vars:{CONTROL_BASE_URL:this.state.appUrl,ACCESS_TEAM_DOMAIN:this.config.accessTeamDomain,ACCESS_AUD:this.state.resources.access.aud,ARTIFACTS_NAMESPACE:this.names.namespace},
       ...(publicApp||this.state.resources.domain?.status==='ready'?{routes:[{pattern:this.profile.domain.hostname,custom_domain:true,zone_id:this.profile.domain.zoneId}]}:{}),
     });
+    if(this.sourceCommit)Object.assign(app.vars,{PENTCLOUD_RELEASE_SHA:this.sourceCommit,PENTCLOUD_INSTALLER_SCHEMA:'2'});
     const mail=emailBindings(this.config.email);Object.assign(app,mail,{vars:{...app.vars,...mail.vars}});
     Object.assign(gateway,{
       name:this.names.gateway,account_id:this.config.accountId,main:join(this.root,'infra/tool-packs/src/worker.ts'),
@@ -106,6 +113,15 @@ export class PackageInstaller extends Installer {
       this.state.resources['pack-'+pack]={id:c.id,name:c.name,namespaceId:binding.namespace_id,status:'ready',image:this.profile.images[pack]};
     }
     await this.save();
+  }
+  async deploy(key){
+    const tag=this.state.resources[key]?.tag;
+    if(tag)assert.equal((await this.api.list(this.base+'/workers/scripts')).find(x=>x.id===this.names[key])?.tag,tag,'Owned Worker immutable identity changed');
+    await super.deploy(key);
+    const script=(await this.api.list(this.base+'/workers/scripts')).find(x=>x.id===this.names[key]);
+    assert(script?.tag,'Deployed Worker immutable identity is unavailable');
+    if(tag)assert.equal(script.tag,tag,'Owned Worker immutable identity changed');
+    this.state.resources[key].tag=script.tag;await this.save();
   }
   async install({upgrade=false,verify=true}={}){
     await this.load({create:!upgrade,updateEmail:upgrade});
@@ -141,6 +157,7 @@ export class PackageInstaller extends Installer {
   }
   async doctor({authenticate=true}={}){
     if(!this.state)await this.load();
+    await configureEmail(this.api,this.config,this.names.app,{apply:false});
     const app=await this.api.request(this.base+'/workers/scripts/'+this.names.app+'/settings');
     const services=app.bindings??[];
     assert(services.some(x=>x.name==='TOOL_PACKS'&&x.service===this.names.gateway&&x.entrypoint==='ToolPackGateway'),'Package service binding mismatch');
@@ -159,6 +176,6 @@ export class PackageInstaller extends Installer {
     if(authenticate)assert.equal((await this.probe('/v1/runs',true)).status,200,'Owner authentication failed');
     return {status:authenticate?'verified-package-installation':'provisioned-awaiting-owner-verification',appUrl:this.state.appUrl,toolPacks:11,kaliInstalled:false,modelCalls:0,scannerCalls:0};
   }
-  async uninstall(){throw Error('Package installation removal requires an explicit reviewed package-resource teardown; legacy uninstall is not applicable');}
+  async uninstall(options){return uninstallPackage(this,options);}
 }
 

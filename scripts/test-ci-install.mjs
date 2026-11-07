@@ -7,6 +7,138 @@ import {spawnSync} from 'node:child_process';
 import {withNativeTestHarness} from './lib/native-test-harness.mjs';
 
 const root=resolve(import.meta.dirname,'..');
+const candidateCommit='a'.repeat(40);
+const customerEnvironment={accountId:'b'.repeat(32),zoneId:'c'.repeat(32),team:'https://fixture.cloudflareaccess.com',emails:['owner@example.invalid'],sha:candidateCommit};
+const customerRun={RUNNER_TEMP:'/tmp/customer-ci-fixture',GITHUB_RUN_ID:'12345',GITHUB_RUN_ATTEMPT:'2'};
+
+test('customer CI isolates fresh and retained configurations and image caches',async()=>{
+  const {customerCases}=await import('./ci/install.mjs');assert.equal(typeof customerCases,'function');
+  const cases=customerCases(customerEnvironment,customerRun);
+  assert.equal(cases.fresh.config.instance,'pc-fresh-12345-2');
+  assert.equal(cases.fresh.config.domain.hostname,'pc-fresh-12345-2.heflare.app');
+  assert.equal(cases.retained.config.instance,'pentcloud-customer');
+  assert.equal(cases.retained.config.domain.hostname,'customer.heflare.app');
+  assert.equal(cases.fresh.config.schemaVersion,2);
+  assert.notEqual(cases.fresh.cacheDirectory,cases.retained.cacheDirectory);
+  assert(!JSON.stringify(cases).includes('install.heflare.app'));
+  const largest=customerCases(customerEnvironment,{...customerRun,GITHUB_RUN_ID:'9'.repeat(20),GITHUB_RUN_ATTEMPT:'9'.repeat(6)});
+  assert(largest.fresh.config.instance.length<=38);
+  assert(largest.fresh.config.domain.hostname.split('.')[0].length<=63);
+  assert.throws(()=>customerCases(customerEnvironment,{...customerRun,GITHUB_RUN_ID:'../foreign'}));
+});
+
+test('CI invokes the public headless CLI with private files and captures its result',async()=>{
+  const {customerCases,invokeCustomerCli}=await import('./ci/install.mjs');assert.equal(typeof invokeCustomerCli,'function');
+  const cases=customerCases(customerEnvironment,customerRun),calls=[];
+  const result=await invokeCustomerCli({root,installation:cases.fresh,command:'install',run:async(command,args,settings)=>{
+    calls.push({command,args,settings});return Buffer.from(JSON.stringify({status:'verified-package-installation',sourceCommit:candidateCommit,ownerVerified:false}));
+  }});
+  assert.equal(result.sourceCommit,candidateCommit);
+  assert.equal(calls[0].command,process.execPath);
+  assert.deepEqual(calls[0].args,[join(root,'scripts/pentcloud.mjs'),'install','--config',cases.fresh.configFile,'--state',cases.fresh.stateDirectory,'--images-cache',cases.fresh.cacheDirectory,'--apply','--headless']);
+  assert(!JSON.stringify(calls).includes(customerEnvironment.emails[0]));
+  await assert.rejects(invokeCustomerCli({root,installation:cases.fresh,command:'install',run:async()=>Buffer.from('PRIVATE_PROVIDER_BODY')}),error=>!error.message.includes('PRIVATE_PROVIDER_BODY'));
+});
+
+test('customer subprocess failures retain only recognized bounded diagnostic fields',async()=>{
+  const {captureCustomerProcess}=await import('./ci/install.mjs');assert.equal(typeof captureCustomerProcess,'function');
+  const diagnostic={error:'PC_INSTALLATION_FAILED',stage:'verification',check:'tool-packs',httpStatus:403,providerCodes:[10000],help:'PRIVATE_EMAIL@example.invalid'};
+  await assert.rejects(captureCustomerProcess(process.execPath,['-e','process.stdout.write("PRIVATE_STDOUT");process.stderr.write(JSON.stringify('+JSON.stringify(diagnostic)+'));process.exitCode=1;']),error=>{
+    assert.deepEqual(error.customerFailure,{error:'PC_INSTALLATION_FAILED',stage:'verification',check:'tool-packs',httpStatus:403,providerCodes:[10000]});
+    assert(!JSON.stringify(error).includes('PRIVATE'));assert(!error.message.includes('PRIVATE'));return true;
+  });
+  for(const diagnostic of [
+    {error:'PRIVATE_VALUE',stage:'verification'},
+    {error:'PC_INSTALLATION_FAILED',stage:'PRIVATE_VALUE'},
+  ])await assert.rejects(captureCustomerProcess(process.execPath,['-e','process.stderr.write(JSON.stringify('+JSON.stringify(diagnostic)+'));process.exitCode=1;']),error=>error.customerFailure===undefined&&!error.message.includes('PRIVATE'));
+  const result=await captureCustomerProcess(process.execPath,['-e','process.stdout.write(JSON.stringify({status:"ready"}));process.stderr.write("PRIVATE_WARNING");']);
+  assert.equal(result.toString(),'{"status":"ready"}');
+});
+
+test('main cleanup uses the customer subprocess adapter independently of the native Git runner',async()=>{
+  const {main,customerCases}=await import('./ci/install.mjs');
+  const directory=await mkdtemp(join(tmpdir(),'pentcloud-customer-main-'));
+  const previousArgs=process.argv,previousToken=process.env.CLOUDFLARE_API_TOKEN,calls=[];
+  try{
+    const env={...customerRun,RUNNER_TEMP:directory,GITHUB_SHA:candidateCommit,GITHUB_REF_NAME:'fixture',GITHUB_REPOSITORY:'Memrov/PentCloud',CLOUDFLARE_API_TOKEN:'fixture-token',
+      PENTCLOUD_INSTALL_CONFIG:JSON.stringify({...customerEnvironment,hostname:'install.heflare.app'})};
+    const cases=customerCases(customerEnvironment,env);
+    const {mkdir}=await import('node:fs/promises');await mkdir(cases.directory,{recursive:true});
+    for(const installation of [cases.fresh,cases.retained])await writeFile(installation.configFile,JSON.stringify(installation.config));
+    await writeFile(join(cases.directory,'cleanup.json'),JSON.stringify({schemaVersion:1,owner:{repository:'Memrov/PentCloud',accountId:customerEnvironment.accountId,runId:'12345',attempt:'2'},
+      entries:[cases.fresh,cases.retained].map(({configFile,stateDirectory,cacheDirectory})=>({configFile,stateDirectory,cacheDirectory}))}));
+    process.argv=[process.execPath,'fixture','--cleanup-only'];process.env.CLOUDFLARE_API_TOKEN='fixture-token';
+    await main({env,run:()=>assert.fail('The private Git runner must not bypass customer error capture'),runCli:async(command,args)=>{
+      calls.push({command,args});return Buffer.from('{"status":"verification-resources-cleaned"}');
+    }});
+    assert.equal(calls.length,2);assert(calls.every(call=>call.command===process.execPath&&call.args[1]==='cleanup'&&call.args.includes('--headless')));
+  }finally{
+    process.argv=previousArgs;if(previousToken===undefined)delete process.env.CLOUDFLARE_API_TOKEN;else process.env.CLOUDFLARE_API_TOKEN=previousToken;
+    await rm(directory,{recursive:true,force:true});
+  }
+});
+
+test('CI migrates only a complete ready image set from the exact former ledger owner',async()=>{
+  const {migrateCIImageLedger}=await import('./ci/install.mjs');assert.equal(typeof migrateCIImageLedger,'function');
+  const {recipeIdentity}=await import('./ci/image-manifest.mjs');
+  const {REGCTL_VERSION}=await import('./lib/private-image.mjs');
+  const packs=['http','recon','nuclei','service','sqlmap','web-context','file-analysis','password','pcap','reference','metasploit'];
+  const pins={schemaVersion:1,repository:'Memrov/PentCloud-tools',commit:'d'.repeat(40),packs:packs.map(id=>({id}))};
+  const locks=Object.fromEntries(packs.map(pack=>[pack,{packId:pack}]));
+  const owner={schemaVersion:1,repository:'Memrov/PentCloud',accountId:customerEnvironment.accountId,zoneId:customerEnvironment.zoneId,hostname:'install.heflare.app'};
+  const records={schemaVersion:1,recipes:Object.fromEntries(packs.map(pack=>{
+    const identity=recipeIdentity(pack,locks[pack],pins.commit,REGCTL_VERSION);
+    return [identity,{status:'ready',pack,sourceCommit:pins.commit,recipeIdentity:identity,digest:'sha256:'+'e'.repeat(64),compressedBytes:123}];
+  }))};
+  const value=migrateCIImageLedger({owner,expectedOwner:owner,records,pins,locks});
+  assert.equal(value.schemaVersion,2);assert.equal(value.accountId,customerEnvironment.accountId);
+  assert.equal(Object.keys(value.recipes).length,11);
+  assert.equal(Object.values(value.recipes).find(record=>record.pack==='http').image,'registry.cloudflare.com/'+customerEnvironment.accountId+'/pentcloud-ci-http@sha256:'+'e'.repeat(64));
+  assert.throws(()=>migrateCIImageLedger({owner:{...owner,hostname:'foreign.example'},expectedOwner:owner,records,pins,locks}));
+  const incomplete=structuredClone(records);delete incomplete.recipes[Object.keys(incomplete.recipes)[0]];
+  assert.throws(()=>migrateCIImageLedger({owner,expectedOwner:owner,records:incomplete,pins,locks}));
+  const pending=structuredClone(records);Object.values(pending.recipes)[0].status='pending';
+  assert.throws(()=>migrateCIImageLedger({owner,expectedOwner:owner,records:pending,pins,locks}));
+});
+
+test('CI proves a fresh empty teardown and honest first-baseline retained upgrade through public commands',async()=>{
+  const {customerCases,proveCustomerLifecycle}=await import('./ci/install.mjs');assert.equal(typeof proveCustomerLifecycle,'function');
+  const cases=customerCases(customerEnvironment,customerRun),events=[];
+  const receipt={identity:{installationId:'owned-installation',resources:{access:'owned-access'}},target:{id:'saved-target',revision:1},evidence:{id:'owned-repo',commit:'f'.repeat(40),content:'retained bytes'},release:{sourceCommit:candidateCommit,deployments:{app:{versionId:'app-version'}}},runtime:{sourceCommit:candidateCommit,versionId:'app-version'}};
+  const result=await proveCustomerLifecycle({cases,sourceCommit:candidateCommit,retainedExists:false,
+    invoke:async(installation,command,extra=[])=>{
+      events.push([installation.config.instance,command,...extra]);
+      if(command==='uninstall')return {status:'removed'};
+      return {status:'verified-package-installation',sourceCommit:candidateCommit,ownerVerified:false,toolPacks:11,noKali:true,modelCalls:0};
+    },seed:async()=>events.push(['seed']),snapshot:async()=>structuredClone(receipt)});
+  assert.equal(result.upgradeProof,'same-source-baseline');
+  assert.equal(result.sourceCommit,candidateCommit);assert.equal(result.ownerVerified,false);
+  assert.deepEqual(events,[
+    ['pc-fresh-12345-2','install'],['pc-fresh-12345-2','doctor'],
+    ['pc-fresh-12345-2','uninstall','--data','delete','--confirm','pc-fresh-12345-2'],
+    ['pentcloud-customer','install'],['seed'],['pentcloud-customer','upgrade'],
+    ['pc-fresh-12345-2','cleanup'],['pentcloud-customer','cleanup'],
+  ]);
+});
+
+test('retained candidate upgrades reject changed data, provider identity or runtime provenance',async()=>{
+  const {assertCustomerPreserved}=await import('./ci/install.mjs');assert.equal(typeof assertCustomerPreserved,'function');
+  const before={identity:{installationId:'owned',resources:{coordinator:'stable-do'}},target:{id:'saved',revision:1},evidence:{id:'owned-repo',commit:'b'.repeat(40),content:'saved bytes'},release:{sourceCommit:'c'.repeat(40),deployments:{app:{versionId:'old-version'}}},runtime:{sourceCommit:'c'.repeat(40),versionId:'old-version'}};
+  const after={...structuredClone(before),release:{sourceCommit:candidateCommit,deployments:{app:{versionId:'candidate-version'}}},runtime:{sourceCommit:candidateCommit,versionId:'candidate-version'}};
+  assert.doesNotThrow(()=>assertCustomerPreserved(before,after,candidateCommit));
+  for(const change of [value=>value.identity.resources.coordinator='replacement',value=>value.target.revision++,value=>value.evidence.commit='d'.repeat(40),value=>value.runtime.sourceCommit='c'.repeat(40),value=>value.runtime.versionId='foreign-version']){
+    const changed=structuredClone(after);change(changed);assert.throws(()=>assertCustomerPreserved(before,changed,candidateCommit));
+  }
+});
+
+test('public cleanup still runs for both journals after a failed customer install',async()=>{
+  const {customerCases,proveCustomerLifecycle}=await import('./ci/install.mjs');assert.equal(typeof proveCustomerLifecycle,'function');
+  const cases=customerCases(customerEnvironment,customerRun),events=[];
+  await assert.rejects(proveCustomerLifecycle({cases,sourceCommit:candidateCommit,retainedExists:false,
+    invoke:async(installation,command)=>{events.push([installation.config.instance,command]);if(command==='install')throw Error('PRIVATE_BODY');return {status:'verification-resources-cleaned'};},
+    snapshot:()=>assert.fail('No snapshot after failed installation'),seed:()=>assert.fail('No seed after failed installation')}));
+  assert.deepEqual(events,[['pc-fresh-12345-2','install'],['pc-fresh-12345-2','cleanup'],['pentcloud-customer','cleanup']]);
+});
 test('probe readiness retries only bounded propagation failures and cancels discarded bodies',async()=>{
   const {waitForProbeReady}=await import('./ci/install.mjs');
   let time=0,calls=0,cancelled=0;const statuses=[null,401,403,404,502,503,525,526,530,200],observed=[];

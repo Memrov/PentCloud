@@ -1,9 +1,11 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "accountId": "YOUR_32_CHARACTER_CLOUDFLARE_ACCOUNT_ID",
   "instance": "my-pentcloud",
   "accessTeamDomain": "https://YOUR_TEAM.cloudflareaccess.com",
-  "allowedEmails": [
-    "owner@example.com"
-  ]
+  "allowedEmails": ["owner@example.com"],
+  "domain": {
+    "zoneId": "YOUR_32_CHARACTER_CLOUDFLARE_ZONE_ID",
+    "hostname": "pentcloud.example.com"
+  }
 }

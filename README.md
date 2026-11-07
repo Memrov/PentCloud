@@ -23,7 +23,9 @@ belongs to one owner or a trusted team in their own Cloudflare account. See
 ## Get started
 
 Open this repository in your coding assistant. The guided CLI prepares your own
-Cloudflare installation; installation uses the CLI rather than a one-click deploy button.
+Cloudflare installation with all eleven smaller tool packages. Run `npm ci`, then
+`npm run pentcloud -- setup`. The CLI guides account, domain and owner selection,
+checks the installation and returns its app URL. See [deployment](docs/deployment.md).
 
 ### Before you start
 
@@ -33,7 +35,7 @@ Cloudflare installation; installation uses the CLI rather than a one-click deplo
 | Operator access | **Zero Trust Free / Access**, $0 within its 50-user limit |
 | Model access | **OpenCode Go, $10/month**, recommended for a solo first install when its catalog fits; Console pay-as-you-go is an alternative |
 | Model credential | A workspace API key with **Models → Request**, entered directly into a Cloudflare app Worker Secret |
-| Installation tools | macOS/Linux x64/arm64, Node 26.12.1 or later 26.x, Go 1.26.5, Git, Bash, npm, `cf` and `cloudflared`; Python 3.11+ for full checks |
+| Installation tools | macOS/Linux x64/arm64, Node 26.12.1 or later 26.x, Go 1.26.5, Git, Bash, npm, Python 3.11+, libarchive/bsdtar, `cf` and `cloudflared` |
 
 **Starting subscriptions: $15/month with Go, plus metered usage.** This is not
 an all-inclusive assessment price. Containers, browser time, storage, logs and
@@ -90,13 +92,13 @@ For errors: [Setup and runtime debugging](docs/operations/debugging.md).
 
 | Capability | What it gives you |
 | --- | --- |
-| **Agentic security testing** | A primary agent and specialists use browser, HTTP and Kali capabilities for an authorized assessment. |
+| **Agentic security testing** | A primary agent and specialists use browser, HTTP and tool-package capabilities for an authorized assessment. |
 | **Git-backed evidence** | Pinned inputs, captured files and accepted output commits connect results to a reviewable work history. |
 | **Durable orchestration** | Recorded state, receipts and supported recovery paths keep interruptions visible. Uncertain remote actions require reconciliation. |
 | **Separate agent sessions** | Each revision has its own OpenCode session/workspace. Specialist conversations remain individually accessible. |
 | **Source-informed testing** | Reference separate source repositories at exact per-run commits, alongside bounded document/source/config attachments. |
 | **Model flexibility** | Choose supported OpenCode models per role, including explicitly configured Console BYOK connections. |
-| **Cloudflare-native runtime** | Workers, Durable Objects, Artifacts, Browser Run and an on-demand shared Kali Container run in your account. |
+| **Cloudflare-native runtime** | Workers, Durable Objects, Artifacts, Browser Run and eleven on-demand tool packages run in your account. |
 
 Separate sessions do not mean parallel scans or a private Container for each agent.
 One mutating attempt runs at a time, with at most two waiting. Read-only preparation
@@ -177,7 +179,7 @@ See [attribution and distribution](docs/third-party-notices.md) and the [MIT lic
   allowlisting, proxies and private-network access yourself. PentCloud does not
   currently provision dedicated egress or promise anonymity.
 - **Cloud hosting has costs.** Cloudflare services and configured model providers
-  have their own charges. Kali starts when needed and has a 30-minute idle window;
+  have their own charges. Tool runtimes start when needed and retire after use;
   on-demand does not mean free. See [deployment](docs/deployment.md).
 - **One installation is a shared workspace.** Admitted operators share its data.
   Fresh installs start empty; this is not a shared public multi-tenant service.
@@ -231,7 +233,7 @@ The checked-in Wrangler configs are local compilation examples. They have no
 trusted Access issuer/audience, account IDs, model-provider connection, prepared
 image or secret values. They reject application access until configured. Use the
 guided installer to generate the production configs for your own account; it
-prepares that account's stock image, private gateway and Access-protected app.
+prepares that account's eleven tool packages, private gateway and Access-protected app.
 Do not use another installation's Access issuer/audience or reuse credentials.
 
 See [security and disclosure](SECURITY.md) and [third-party notices](docs/third-party-notices.md).

@@ -604,3 +604,4 @@ await fixture(async()=>{
 console.log(
   "workerd coordinator: Queue/deadman/reset, cancellation drain/FIFO/capacity, continuation CAS, role/revision authority, real Git candidate validation and durable publication replay passed",
 );
+await import("./upgrade.mjs");
