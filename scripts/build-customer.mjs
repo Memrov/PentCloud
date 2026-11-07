@@ -28,8 +28,8 @@ await mkdir(new URL('../.pentcloud-tools/',import.meta.url),{recursive:true});
 await writeFile(new URL('../.pentcloud-tools/source.tgz',import.meta.url),archive);
 const run=(command,args,cwd=root)=>execFileSync(command,args,{cwd,stdio:'inherit',env:{...process.env,GOTOOLCHAIN:'go1.26.5',WRANGLER_SEND_METRICS:'false'}});
 run('tar',['-xzf','source.tgz','--strip-components','1'],root+'/.pentcloud-tools');
-run('python3',['scripts/prepare-image.py'],root+'/.pentcloud-tools');
-for(const container of config.containers){const pack=Object.keys(container.images)[0];if(pack!=='recon')run('python3',['scripts/prepare-pack.py',pack],root+'/.pentcloud-tools');}
+// The Docker preparation stage needs the pinned source, not host-specific tools or caches.
+await writeFile(new URL('../.pentcloud-tools/.dockerignore',import.meta.url),'.cache/\nnode_modules/\n.git/\nsource.tgz\n');
 run('npm',['run','build:prompts']);
 run('npm',['exec','--workspace','@pentagi-artifacts/control-plane','--','vite','build']);
 run(process.execPath,['scripts/build-native-app.mjs','--config','wrangler.jsonc']);

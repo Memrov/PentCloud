@@ -16,3 +16,9 @@ test('selected Worker names isolate Artifacts, Workflow and wizard metadata for 
   for(const value of [first,second]){assert.equal(value.artifacts[0].namespace,value.name);assert.equal(value.workflows[0].name,value.name);assert.equal(value.vars.PENTCLOUD_WORKER_NAME,value.name);assert.equal(value.vars.ARTIFACTS_NAMESPACE,value.name);}
   assert.notEqual(first.artifacts[0].namespace,second.artifacts[0].namespace);assert.equal(second.vars.PENTCLOUD_ACCOUNT_ID,'b'.repeat(32));
 });
+
+test('native image builds use the matching SDK base digests and isolate build-only tools',async()=>{
+  const config=await read('wrangler.jsonc');
+  for(const container of config.containers){const [pack,image]=Object.entries(container.images)[0],lock=await read('node_modules/@memrov2/pentcloud-'+pack+'/tools.lock.json');assert.equal(image.dockerfile,'infra/tool-packs/Dockerfile');assert.equal(image.build_vars.PACK,pack);assert.equal(image.build_vars.RUNTIME_IMAGE.split('@')[1],lock.baseImage.split('@')[1]);}
+  const docker=await readFile(new URL('../infra/tool-packs/Dockerfile',import.meta.url),'utf8');assert.match(docker,/libarchive-tools/);assert.match(docker,/COPY --from=prepare \/prepared\/ \//);assert.match(docker,/CMD \[\]/);
+});

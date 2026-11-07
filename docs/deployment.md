@@ -51,7 +51,8 @@ namespace and Workflow name, keeping separate installations isolated.
 
 The build fetches a checksum-pinned revision of
 [PentCloud-tools](https://github.com/Memrov/PentCloud-tools) and uses its existing
-verified image preparation scripts. Native Wrangler and
+verified image preparation scripts in a pinned Docker build stage. Build-only
+Go/Python/bsdtar tooling is excluded from the final images. Native Wrangler and
 [Workers Builds](https://developers.cloudflare.com/containers/guides/deploy/#deploy-with-workers-builds)
 build and publish the images into the customer's Cloudflare account. There is no
 custom image registry, installer state machine or setup agent. Node and Go are

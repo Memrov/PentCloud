@@ -186,8 +186,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "recon": {
-          "dockerfile": ".pentcloud-tools/images/recon/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "recon",
+            "RUNTIME_IMAGE": "alpine:3.22.2@sha256:85f2b723e106c34644cd5851d7e81ee87da98ac54672b29947c052a45d31dc2f"
+          }
         }
       }
     },
@@ -196,8 +200,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "http": {
-          "dockerfile": ".pentcloud-tools/images/http/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "http",
+            "RUNTIME_IMAGE": "docker.io/alpine/curl@sha256:96a0479d24c465a7d8d29ebf5ebe92b82536e8443a870d2654e66d3ac235441f"
+          }
         }
       }
     },
@@ -206,8 +214,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "nuclei": {
-          "dockerfile": ".pentcloud-tools/images/nuclei/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "nuclei",
+            "RUNTIME_IMAGE": "docker.io/library/alpine@sha256:85f2b723e106c34644cd5851d7e81ee87da98ac54672b29947c052a45d31dc2f"
+          }
         }
       }
     },
@@ -216,8 +228,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "sqlmap": {
-          "dockerfile": ".pentcloud-tools/images/sqlmap/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "sqlmap",
+            "RUNTIME_IMAGE": "docker.io/library/python@sha256:bdd0cc97663b9b920570d0f1b4601ee18ed895221a0594ca1d9b5e2f26adba83"
+          }
         }
       }
     },
@@ -226,8 +242,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "service": {
-          "dockerfile": ".pentcloud-tools/images/service/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "service",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
         }
       }
     },
@@ -236,8 +256,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "web-context": {
-          "dockerfile": ".pentcloud-tools/images/web-context/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "web-context",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
         }
       }
     },
@@ -246,8 +270,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "pcap": {
-          "dockerfile": ".pentcloud-tools/images/pcap/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "pcap",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
         }
       }
     },
@@ -256,8 +284,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "file-analysis": {
-          "dockerfile": ".pentcloud-tools/images/file-analysis/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "file-analysis",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
         }
       }
     },
@@ -266,8 +298,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "password": {
-          "dockerfile": ".pentcloud-tools/images/password/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "password",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
         }
       }
     },
@@ -276,8 +312,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "reference": {
-          "dockerfile": ".pentcloud-tools/images/reference/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "reference",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
         }
       }
     },
@@ -286,8 +326,12 @@
       "scheduling_policy": "durable_object",
       "images": {
         "metasploit": {
-          "dockerfile": ".pentcloud-tools/images/metasploit/Dockerfile",
-          "build_context": ".pentcloud-tools"
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "metasploit",
+            "RUNTIME_IMAGE": "docker.io/metasploitframework/metasploit-framework@sha256:8096709486bce8b5f35980f2aea42dc7cd83e34ebbeb4d56eab3339847de258d"
+          }
         }
       }
     }
