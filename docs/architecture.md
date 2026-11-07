@@ -93,14 +93,11 @@ or dedicated source-IP guarantee is provided. See
 [authentication](operations/authentication.md), [hosted UI](operations/hosted-ui.md)
 and the [network and data risks](../SECURITY.md#network-and-data-risks).
 
-## Guided installation
+## Installation
 
-![Use the README assistant prompt, official Cloudflare authentication, reviewed installation plan, approved CLI installation, native secret bindings and protected app entry. Installation uses the guided CLI.](../media/install.light.png)
-
-Installation uses the guided CLI. Cloudflare and model providers have their own
-charges. A one-click Deploy to Cloudflare button is not available. Follow [deployment](deployment.md) and
-[installation limits](deployment.md#limitations), rather than treating this diagram as
-an installation script.
+Use the native Deploy to Cloudflare button, then open the app's `/setup` wizard.
+Cloudflare and model providers have their own charges. Follow [deployment](deployment.md) and
+[installation limits](../README.md#know-the-boundaries).
 
 ## Diagram sources
 

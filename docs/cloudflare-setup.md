@@ -26,7 +26,7 @@ This guide covers your self-hosted installation.
 ## Add the OpenCode key in Cloudflare
 
 The `/setup` wizard can save the key using a temporary scoped account token;
-see [customer setup](deployment.md#customer-setup). It clears the submitted token
+see [customer setup](deployment.md#customer-installation). It clears the submitted token
 and key from the form and never persists the account token. Revoke that token
 when finished. The following native dashboard option needs no token pasted into
 PentCloud.
