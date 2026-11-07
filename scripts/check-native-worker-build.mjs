@@ -2,11 +2,15 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { SourceMap } from 'node:module';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import { gzipSync } from 'node:zlib';
 import ts from 'typescript';
 
-const output = new URL('../apps/control-plane/dist/worker/', import.meta.url);
+const output = process.argv[2]
+  ? pathToFileURL(resolve(process.argv[2]) + '/')
+  : new URL('../apps/control-plane/dist/worker/', import.meta.url);
 const config = JSON.parse(await readFile(new URL('wrangler.json', output), 'utf8'));
 assert.equal(config.no_bundle, true);
 assert.equal(config.upload_source_maps, true);

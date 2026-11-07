@@ -31,7 +31,7 @@ run('tar',['-xzf','source.tgz','--strip-components','1'],root+'/.pentcloud-tools
 // The Docker preparation stage needs the pinned source, not host-specific tools or caches.
 await writeFile(new URL('../.pentcloud-tools/.dockerignore',import.meta.url),'.cache/\nnode_modules/\n.git/\nsource.tgz\n');
 run('npm',['exec','--workspace','@pentagi-artifacts/control-plane','--','vite','build','--mode','customer']);
-run(process.execPath,['scripts/check-native-worker-build.mjs']);
+run(process.execPath,['scripts/check-native-worker-build.mjs','apps/control-plane/dist-customer/worker']);
 
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();

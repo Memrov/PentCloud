@@ -3,6 +3,7 @@
 .superpowers/
 node_modules/
 dist/
+dist-customer/
 coverage/
 .wrangler/
 .dev.vars*

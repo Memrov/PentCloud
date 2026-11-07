@@ -100,12 +100,15 @@ The full gate verifies deterministic generation and original prompt hashes.
 ## Worker build output
 
 The pinned [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/vite-plugin/)
-uses one `worker` environment and emits `apps/control-plane/dist/client` assets
-and `dist/worker/wrangler.json`. The customer build selects the root source config
+uses one `worker` environment. The app build emits assets and generated config
+under `apps/control-plane/dist/`; the customer build uses the separate sibling
+`apps/control-plane/dist-customer/`. Customer mode selects the root source config
 with `vite build --mode customer`; the ordinary app build selects the app source
-config and retains its gateway binding. Root `npm run deploy` uses that generated
-customer config. Build the intended target immediately before deployment: both
-builds use the same output directory.
+config and retains its gateway binding. Root `npm run deploy` explicitly uses
+`apps/control-plane/dist-customer/worker/wrangler.json`; app deployment uses
+`dist/worker/wrangler.json` from the app workspace. Building either target leaves
+the other's output intact. A missing target config fails deployment instead of
+falling back to the other Worker. Build the intended target before deploying it.
 
 Worker maps omit `sourcesContent` through Rolldown's `sourcemapExcludeSources`.
 `upload_source_maps: true` makes Wrangler reject missing maps. The build checks

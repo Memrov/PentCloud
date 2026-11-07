@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => ({
       viteEnvironment: { name: 'worker' },
     })]),
   ],
-  build: { outDir: mode === 'browser-fixture' ? 'dist/client' : 'dist' },
+  build: { outDir: mode === 'customer' ? 'dist-customer' : mode === 'browser-fixture' ? 'dist/client' : 'dist' },
   environments: {
     worker: {
       build: {

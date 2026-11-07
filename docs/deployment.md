@@ -97,11 +97,11 @@ loopback gateway, authenticated/public bootstrap boundaries, secret handling,
 installation name isolation, desktop/mobile UI and verified source maps.
 The build uses the pinned Cloudflare Vite plugin to emit client assets and the
 Worker, then checks the compiled source maps. `npm run deploy` uses
-`apps/control-plane/dist/worker/wrangler.json`, including the customer bindings
+`apps/control-plane/dist-customer/worker/wrangler.json`, including the customer bindings
 and native Container definitions. For a local packaging check after `npm run build`, run:
 
 ```sh
-npx wrangler deploy --config apps/control-plane/dist/worker/wrangler.json --dry-run --containers-rollout=none
+npx wrangler deploy --config apps/control-plane/dist-customer/worker/wrangler.json --dry-run --containers-rollout=none
 ```
 
 Source-only dry runs skip Container rollout; the actual deploy builds/publishes
