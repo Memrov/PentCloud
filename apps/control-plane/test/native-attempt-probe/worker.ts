@@ -13,6 +13,7 @@ import {redact} from "../../src/native/tool-policy";
 import {digest} from "../../src/native/domain";
 import {type PinnedModel} from "../../src/native/opencode-models";
 import {OpenCodeWorkerd} from "@opencode/sdk/workerd";
+import type {OpenCodeOperationResult, OpenCodeReceipt, OpenCodeSession, OpenCodeSessionEvent} from "agents/harness/opencode";
 import {Plugin} from "@opencode/plugin";
 import {OpenCodeConnectionTest} from "../../src/native/model-test";
 import type { AttemptInput, NativeEnv } from "../../src/native/types";
@@ -621,10 +622,9 @@ export class ProbeAttempt extends NativeAttempt {
       return checks;
     }else if(kind==="evidence-finalization"){
       const operations:string[]=[];
-      const harness=this.harness as unknown as {session:()=>{setModel:()=>Promise<void>};submit:(text:string,options:{operationId:string})=>Promise<{operationId:string;session:object}>;wait:(id:string)=>Promise<{status:string}>};
-      harness.session=()=>({setModel:async()=>{}});
-      harness.submit=async(_text,options)=>{operations.push(options.operationId);return {operationId:options.operationId,session:{}};};
-      harness.wait=async operation=>{
+      let listener:(events:readonly OpenCodeSessionEvent[])=>void=()=>{};
+      let streamsOpened=0,streamsStopped=0;
+      const wait=async(operation:string):Promise<OpenCodeOperationResult>=>{
         if(operation.startsWith("finalize-")){
           try{await computer("computer_exec",{command:"echo forbidden"});}catch{checks.mutationFenced=true;}
           const tools=await internal.cloudflareTools(),tool=tools.find(t=>t.name==="pentcloud_kali_import")!;
@@ -632,9 +632,26 @@ export class ProbeAttempt extends NativeAttempt {
           try{await exec("export default function(){return 'forbidden'}", "native-javascript");}catch{checks.javascriptFenced=true;}
           await internal.callTool("code_result",{result:"Existing work finalized",message:"done"},"final-result");
         }
-        return {status:"done"};
+        return {operationId:operation,session:"ses_root",status:"done",text:""};
+      };
+      // Match the native session surface used by both admission and finalization.
+      const session={
+        setModel:async()=>{},
+        events:async()=>{
+          streamsOpened++;
+          return {start:(next:typeof listener)=>{listener=next;},stop:async()=>{streamsStopped++;}};
+        },
+        wait,
+      } as unknown as OpenCodeSession;
+      const harness=this.harness as unknown as {session:()=>OpenCodeSession;submit:(text:string,options:{operationId:string})=>Promise<OpenCodeReceipt>};
+      harness.session=()=>session;
+      harness.submit=async(_text,options)=>{
+        const operationId=options.operationId;operations.push(operationId);
+        listener([{type:"operation_end",result:{operationId,session:"ses_root",status:"done",text:""}}]);
+        return {operationId,session:"ses_root",accepted:true};
       };
       checks.result=await (this as unknown as {execute():Promise<unknown>}).execute();
+      checks.streamsOpened=streamsOpened;checks.streamsStopped=streamsStopped;
       checks.operations=operations;checks.initialId=id;checks.starts=(await this.ctx.storage.get("fixture:modelRequests"))??0;return checks;
     }else if(kind==="evidence-gateway-compat"){
       (this.env.TOOLBOX as unknown as {putFile:()=>Promise<never>}).putFile=async()=>{throw new Error('RPC receiver does not implement method putFile');};

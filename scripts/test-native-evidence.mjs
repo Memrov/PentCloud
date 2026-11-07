@@ -28,7 +28,7 @@ await withNativeTestHarness({root,workers:[{configPath:'test/native-attempt-prob
   const response=await server.fetch('https://attempt.test/'+scenario),value=await response.json();assert.equal(response.status,200,JSON.stringify(value));assert.ok(value.registrations.length>0);assert.equal(value.execution.drained,true);assert.equal(value.starts,0);assert.ok(!value.execution.result.outputCommit);
  }
  const finalized=await server.fetch('https://attempt.test/evidence-finalization');const final=await finalized.json();assert.equal(finalized.status,200,JSON.stringify(final));
- assert.equal(final.result.status,'completed');assert.deepEqual(final.operations,[final.initialId,`finalize-${final.initialId}`]);assert.equal(final.mutationFenced,true);assert.equal(final.fileMutationFenced,true);assert.equal(final.javascriptFenced,true);assert.equal(final.starts,0);
+ assert.equal(final.result.status,'completed',JSON.stringify(final));assert.equal(final.streamsOpened,2);assert.equal(final.streamsStopped,2);assert.deepEqual(final.operations,[final.initialId,`finalize-${final.initialId}`]);assert.equal(final.mutationFenced,true);assert.equal(final.fileMutationFenced,true);assert.equal(final.javascriptFenced,true);assert.equal(final.starts,0);
  console.log('native cancellation-after-push and bounded same-session finalization: passed');
  const compatResponse=await server.fetch('https://attempt.test/evidence-gateway-compat'),compat=await compatResponse.json();assert.equal(compatResponse.status,200,JSON.stringify(compat));assert.equal(compat.pending,true);assert.equal(compat.starts,0);
 });

@@ -50,6 +50,14 @@ The existing coordinator negative-test cast also uses `NonNullable` so the
 intentional invalid value remains valid test code under exact optional property
 types. This addresses the earlier pull-request TypeScript failure.
 
+Full CI also exposed a stale evidence-finalization test facade. It implemented
+only `session.setModel` and the former `harness.wait` call, so the new public
+`session.events()` call failed before admission. The focused reproduction returned
+`session.events is not a function`. The fixture now implements accepted receipts,
+matching operation events, session-level waiting and stream cleanup, while retaining
+the mutation, file and JavaScript finalization fences. Both operation streams are
+checked for cleanup, and failed status assertions include the returned error.
+
 ## Failed or unproven experiments
 
 Full raw results, runnable second-pass fixtures and reproduction instructions are
