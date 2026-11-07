@@ -6,7 +6,6 @@ import { canonical } from "../../src/native/domain";
 import {materialSelection} from "../../src/native/materials";
 import {recordedWorkPage} from "../../src/native/recorded-work";
 import {assertPreparationPromotion} from "../../src/native/preparation";
-import {normalizeCatalog} from "../../src/native/opencode-models";
 import type {
   AttemptInput,
   AttemptRecord,
@@ -139,101 +138,6 @@ export class FakeAttempt extends DurableObject<Bindings> {
   async inputReady(){return !!await this.ctx.storage.get("input");}
 }
 export class ProbeCoordinator extends Coordinator {
-  async upgradeProbe(action:string,value:Record<string,unknown>={}) {
-    const upgrade=this as unknown as {prepareUpgrade(value:unknown):Promise<unknown>;finishUpgrade(value:unknown):Promise<unknown>};
-    const internal=this as unknown as Record<string,unknown>;
-    const read=(key:string)=>JSON.parse(this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM native_records WHERE key=?",key).one().value);
-    const operation={operationId:"upgrade-probe",sourceCommit:"a".repeat(40)};
-    if(action==="setup"){
-      await this.seed(1,"coder",false);
-      this.write("run:run-0",{...read("run:run-0"),phase:"completed",status:"completed",lifecycle:"archived"});
-      this.write("job:job-0",{...read("job:job-0"),status:"completed"});
-      await this.onboardingAction("target.save",{id:"saved-api",kind:"api",name:"Saved API",url:"https://owned.invalid/api/",revision:null},"fixture-owner");
-      await this.onboardingAction("credential.save",{id:"saved-key",purpose:"api",targetId:"saved-api",scheme:"bearer",header:"Authorization",label:"Private API",value:"retained-private-credential",revision:null},"fixture-owner");
-      const bytes=new TextEncoder().encode('{"openapi":"3.1.0","info":{"title":"Saved API"}}');
-      const sha256=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),b=>b.toString(16).padStart(2,"0")).join("");
-      await this.saveTargetDefinition("saved-api",0,{name:"openapi.json",sha256,uploadedBy:"fixture-owner",body:new Blob([bytes]).stream()});
-      return this.lifecycleStatus();
-    }
-    if(action==="data")return {records:this.ctx.storage.sql.exec<{key:string;value:string}>("SELECT key,value FROM native_records WHERE key LIKE 'onboarding:%' OR key LIKE 'material:%' OR key LIKE 'run:%' OR key LIKE 'job:%' ORDER BY key").toArray(),definition:await (await this.targetDefinition("saved-api")).text()};
-    if(action==="prepare")return upgrade.prepareUpgrade(value);
-    if(action==="finish")return upgrade.finishUpgrade(value);
-    if(action==="status")return this.lifecycleStatus();
-    if(action.startsWith("race-")){
-      let enter!:()=>void,release!:()=>void;
-      const entered=new Promise<void>(resolve=>{enter=resolve;}),released=new Promise<void>(resolve=>{release=resolve;});
-      let work:Promise<unknown>,restore=()=>{};
-      if(action==="race-model"){
-        const [model]=normalizeCatalog({data:[{id:"upgrade-model",type:"chat",capabilities:{tools:{supported:true}},api:{"chat-completions":{base_url:"https://opencode.ai/inference/go/openai/v1"}}}]},"go");
-        this.write("onboarding:catalog:go",{models:[model],fetchedAt:new Date().toISOString(),stale:false,digest:"f".repeat(64),modelDigests:{[model!.id]:"f".repeat(64)}});
-        const key=this.env.OPENCODE_GO_API_KEY,tests=this.env.MODEL_TESTS;
-        Reflect.set(this.env,"OPENCODE_GO_API_KEY",{get:async()=>{enter();await released;return "fixture-key";}});
-        Reflect.set(this.env,"MODEL_TESTS",{getByName:()=>({probeModel:async()=>{}})});
-        restore=()=>{Reflect.set(this.env,"OPENCODE_GO_API_KEY",key);Reflect.set(this.env,"MODEL_TESTS",tests);};
-        work=this.onboardingAction("model.test",{choice:{model:model!.id,credentialId:"bound-go",credentialVersion:0},requestId:"upgrade-model-test"},"fixture");
-      }else if(action==="race-discard"){
-        const original=this.workspace.fs.rm;
-        this.workspace.fs.rm=async(...args)=>{enter();await released;return original.apply(this.workspace.fs,args);};
-        restore=()=>{this.workspace.fs.rm=original;};
-        work=this.discardDraft("empty-draft");
-      }else{
-        const bytes=new TextEncoder().encode('{"openapi":"3.1.0","info":{"title":"Updated API"}}');
-        const sha256=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),b=>b.toString(16).padStart(2,"0")).join("");
-        const stream=new ReadableStream<Uint8Array>({async pull(controller){enter();await released;controller.enqueue(bytes);controller.close();}},{highWaterMark:0});
-        const input={name:action==="race-definition"?"updated.json":"draft.txt",sha256,uploadedBy:"fixture",body:stream};
-        work=action==="race-definition"?this.saveTargetDefinition("saved-api",1,input):this.stageUpload({...input,runId:"empty-draft",id:"draft-file"});
-      }
-      const outcome=work.then(()=>({complete:true}),error=>({error:String(error)}));
-      await entered;
-      let refused:string|undefined;
-      try{await upgrade.prepareUpgrade(operation);}catch(error){refused=String(error);}
-      const during=await this.lifecycleStatus();release();
-      try{const result=await outcome;return {refused,during,result,after:await this.lifecycleStatus()};}finally{restore();}
-    }
-    if(action==="admission"){
-      const denied:Record<string,string>={};
-      for(const [name,work] of [
-        ["run",()=>this.createRun({run_id:"late-upgrade",task:"late"})],
-        ["target",()=>this.onboardingAction("target.save",{id:"late",kind:"api",name:"Late",url:"https://owned.invalid/",revision:null},"fixture")],
-        ["model",()=>this.onboardingAction("model.test",{},"fixture")],
-        ["upload",()=>this.stageUpload({runId:"late-upgrade",id:"late",name:"late.txt",sha256:"0".repeat(64),uploadedBy:"fixture",body:new Blob(["late"]).stream()})],
-        ["definition",()=>this.saveTargetDefinition("saved-api",1,{name:"late.json",sha256:"0".repeat(64),uploadedBy:"fixture",body:new Blob(["late"]).stream()})],
-        ["restore",()=>this.restoreRun("run-0")],
-        ["archive",()=>this.archiveRun("run-0")],
-        ["trash",()=>this.trashRun("run-0")],
-        ["delete",()=>this.purgeRun("run-0","run-0")],
-        ["discard",()=>this.discardDraft("late-draft")],
-        ["cancel",()=>this.cancelRun("run-0")],
-        ["interrupt",()=>this.interrupt("job-0")],
-        ["revise",()=>this.revise("job-0","late","late-revision")],
-        ["settings",()=>this.saveSettings({} as Parameters<Coordinator["saveSettings"]>[0],0,"fixture")],
-        ["catalog",()=>this.modelCatalog()],
-        ["uninstall",()=>this.prepareUninstall(true)],
-      ] as const){try{await work();}catch(error){denied[name]=String(error);}}
-      return {denied,snapshot:await this.onboardingSnapshot()};
-    }
-    if(action==="blockers"){
-      const errors:Record<string,string>={};
-      const cases:Array<[string,()=>void,()=>void]>=[
-        ["quiesced",()=>this.write("lifecycle:quiesced",true),()=>this.write("lifecycle:quiesced",false)],
-        ...[["active",{id:"job-0",input:read("job:job-0")}],["publication:run-0",{runId:"run-0"}],["input:preparing",{}],["purge:run-0",{}],["project:owned:unfinished",{runId:"unfinished",repo:"run-unfinished"}],["onboarding:creation:unfinished",{input:{run_id:"unfinished"}}],["conversation:job-0",{status:"pending"}]].map(([key,data])=>[String(key),()=>this.write(String(key),data),()=>this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",String(key))] as [string,()=>void,()=>void]),
-        ...["acceptances","projections","uploads","initializing","creations","purges","preparingConversations"].map(key=>[key,()=>{(internal[key] as Map<string,unknown>).set("inflight",Promise.resolve());},()=>{(internal[key] as Map<string,unknown>).delete("inflight");}] as [string,()=>void,()=>void]),
-        ["preparingMaterials",()=>{internal.preparingMaterials=Promise.resolve();},()=>{internal.preparingMaterials=undefined;}],
-        ["definitionBusy",()=>{internal.definitionBusy=1;},()=>{internal.definitionBusy=0;}],
-        ["job",()=>this.write("job:job-0",{...read("job:job-0"),status:"created"}),()=>this.write("job:job-0",{...read("job:job-0"),status:"completed"})],
-        ["run",()=>this.write("run:run-0",{...read("run:run-0"),phase:"primary"}),()=>this.write("run:run-0",{...read("run:run-0"),phase:"completed"})],
-      ];
-      for(const [name,set,clear] of cases){set();try{await upgrade.prepareUpgrade(operation);}catch(error){errors[name]=String(error);}finally{clear();}}
-      return {errors,status:await this.lifecycleStatus()};
-    }
-    if(action==="advance"){
-      this.write("run:run-0",{...read("run:run-0"),phase:"specialists",lifecycle:"active"});
-      await (this as unknown as {advance():Promise<void>;claimNext():void}).advance();
-      (this as unknown as {claimNext():void}).claimNext();
-      return {jobs:this.ctx.storage.sql.exec("SELECT key FROM native_records WHERE key LIKE 'job:%'").toArray().length,active:this.ctx.storage.sql.exec("SELECT key FROM native_records WHERE key='active' AND value!='null'").toArray().length};
-    }
-    throw new Error("Unknown upgrade probe action");
-  }
   async bountyGateScenario(){
     const target=await this.onboardingAction('target.save',{id:'bounty-gate-target',kind:'website',name:'Owned fixture',url:'https://owned.invalid/',revision:null},'fixture') as {id:string;revision:number};
     const denied:string[]=[];
@@ -243,7 +147,7 @@ export class ProbeCoordinator extends Coordinator {
     return {denied,unavailable,status:await this.onboardingAction('bounty.status',{},'fixture')};
   }
   override async createRun(input:import("../../src/native/types").NewRunInput){
-    if(this.ctx.storage.sql.exec("SELECT key FROM native_records WHERE key IN (?,?,?)","lifecycle:quiesced","lifecycle:maintenance","purged:run:"+input.run_id).toArray().length)return super.createRun(input);
+    if(this.ctx.storage.sql.exec("SELECT key FROM native_records WHERE key IN (?,?)","lifecycle:quiesced","purged:run:"+input.run_id).toArray().length)return super.createRun(input);
     // Test fixtures provide an already verified owned target; never perform a network check.
     const target={id:"probe-target",name:"Owned fixture",kind:"website",url:"https://owned.invalid/",revision:1,archived:false,createdAt:0,updatedAt:0,updatedBy:"fixture",objective:"",exclusions:""};
     this.ctx.storage.sql.exec("INSERT INTO native_records(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value","onboarding:target:probe-target",JSON.stringify(target));
@@ -1055,9 +959,8 @@ export class ProbeCoordinator extends Coordinator {
 export default {
   async fetch(request: Request, env: Bindings) {
     const url = new URL(request.url),
-      coordinator = env.COORDINATOR.getByName(url.searchParams.get("object")??"global");
+      coordinator = env.COORDINATOR.getByName("global");
     try {
-      if(url.pathname==="/upgrade")return Response.json(await coordinator.upgradeProbe(url.searchParams.get("action")!,request.method==="POST"?await request.json() as Record<string,unknown>:{}));
       if(url.pathname==='/bounty-gate-scenario')return Response.json(await coordinator.bountyGateScenario());
       if (url.pathname === "/agents/coordinator/global")
         return coordinator.fetch(request);

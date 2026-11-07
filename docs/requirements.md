@@ -33,9 +33,9 @@ resources and costs.
 
 | Capability | Needed for | What to check |
 | --- | --- | --- |
-| Workers + an active owned domain zone | App and private gateway | Workers Paid; an unused custom hostname in the selected zone |
+| Workers + a Workers subdomain | App and private gateway | Workers Paid; generated `workers.dev` address available |
 | SQLite-backed Durable Objects and Worker Loader | Coordinator, native sessions/workspaces and dynamic tools | Account deployment access; billed with native product meters |
-| Containers + Cloudflare registry/image preparation | Eleven smaller tool packages | Product access/terms, registry push/pull, image-preparation permission and capacity for the selected package runtime profiles |
+| Containers + Cloudflare Registry | Eleven smaller tool packages | Product access/terms and capacity for the selected package profiles; existing legacy installations retain their backend |
 | Artifacts | Per-install work/evidence repositories | Workers Paid; namespace/repository access and current terms |
 | Browser Run | Agent browser tools | Account access; browser-hour/concurrency allowance |
 | Workflows | Result validation | Account access; included allowance and overages |
@@ -47,11 +47,9 @@ subscriptions to purchase. Access setup is separate from enabling Workers Paid.
 Email one-time PIN is a simple login option; a paid identity-provider subscription
 is not required. See [setup walkthrough](cloudflare-setup.md).
 
-The package installer requires an active zone and unused app hostname.
-
-**Not required by the default install:** a paid DNS/zone plan,
+**Not required by the runtime itself:** a paid DNS/zone plan, custom domain,
 public Tunnel, dedicated egress product, paid Access tier, Secrets Store add-on,
-Docker daemon or a customer-managed object-storage bucket. The generated app uses native Worker secrets. Existing Secrets Store
+Docker daemon or a customer-managed object-storage bucket. The app uses native Worker secrets. Existing Secrets Store
 bindings are supported and should be preserved.
 
 The runtime's `agents/queue` is hosted in its Durable Object, not a separate
@@ -95,14 +93,9 @@ are 1 TB for North America/Europe and 500 GB for other listed regions; published
 overage is $0.025–$0.05/GB by region. Workers and Durable Objects supporting a
 Container still have their own meters.
 
-### Existing legacy toolbox installations
+### What the shared Kali toolbox costs while awake
 
-New installs use eleven smaller tool packages. Each package is billed for its
-selected runtime profile while active, alongside registry/storage and the
-other native services. Installation verification starts and retires each
-package without an assessment. See [Containers pricing](https://developers.cloudflare.com/containers/platform/pricing/).
-
-An existing legacy gateway requests **2 vCPU, 6 GiB RAM and 20 GB disk**. Memory and disk
+The current gateway requests **2 vCPU, 6 GiB RAM and 20 GB disk**. Memory and disk
 are charged for provisioned resources while awake; CPU is charged for actual use.
 At published rates, before included allowances and other meters:
 
@@ -131,7 +124,7 @@ bill, because those requests can keep it active.
   not Go usage. [Conversion](https://developers.cloudflare.com/workers-ai/features/markdown-conversion/),
   [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 - Optional `clef_audit` needs the AI binding and an explicitly configured
-  `AI_GATEWAY_ID`. The fresh installer does **not** create that gateway. Core
+  `AI_GATEWAY_ID`. The gateway is optional and must be configured separately. Core
   Gateway features have no extra subscription; inference/logging can still cost.
   Clef Flash lists $0.038/million input tokens and Clef $0.24/million; output tokens
   are not charged by those models. Configure and verify this separately if wanted;
@@ -180,11 +173,11 @@ do not assume a service-account key inherits a personal Go subscription.
 
 | Credential | Required? | Custody |
 | --- | --- | --- |
-| Cloudflare account authorization | Yes, during installation | Official `cf` browser login and its short-lived deployment lease; never paste tokens into chat |
+| Cloudflare account authorization | Yes, during setup/deployment | Cloudflare-authorized account access with the required service scopes; never paste tokens into chat |
 | `OPENCODE_GO_API_KEY` | For Go | Native encrypted secret on the **app Worker**, or an existing Secrets Store binding |
 | `OPENCODE_API_KEY` | For Console | Same app Worker; optional alongside Go when both routes are wanted |
 | Provider/BYOK key | Optional | OpenCode Providers, not a new vendor-key field in PentCloud |
-| Legacy Kali MCP secret | Existing legacy installs only | Retained native gateway Worker secret; new package installs do not create one |
+| Legacy Kali MCP secret | Existing legacy installations only | Preserve the existing gateway Worker secret; new installations use the smaller tool packages |
 | Target login / bound API credentials | Optional, engagement-specific | App Worker secrets or Secrets Store bindings named `PENTCLOUD_TARGET_*`; only names are saved on the target. Authenticator verification adds one seed binding. |
 | Bounty researcher API token | Optional, for imported HackerOne/Intigriti programs | Native app Worker secret binding; separate from target test-account credentials |
 | Verification email | Optional | Cloudflare Email Routing on an owned unused domain/subdomain, or an existing AgentMail inbox with a message-read key bound through Cloudflare Secrets Store. Preserve existing MX/mail services and the program’s registration alias. AgentMail charges/retention are separate. |
@@ -197,28 +190,21 @@ Public bounty scope search needs no platform API key, GitHub token or additional
 subscription. It reads a bounded, cached public catalog; private programs are not
 included. [Target setup and network limitations](operations/onboarding.md#bounty-scope-and-target-login).
 
-## Local prerequisites and completion
+## Source verification and setup status
 
-- Installation host: macOS or Linux, x64 or arm64; other hosts need a supported
-  environment for the package image builder. On Windows, use a Linux environment
-  such as WSL2 or a remote Linux terminal; native Windows package image building is not
-  implemented. Docker is not required.
-- Node **26.12.1 or compatible later 26.x**, npm, Git, Bash and Go **1.26.5**.
-  Python **3.11+** and libarchive/bsdtar with 7z support are required for package builds.
-- Official `cf` CLI and `cloudflared`; project-pinned Wrangler comes from the
-  normal root `npm ci`. `cf` and Wrangler have separate authentication sessions.
-- Network access for dependencies, official tools, pinned package sources and
-  checksummed upstream archives/base images. Initial builds/preparation can take
-  tens of minutes. Preserve installation state and the per-installation cache
-  for resumption and immutable image reuse. New installs do not transfer Kali.
-- The installer needs the account roles in [authentication](operations/authentication.md),
-  including API Token Provisioning capability for the two-hour deployment lease.
+Local source checks need Node **26.12.1 or compatible later 26.x**, npm, Git,
+Bash and Go **1.26.5**. Python **3.11+** is used by integration assertions.
+Cloudflare Workers Builds owns application build and deployment execution.
+The previous CLI installer is removed; the browser setup wizard is planned.
+See [deployment status](deployment.md) before attempting a new installation.
 
-Installation/doctor do not prove a model key works. Catalog refresh is not paid
-inference; PentCloud's explicit **Test selected models** action makes a small model
-request and can use allowance/credit. Obtain approval before that test, and before
-target discovery or any assessment. Check actual Cloudflare Billable Usage and
-OpenCode usage/budgets afterward. A budget alert is not a Cloudflare spending cap.
+New installations use the eleven smaller tool packages and do not import Kali.
+Existing legacy installations retain their backend and credentials.
+
+Catalog refresh is not paid inference. PentCloud's explicit **Test selected
+models** action makes a model request and can use allowance/credit. Obtain
+approval before model tests, target discovery or assessments. A budget alert is
+not a Cloudflare spending cap.
 
 Review [installation limits](deployment.md#limitations) before deployment.
 Each account needs its own entitlement, human-login and model/scanner checks.

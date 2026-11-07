@@ -13,9 +13,8 @@ Dependency versions are recorded in [package-lock.json](../package-lock.json);
 those dependencies retain their own licenses.
 
 This repository distributes source and documentation, not node_modules,
-Container layers or scanner binaries. The installer imports the pinned public
-Kali image into the deployer's account and downloads checksum-pinned regctl;
-those distributions have their own licenses. When redistributing compiled
+Container layers or scanner binaries. Tool-package images and the Kali image
+used by existing legacy installations have their own licenses. When redistributing compiled
 bundles, images or dependencies, preserve the applicable notices and review
 any source-distribution requirements. The root license does not replace them.
 

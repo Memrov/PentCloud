@@ -16,7 +16,7 @@ and the installed Go compiler, and prepare the Go/Wasm assets themselves.
 | `npm run test:workers:watch` | Watch native Worker tests |
 | `npm run verify` | App checks and production bundle |
 | `npm run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
-| `npm run verify:full` | Both Worker gates, Go/renderer, installer/auth, lifecycle, Git publication and recovery checks |
+| `npm run verify:full` | Both Worker gates, Go/renderer, auth, lifecycle, Git publication and recovery checks |
 | `npm run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
 | `npm run test:browser` | Attachment/browser fixtures; requires installed Chrome |
 
@@ -71,11 +71,9 @@ Required secret names are declared for generated types; their values stay bound.
 Keep actual API keys in bound Worker secrets; the JSON must contain
 configuration metadata only. Never upload the generated config or deployment
 logs as public CI artifacts. Use the existing app deploy helper to preserve the
-prebuilt module catalog and source maps. Managed default-config app deployments
-also enforce the [production shipping checks](production-shipping.md) for the
-exact checked-out `main` commit before invoking Wrangler. Protect `main` with
-passing GitHub checks; Cloudflare's push-triggered build does not wait for GitHub
-environment approvals.
+prebuilt module catalog and source maps. Protect `main` with passing GitHub
+checks; Cloudflare's push-triggered build does not wait for GitHub environment
+approvals.
 
 ## Prompt sources
 

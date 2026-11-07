@@ -4,10 +4,8 @@ import worker from "../../src/native/worker";
 // Test only: the real router and signed auth see a narrow lifecycle RPC fixture.
 export default {fetch(request:Request,env:RuntimeFixtureEnv){
   const coordinator=env.COORDINATOR.getByName("global");
-  const release={PENTCLOUD_RELEASE_SHA:request.headers.get("X-Fixture-Release-SHA")??undefined,PENTCLOUD_INSTALLER_SCHEMA:request.headers.get("X-Fixture-Installer-Schema")??undefined,CF_VERSION_METADATA:{id:"fixture-native-version",tag:"",timestamp:""}};
-  if(request.headers.get("X-Fixture-Tool-Backend")==="unconfigured")return worker.fetch(request,{...env,...release} as unknown as Parameters<typeof worker.fetch>[1]);
-  if(request.headers.get("X-Fixture-Tool-Backend")==="tool-packs")return worker.fetch(request,{...env,...release,TOOL_PACKS:{}} as unknown as Parameters<typeof worker.fetch>[1]);
-  return worker.fetch(request,{...env,...release,TOOLBOX:{
+  if(request.headers.get("X-Fixture-Tool-Backend")==="tool-packs")return worker.fetch(request,{...env,TOOL_PACKS:{}} as unknown as Parameters<typeof worker.fetch>[1]);
+  return worker.fetch(request,{...env,TOOLBOX:{
     async status(){await coordinator.noteRemote("toolboxStatus","[]");return {state:"stopped",inactivityTimeoutMs:1800000};},
     async ready(generation?:string){await coordinator.noteRemote("toolboxReady",JSON.stringify([generation??null]));return generation?{error:"generation_lost"}:{state:"booting",generation:"fixture-generation"};},
   }} as unknown as Parameters<typeof worker.fetch>[1]);
@@ -82,8 +80,6 @@ export class RouterControl extends DurableObject<RuntimeFixtureEnv> {
   }
   async lifecycleStatus(){this.record("lifecycleStatus");return {safeToUninstall:true};}
   async prepareUninstall(){this.record("prepareUninstall");return {safeToUninstall:true,quiesced:true};}
-  async prepareUpgrade(value:unknown){this.record("prepareUpgrade",value);return {maintenance:true};}
-  async finishUpgrade(value:unknown){this.record("finishUpgrade",value);return {maintenance:false,completed:true};}
   async archiveRun(id:string){this.record("archiveRun",id);return {run:{...run,lifecycle:"archived"}};}
   async trashRun(id:string){this.record("trashRun",id);return {run:{...run,lifecycle:"trashed"}};}
   async restoreRun(id:string){this.record("restoreRun",id);return {run:{...run,lifecycle:"active"}};}

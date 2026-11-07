@@ -34,13 +34,13 @@ const fixture = async (run) => withNativeTestHarness({
   worker = {dispatchFetch: server.fetch};
   await run(url);
 });
+await fixture(async()=>{const value=await get('/bounty-gate-scenario');assert.deepEqual(value.denied,['scope.names','scope.search','scope.preview','scope.import']);assert.deepEqual(Object.fromEntries(value.status.connections.map(c=>[c.platform,c.status])),{hackerone:'missing',intigriti:'missing',bugcrowd:'development',yeswehack:'development'});assert.deepEqual(value.unavailable,['bugcrowd:bounty.check','bugcrowd:scope.preview','bugcrowd:scope.import','yeswehack:bounty.check','yeswehack:scope.preview','yeswehack:scope.import']);});
 await fixture(async()=>{
   const value=await get("/direct-delete-scenario?mode=tool-packs");
   assert.equal(value.error,undefined,"package-only run deletion does not require a Kali binding");
   assert.equal(value.clears,0);
   assert.equal(value.before.records.find(row=>row.key==="purged:run:run-0").value.id,"run-0");
 });
-await fixture(async()=>{const value=await get('/bounty-gate-scenario');assert.deepEqual(value.denied,['scope.names','scope.search','scope.preview','scope.import']);assert.deepEqual(Object.fromEntries(value.status.connections.map(c=>[c.platform,c.status])),{hackerone:'missing',intigriti:'missing',bugcrowd:'development',yeswehack:'development'});assert.deepEqual(value.unavailable,['bugcrowd:bounty.check','bugcrowd:scope.preview','bugcrowd:scope.import','yeswehack:bounty.check','yeswehack:scope.preview','yeswehack:scope.import']);});
 const params = (values) =>
   new URLSearchParams(
     Object.fromEntries(
@@ -604,4 +604,3 @@ await fixture(async()=>{
 console.log(
   "workerd coordinator: Queue/deadman/reset, cancellation drain/FIFO/capacity, continuation CAS, role/revision authority, real Git candidate validation and durable publication replay passed",
 );
-await import("./upgrade.mjs");

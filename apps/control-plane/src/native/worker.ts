@@ -4,7 +4,7 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import type { NativeEnv, PrepareUpgradeInput, UpgradeOperation } from "./types";
+import type { NativeEnv } from "./types";
 import type { AgentSettings } from "../settings/catalog";
 import { LegacyHistory } from "./history";
 import {knownRuntimeSecrets} from "../../../../shared/runtime-secrets";
@@ -125,13 +125,6 @@ export default {
         return await coordinator.fetch(request);
       }
       const path = url.pathname.replace(/^\/v1(?:\/ui)?/, "");
-      if(path==="/installation" && request.method==="GET")return Response.json({
-        schemaVersion:1,
-        sourceCommit:typeof env.PENTCLOUD_RELEASE_SHA==="string"&&/^[a-fA-F0-9]{40}$/.test(env.PENTCLOUD_RELEASE_SHA)?env.PENTCLOUD_RELEASE_SHA:null,
-        installerSchema:env.PENTCLOUD_INSTALLER_SCHEMA==="2"?2:null,
-        backend:env.TOOL_PACKS?"tool-packages":env.TOOLBOX?"legacy-toolbox":"unconfigured",
-        versionId:env.CF_VERSION_METADATA?.id??null,
-      },{headers:{"Cache-Control":"no-store"}});
       if (!url.search && ((path === "/toolbox/status" && ["GET","POST"].includes(request.method)) || (path === "/toolbox/start" && request.method === "POST"))) {
         if(!env.TOOLBOX)return Response.json({state:"not-installed",...(env.TOOL_PACKS?{runtime:"Cloudflare tool packs"}:{})},{status:404,headers:{"Cache-Control":"no-store"}});
         const reply=path.endsWith("status")?await env.TOOLBOX.status():await env.TOOLBOX.ready(request.headers.get(TOOLBOX_GENERATION_HEADER)??undefined);
@@ -163,16 +156,6 @@ export default {
         return Response.json(await coordinator.activateAnalysis(activation[1]!,value.revision,value.requestId,value.acknowledgeFailure===true,typeof value.definitionVersion==="number"?value.definitionVersion:0),{status:202});
       }
       if(path==="/lifecycle" && request.method==="GET")return Response.json(await coordinator.lifecycleStatus(),{headers:{"Cache-Control":"no-store"}});
-      if(["/lifecycle/prepare-upgrade","/lifecycle/finish-upgrade"].includes(path) && request.method==="POST"){
-        const input=await body(request,2048),prepare=path.endsWith("prepare-upgrade");
-        if(!Object.keys(input).every(key=>["operationId","sourceCommit",...(prepare?["previousSourceCommit"]:[])].includes(key)) ||
-          typeof input.operationId!=="string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(input.operationId) ||
-          typeof input.sourceCommit!=="string" || !/^[a-f0-9]{40}$/.test(input.sourceCommit) ||
-          (input.previousSourceCommit!==undefined&&(typeof input.previousSourceCommit!=="string"||!/^[a-f0-9]{40}$/.test(input.previousSourceCommit))))
-          throw new Error("400: valid upgrade operation and immutable source commit are required");
-        if(!prepare&&env.PENTCLOUD_RELEASE_SHA!==input.sourceCommit)throw new Error("409: deployed release does not match the upgrade source commit");
-        return Response.json(prepare?await coordinator.prepareUpgrade(input as unknown as PrepareUpgradeInput):await coordinator.finishUpgrade(input as unknown as UpgradeOperation),{headers:{"Cache-Control":"no-store"}});
-      }
       if(path==="/lifecycle/prepare-uninstall" && request.method==="POST")return Response.json(await coordinator.prepareUninstall(request.body?(await body(request)).deleteOnboarding===true:false));
       const lifecycleRoute=path.match(/^\/runs\/([A-Za-z0-9._-]+)(?:\/(archive|trash|restore|report|findings))?$/);
       if(lifecycleRoute){

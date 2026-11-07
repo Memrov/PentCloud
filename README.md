@@ -22,10 +22,10 @@ belongs to one owner or a trusted team in their own Cloudflare account. See
 
 ## Get started
 
-Open this repository in your coding assistant. The guided CLI prepares your own
-Cloudflare installation with all eleven smaller tool packages. Run `npm ci`, then
-`npm run pentcloud -- setup`. The CLI guides account, domain and owner selection,
-checks the installation and returns its app URL. See [deployment](docs/deployment.md).
+Customer setup is being redesigned around Cloudflare Workers Builds and an in-app
+setup wizard. The previous CLI installer has been removed; the replacement wizard
+and deployment button are not available yet. Existing installations continue to
+run. See [deployment status and phases](docs/deployment.md).
 
 ### Before you start
 
@@ -35,7 +35,7 @@ checks the installation and returns its app URL. See [deployment](docs/deploymen
 | Operator access | **Zero Trust Free / Access**, $0 within its 50-user limit |
 | Model access | **OpenCode Go, $10/month**, recommended for a solo first install when its catalog fits; Console pay-as-you-go is an alternative |
 | Model credential | A workspace API key with **Models → Request**, entered directly into a Cloudflare app Worker Secret |
-| Installation tools | macOS/Linux x64/arm64, Node 26.12.1 or later 26.x, Go 1.26.5, Git, Bash, npm, Python 3.11+, libarchive/bsdtar, `cf` and `cloudflared` |
+| Source development tools | Node 26.12.1 or later 26.x, Go 1.26.5, Git, Bash, npm and Python 3.11+; the planned customer wizard runs in the browser |
 
 **Starting subscriptions: $15/month with Go, plus metered usage.** This is not
 an all-inclusive assessment price. Containers, browser time, storage, logs and
@@ -44,28 +44,6 @@ starts November 12, 2026; log pricing changes December 1. Prices checked
 November 4, 2026. See [requirements, add-ons and cost details](docs/requirements.md)
 for source links, service entitlements and optional charges. You need one working
 OpenCode billing route, not both keys or a separate vendor key for each agent.
-
-<details>
-<summary>Copy the setup instructions into your coding assistant</summary>
-
-```text
-Install PentCloud in my Cloudflare account using docs/requirements.md,
-docs/cloudflare-setup.md and docs/deployment.md. Explain the required plans,
-permissions and metered costs before changing anything. Use current official
-Cloudflare documentation and CLI sign-in. I will complete login, MFA, billing
-and secret entry directly in the provider's browser or private terminal prompt.
-Keep keys and installation state out of chat and Git. Configure my own Access
-policy and Cloudflare model-secret bindings, then show the app URL and any
-setup steps I still need to complete. Do not start a scan or paid model test
-without asking me. If I need target login or API credentials, guide me through
-PENTCLOUD_TARGET_ secret bindings in docs/cloudflare-setup.md; save only their
-names on my target. Configure and check researcher connections in Dashboard →
-Bug bounty before selecting a program in Targets. Keep target login separate. Help me claim permitted test credentials once and configure
-optional authenticator or email verification using that setup guide. Preserve
-existing MX/mailbox services. Use docs/operations/debugging.md if setup fails.
-```
-
-</details>
 
 Setup reference: [Cloudflare account and OpenCode key walkthrough](docs/cloudflare-setup.md).
 For errors: [Setup and runtime debugging](docs/operations/debugging.md).
@@ -92,13 +70,13 @@ For errors: [Setup and runtime debugging](docs/operations/debugging.md).
 
 | Capability | What it gives you |
 | --- | --- |
-| **Agentic security testing** | A primary agent and specialists use browser, HTTP and tool-package capabilities for an authorized assessment. |
+| **Agentic security testing** | A primary agent and specialists use browser, HTTP and Kali capabilities for an authorized assessment. |
 | **Git-backed evidence** | Pinned inputs, captured files and accepted output commits connect results to a reviewable work history. |
 | **Durable orchestration** | Recorded state, receipts and supported recovery paths keep interruptions visible. Uncertain remote actions require reconciliation. |
 | **Separate agent sessions** | Each revision has its own OpenCode session/workspace. Specialist conversations remain individually accessible. |
 | **Source-informed testing** | Reference separate source repositories at exact per-run commits, alongside bounded document/source/config attachments. |
 | **Model flexibility** | Choose supported OpenCode models per role, including explicitly configured Console BYOK connections. |
-| **Cloudflare-native runtime** | Workers, Durable Objects, Artifacts, Browser Run and eleven on-demand tool packages run in your account. |
+| **Cloudflare-native runtime** | Workers, Durable Objects, Artifacts, Browser Run and an on-demand shared Kali Container run in your account. |
 
 Separate sessions do not mean parallel scans or a private Container for each agent.
 One mutating attempt runs at a time, with at most two waiting. Read-only preparation
@@ -179,7 +157,7 @@ See [attribution and distribution](docs/third-party-notices.md) and the [MIT lic
   allowlisting, proxies and private-network access yourself. PentCloud does not
   currently provision dedicated egress or promise anonymity.
 - **Cloud hosting has costs.** Cloudflare services and configured model providers
-  have their own charges. Tool runtimes start when needed and retire after use;
+  have their own charges. Kali starts when needed and has a 30-minute idle window;
   on-demand does not mean free. See [deployment](docs/deployment.md).
 - **One installation is a shared workspace.** Admitted operators share its data.
   Fresh installs start empty; this is not a shared public multi-tenant service.
@@ -231,9 +209,9 @@ for backend, authentication, dependency or deployment changes. See
 
 The checked-in Wrangler configs are local compilation examples. They have no
 trusted Access issuer/audience, account IDs, model-provider connection, prepared
-image or secret values. They reject application access until configured. Use the
-guided installer to generate the production configs for your own account; it
-prepares that account's eleven tool packages, private gateway and Access-protected app.
+image or secret values. They reject application access until configured. Preserve
+existing installation configurations. New customer setup is moving to Cloudflare
+Builds and an in-app wizard; see [deployment status](docs/deployment.md).
 Do not use another installation's Access issuer/audience or reuse credentials.
 
 See [security and disclosure](SECURITY.md) and [third-party notices](docs/third-party-notices.md).
