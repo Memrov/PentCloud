@@ -28,7 +28,7 @@ export function sanitizeBrowserDiagnostics(value){
   const count=item=>Number.isInteger(item)&&item>=0&&item<=20,result={};
   for(const key of ['hasRoot','documentTitlePentCloud','hasRenderedPentCloud','isAccessLoginPage','hasCloudflareChallenge','browserApiJson'])if(typeof value[key]==='boolean')result[key]=value[key];
   if(count(value.rootChildCount))result.rootChildCount=value.rootChildCount;
-  for(const [key,allowed]of [['scriptResponses',['ok','redirect','clientError','serverError']],['requestFailures',browserNetworkErrors],['runtimeErrors',browserRuntimeErrors]])if(record(value[key]))result[key]=Object.fromEntries(allowed.filter(name=>count(value[key][name])).map(name=>[name,value[key][name]]));
+  for(const [key,allowed]of [['scriptResponses',['ok','redirect','clientError','serverError']],['scriptMime',['javascript','html','other']],['scriptBodies',['empty','nonEmpty']],['consoleErrors',['mimeMismatch','cspScript','cspEval','Other']],['requestFailures',browserNetworkErrors],['runtimeErrors',browserRuntimeErrors]])if(record(value[key]))result[key]=Object.fromEntries(allowed.filter(name=>count(value[key][name])).map(name=>[name,value[key][name]]));
   if(Object.keys(result).length)return result;
 }
 

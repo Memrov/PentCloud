@@ -39,7 +39,7 @@ export default {
         checkpoint='browser-launch';
         const browser=await launch(env.BROWSER);
         let page,browserApiJson;
-        const counts={scriptResponses:{ok:0,redirect:0,clientError:0,serverError:0},requestFailures:{},runtimeErrors:{}},increment=(record,key)=>{record[key]=Math.min(20,(record[key]??0)+1);};
+        const counts={scriptResponses:{ok:0,redirect:0,clientError:0,serverError:0},scriptMime:{javascript:0,html:0,other:0},scriptBodies:{empty:0,nonEmpty:0},consoleErrors:{mimeMismatch:0,cspScript:0,cspEval:0,Other:0},requestFailures:{},runtimeErrors:{}},increment=(record,key)=>{record[key]=Math.min(20,(record[key]??0)+1);};
         try{
           checkpoint='browser-context';
           const context=await browser.newContext({serviceWorkers:'block'});
@@ -58,12 +58,19 @@ export default {
           page.on('response',response=>{try{if(response.request().resourceType()!=='script')return;const status=response.status(),key=status>=200&&status<300?'ok':status>=300&&status<400?'redirect':status>=400&&status<500?'clientError':status>=500&&status<600?'serverError':null;if(key)increment(counts.scriptResponses,key);}catch{}});
           page.on('requestfailed',request=>{try{const code=/^(?:net::)?(ERR_[A-Z_]+)(?:$|\s)/.exec(request.failure()?.errorText??'')?.[1];increment(counts.requestFailures,networkErrors.includes(code)?code:'Other');}catch{}});
           page.on('pageerror',error=>increment(counts.runtimeErrors,runtimeErrors.includes(error?.name)?error.name:'Other'));
+          page.on('console',message=>{try{if(message.type()!=='error')return;const text=message.text(),key=/MIME type|strict MIME type checking/i.test(text)?'mimeMismatch':/unsafe-eval|Refused to evaluate a string as JavaScript|Evaluating a string as JavaScript violates/i.test(text)?'cspEval':/Refused to (?:load|execute).*script|script-src|Content Security Policy directive.*script/i.test(text)?'cspScript':'Other';increment(counts.consoleErrors,key);}catch{}});
           await context.route('**/*',async route=>{
             if(new URL(route.request().url()).origin!==env.APP_ORIGIN)return route.abort();
             // route.continue header overrides survive redirects. Fetch privately
             // without following redirects, then fulfill only the exact-origin response.
             checkpoint='browser-request';httpStatus=undefined;
             const response=await route.fetch({headers:{...route.request().headers(),...input.headers},maxRedirects:0,timeout:60000});httpStatus=response.status();
+            if(route.request().resourceType?.()==='script'){
+              try{const mime=(response.headers()['content-type']??'').split(';')[0].trim().toLowerCase();increment(counts.scriptMime,/^(?:text|application)\/(?:javascript|ecmascript|x-javascript)$/.test(mime)?'javascript':['text/html','application/xhtml+xml'].includes(mime)?'html':'other');}catch{}
+              // Observe only emptiness. Script bytes remain private and are never
+              // logged, returned or substituted into fulfillment by diagnostics.
+              try{increment(counts.scriptBodies,(await response.body()).length===0?'empty':'nonEmpty');}catch{}
+            }
             try{if(response.status()>=300&&response.status()<400){checkpoint='browser-redirect';await route.abort();}else{checkpoint='browser-fulfill';await route.fulfill({response});}}
             finally{await response.dispose();}
           });

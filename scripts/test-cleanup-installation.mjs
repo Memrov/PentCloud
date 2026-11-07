@@ -59,6 +59,40 @@ test('public cleanup runs after a failed or blocked uninstall without attempting
   }finally{await rm(directory,{recursive:true,force:true});}
 });
 
+test('verify mode runs public full doctor without redeployment and preserves an absent release receipt',async()=>{
+  const {cleanupFixtureInstallation}=await implementation(),directory=await realpath(await mkdtemp(join(tmpdir(),'pentcloud-fixture-verify-'))),calls=[],output=[];
+  try{
+    const result=await cleanupFixtureInstallation({env:{...environment(directory),PENTCLOUD_FIXTURE_OPERATION:'verify'},api:account(),output:value=>output.push(value),invoke:async(_installation,command,extra=[])=>{
+      calls.push([command,...extra]);
+      return command==='doctor'?{status:'verified-package-installation',toolPacks:11,noKali:true,modelCalls:0,sourceCommit:null,ownerVerified:false}:{status:'verification-resources-cleaned'};
+    }});
+    assert.deepEqual(calls,[['doctor','--full'],['cleanup']]);
+    assert.equal(result.status,'verified-owned-fresh-fixture');assert.equal(result.sourceCommit,null);assert.equal(result.ownerVerified,false);
+    assert.equal(output.length,1);assert(!JSON.stringify(output).includes('private-owner'));
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+test('verify mode rejects incomplete native proof and still cleans its owned temporary resources',async()=>{
+  const {cleanupFixtureInstallation}=await implementation(),directory=await realpath(await mkdtemp(join(tmpdir(),'pentcloud-fixture-verify-fail-')));
+  try{
+    for(const change of [{status:'provisioned-awaiting-owner-verification'},{toolPacks:10},{noKali:false},{modelCalls:1},{sourceCommit:'PRIVATE_PERSON@example.invalid'}]){
+      const calls=[];
+      await assert.rejects(cleanupFixtureInstallation({env:{...environment(directory),PENTCLOUD_FIXTURE_OPERATION:'verify'},api:account(),output:()=>assert.fail('Incomplete verification cannot pass'),invoke:async(_installation,command)=>{
+        calls.push(command);return command==='doctor'?{status:'verified-package-installation',toolPacks:11,noKali:true,modelCalls:0,...change}:{status:'verification-resources-cleaned'};
+      }}),/CI_FIXTURE_VERIFY_INCOMPLETE/);
+      assert.deepEqual(calls,['doctor','cleanup']);
+    }
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+test('invalid fixture operations fail before an account request or public command',async()=>{
+  const {cleanupFixtureInstallation}=await implementation();
+  for(const value of ['', 'install', 'upgrade', 'VERIFY', 'verify;echo private'])await assert.rejects(cleanupFixtureInstallation({
+    env:{...environment('/tmp/fixture-not-used'),PENTCLOUD_FIXTURE_OPERATION:value},
+    api:{request:()=>assert.fail('Operation must be validated before account access')},invoke:()=>assert.fail('No command for an invalid operation'),
+  }),/CI_FIXTURE_OPERATION_INVALID/);
+});
+
 test('cleanup refuses foreign repository, hostname, account and inactive-zone settings before invoking the CLI',async()=>{
   const {cleanupFixtureInstallation}=await implementation(),directory=await realpath(await mkdtemp(join(tmpdir(),'pentcloud-fixture-scope-')));
   try{
@@ -79,4 +113,15 @@ test('wrapper failure output contains fixed stages and codes without assertion o
   assert.equal(child.status,1);assert.equal(child.stdout,'');
   const result=JSON.parse(child.stderr);assert.equal(result.error,'CI_FIXTURE_CLEANUP_FAILED');assert.equal(result.stage,'inputs');
   assert(!child.stderr.includes('PRIVATE_PERSON'));assert(!child.stderr.includes('private-owner'));assert(!child.stderr.includes('private-fixture-token'));assert(!child.stderr.includes('AssertionError'));
+});
+
+test('verify failure forwards only the shared sanitized Browser diagnostic counters',async()=>{
+  const {fixtureCleanupFailure}=await implementation();
+  const child={error:'PC_INSTALLATION_VERIFICATION',stage:'verification',check:'native-browser',browserDiagnostics:{hasRoot:true,rootChildCount:0,
+    scriptMime:{javascript:4,html:21,'PRIVATE_PERSON@example.invalid':2},scriptBodies:{empty:0,nonEmpty:4},consoleErrors:{mimeMismatch:0,Other:100},privateBody:'PRIVATE_PERSON@example.invalid'}};
+  const value=fixtureCleanupFailure({customerFailure:child},'verify');
+  assert.deepEqual(value.customerFailure.browserDiagnostics,{hasRoot:true,rootChildCount:0,scriptMime:{javascript:4},scriptBodies:{empty:0,nonEmpty:4},consoleErrors:{mimeMismatch:0}});
+  assert(!JSON.stringify(value).includes('PRIVATE_PERSON'));assert(!JSON.stringify(value).includes('privateBody'));
+  const unrelated=fixtureCleanupFailure({customerFailure:{...child,check:'tool-packs'}},'verify');
+  assert.equal(unrelated.customerFailure.browserDiagnostics,undefined);
 });
