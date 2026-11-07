@@ -161,11 +161,7 @@
       "class_name": "ResultValidation"
     }
   ],
-  "vars": {
-    "ARTIFACTS_NAMESPACE": "pentcloud",
-    "AI_GATEWAY_ID": "",
-    "PENTCLOUD_WORKER_NAME": "pentcloud"
-  },
+  "vars": {},
   "rules": [
     {
       "type": "Text",

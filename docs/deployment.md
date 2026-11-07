@@ -11,7 +11,9 @@ is sufficient within its limits. Keep your OpenCode key ready. Review
 
 1. **Deploy to Cloudflare:** choose your account, repository name and Worker name.
    Use the repository root and accept the detected `npm run build` and
-   `npm run deploy` commands. Cloudflare copies the public repository into your
+   `npm run deploy` commands. Turn **Enable Preview builds** off and leave
+   **Protect with Cloudflare Access** off; the wizard creates the compatible
+   hostname policy. Cloudflare copies the public repository into your
    GitHub/GitLab account and runs Workers Builds. No local CLI or Docker install
    is needed. The first build prepares all eleven smaller tool images.
 2. **Cloudflare:** open the deployed URL. In the wizard, enter your owner email

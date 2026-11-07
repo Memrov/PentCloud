@@ -48,7 +48,7 @@ async function setupClient(env:Pick<SetupEnv,'CF_VERSION_METADATA'>,input:Creden
     let response:Response;
     try{response=await fetcher('https://api.cloudflare.com/client/v4'+path,{...init,headers:{Authorization:`Bearer ${apiToken}`,'Content-Type':'application/json'},redirect:'manual',signal:AbortSignal.timeout(15000)});}
     catch{throw Error('503: Cloudflare could not be reached. Try again.');}
-    if(!response.ok){await response.body?.cancel();throw Error('403: Check the account, Worker name and required setup-token permissions.');}
+    if(!response.ok){await response.body?.cancel();if(response.status===404&&path===`${base}/access/organizations`)throw Error('503: Finish Cloudflare Zero Trust setup, then retry.');throw Error('403: Check the account, Worker name and required setup-token permissions.');}
     try{const value=await response.json() as {success?:boolean;result:T};if(value.success!==true)throw Error();return value.result;}
     catch{throw Error('503: Cloudflare did not confirm the change. Check its dashboard before retrying.');}
   }
@@ -69,7 +69,7 @@ export async function saveSetupKey(env:Pick<SetupEnv,'CF_VERSION_METADATA'>,inpu
 }
 export async function configureSetupAccess(env:Pick<SetupEnv,'CF_VERSION_METADATA'|'ACCESS_AUD'|'ACCESS_TEAM_DOMAIN'>,input:Record<string,unknown>,requestURL:string,fetcher:typeof fetch=fetch){
   if(env.ACCESS_AUD||env.ACCESS_TEAM_DOMAIN)throw Error('409: Access is already configured. Manage it in Cloudflare.');
-  if(Object.keys(input).some(name=>!['accountId','worker','apiToken','email','key','route'].includes(name))||typeof input.email!=='string'||input.email.length>254||!/^\S+@[^@\s]+\.[^@\s]+$/.test(input.email))throw Error('400: Enter the owner email address.');
+  if(Object.keys(input).some(name=>!['accountId','worker','apiToken','email','key','route'].includes(name))||typeof input.email!=='string'||input.email.length>254||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(input.email))throw Error('400: Enter the owner email address.');
   const secret=modelSecret(input,true),target=credentials(input),url=new URL(requestURL);
   if(url.protocol!=='https:')throw Error('400: Open the deployed HTTPS application first.');
   const {call,base,script}=await setupClient(env,target,fetcher);
