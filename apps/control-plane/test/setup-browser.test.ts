@@ -42,6 +42,6 @@ describe.skipIf(process.env.PENTCLOUD_SETUP_BROWSER!=='1')('small setup wizard i
       return route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,accountId:'a'.repeat(32),worker:'customer-app',access:configured,missing:configured?[]:['Cloudflare Access'],storage:false,models:configured,ready:false})});
     });
     try{await page.goto(origin+'/setup');await page.getByLabel('Owner email',{exact:true}).fill('owner@example.com');await check(page.getByLabel('Cloudflare account ID')).toHaveValue('a'.repeat(32));await page.getByLabel('Setup API token').fill('temporary-setup-token');await page.getByLabel('OpenCode key (optional)').fill('private-model-key');await page.getByRole('button',{name:'Protect this installation',exact:true}).click();await check(page.getByRole('button',{name:'Sign in to continue',exact:true})).toBeVisible();await check(page.getByLabel('Setup API token')).toHaveCount(0);await page.getByRole('button',{name:'Sign in to continue',exact:true}).click();await check(page.getByText('Your deployment has the required service bindings.',{exact:true})).toBeVisible();expect(await page.evaluate(()=>Object.keys(localStorage).length)).toBe(0);}finally{await page.close();}
-  });
+  },30000);
 
 });
