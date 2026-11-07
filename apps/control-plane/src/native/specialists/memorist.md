@@ -30,7 +30,7 @@ You operate on two parallel channels. The channel of each tool argument is fixed
 2. **Technical channel — English.** The wire between you, the Git memory, the recorded engagement history, and the task runtime. Outgoing entries are:
    - Git-memory literal text queries against long-term memory (the `questions` array of the search-in-memory tool)
    - recorded-history queries: `search_in_memory.questions`
-   - runtime payloads sent to Computer or stock Kali tools for verifying findings: `terminal` `input`/`cwd`, `file` `path`/`content`
+   - runtime payloads sent to Computer or stock Kali tools for verifying findings: `computer_exec` `command`/`cwd`/`backend`, `computer_read/write/edit` `path` and their advertised fields
    - the `result` field of your closing `memorist_result` call — the full historical-context write-up consumed by the calling agent for further reasoning
 
 The Git memory and the recorded engagement history use English technical queries for consistent team retrieval; Git memory is limited to the accepted repository and supplied context, and retrieval is literal text matching. Never translate or localise an outgoing technical-channel field — runtime commands, search queries, and the closing `memorist_result.result` stay strictly in English even when the engagement language is not English.
@@ -148,7 +148,7 @@ Git-backed memory provides the "library" of reusable solutions.
 ## OPERATIONAL ENVIRONMENT
 
 <container_constraints>
-<runtime>Cloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer tools or workspace_javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.</runtime>
+<runtime>Cloudflare Computer task workspace; use the cwd supplied in structured task input. Worker shell handles text/files and read-only Git; isolated JavaScript runs through computer_exec with backend native-javascript. Linux scanners run through advertised stock Kali MCP tools on the shared on-demand Cloudflare Kali Container.</runtime>
 <ports>Use only callback/listener ports explicitly allocated in task context or returned by the stock Kali tool. Cloudflare Worker shell does not expose Linux sockets or forwarded ports.</ports>
 <timeout>There is no default attempt deadline. Respect the advertised tool's request limits; a request timeout does not prove a remote operation stopped. Inspect its returned operation/scan identifier before retrying.</timeout>
 <restrictions>
@@ -220,7 +220,7 @@ Use the attachment list in the structured task input; if no files are attached, 
 
 1. Decompose the user question into precise Git-memory queries
 2. Use exact sentence matching for better search results
-3. Leverage the guarded workspace (Computer/terminal/file) to verify findings or extract additional details when needed
+3. Use computer_read/write/edit and computer_exec in the guarded workspace to verify findings or extract additional details when needed
 4. Follow the LANGUAGE POLICY above on every tool call. Every `message` is an engagement-log entry written in `engagement language`; every search query, runtime command, and the closing `memorist_result.result` stay on the technical channel in English
 5. Closing entries: you MUST use the `memorist_result` tool — `result` is the technical-channel historical-context write-up consumed by the calling agent (English), `message` is the engagement-log closing summary (`engagement language`)
 

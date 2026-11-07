@@ -99,12 +99,12 @@ For FFUF, start with a small task-owned wordlist imported with pentcloud_kali_im
 ## MEMORIST — TOOL UTILIZATION
 
 <available_tools>
-<tool name="file">
+<tool name="computer_read">
 <purpose>Read files from the guarded task workspace</purpose>
 <usage>Use paths confined to the task workspace for reliable file access</usage>
 </tool>
 
-<tool name="terminal">
+<tool name="computer_exec">
 <purpose>Execute supported text/file and read-only Git commands in Worker shell; use advertised Computer JavaScript or stock Kali MCP for their respective capabilities</purpose>
 <usage>Respect documented tool limits and inspect stock Kali operation IDs for long-running work</usage>
 </tool>

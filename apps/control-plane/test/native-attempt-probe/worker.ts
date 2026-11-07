@@ -1,11 +1,7 @@
 import type {SessionControls} from "../../src/native/managed-session";
 import {evidenceBytesHash} from "../../src/native/evidence";
-import { CodeModeTool } from "@opencode/core/codemode/tool";
-import { Tool } from "@opencode/schema/tool";
-import { Effect } from "effect";
 import { ToolboxMCP, GuardedWorkspace } from "../../src/native/tools";
 import {
-  contracts,
   supportedOptionalTools,
 } from "../../src/native/tool-policy";
 import { NativeAttempt } from "../../src/native/attempt";
@@ -370,7 +366,7 @@ export class ProbeAttempt extends NativeAttempt {
         kind === "unknown" ||
         kind === "known-running"
           ? "pentester"
-          : (kind.startsWith("memory") || kind === "computer-coder")
+          : (kind.startsWith("memory") || kind === "computer-coder" || kind === "javascript")
             ? "coder"
             : kind === "research-policy"
               ? "searcher"
@@ -485,14 +481,17 @@ export class ProbeAttempt extends NativeAttempt {
       apiRequest(input:unknown,id:string):Promise<unknown>;
       cloudflareTools(): Promise<import("../../src/native/cloudflare-tools").CloudflareTool[]>;
       callCloudflareTool(tool: import("../../src/native/cloudflare-tools").CloudflareTool, args: unknown, id: string, signal: AbortSignal): Promise<unknown>;
-      terminal(args: Record<string, unknown>): Promise<unknown>;
-      javascript(source: string): Promise<unknown>;
       publish(proposal: object): Promise<unknown>;
       callTool(name: string, args: object, callId: string): Promise<unknown>;
       captureToolEvidence(tool:string,args:Record<string,unknown>,id:string,result:unknown):Promise<void>;
       checkpointEvidence():Promise<import("../../src/native/evidence").EvidenceCheckpoint|undefined>;
     };
     const internal = this as unknown as Internals;
+    const computer = async (name: string, args: unknown) => {
+      const tool = (await internal.cloudflareTools()).find(tool => tool.name === name)!;
+      return internal.callCloudflareTool(tool, args, crypto.randomUUID(), new AbortController().signal) as Promise<{content:string}>;
+    };
+    const exec = async (command: string, backend = "native-shell") => JSON.parse((await computer("computer_exec", {command,backend})).content).value;
     if(kind === "prompt-compatibility") {
       const results = [];
       for (const format of [undefined, "pentagi-template"] as const) {
@@ -527,7 +526,7 @@ export class ProbeAttempt extends NativeAttempt {
       checks.tools=(await internal.cloudflareTools()).map(tool=>tool.name);
       const request={pack:"http" as const,request:{tool:"curl",target:"https://owned.example/"}};
       checks.result=await internal.packCall(request,"once");await internal.packCall(request,"once");
-      checks.shell=await internal.terminal({input:"echo owned",cwd:this.directory});
+      checks.shell=await exec("echo owned");
       await this.cancel();checks.execution=await this.execution();checks.runs=runs;checks.stops=stops;
       checks.readies=(await this.ctx.storage.get("fixture:readies"))??0;
       checks.initializes=(await this.ctx.storage.get("fixture:initializes"))??0;
@@ -559,14 +558,7 @@ export class ProbeAttempt extends NativeAttempt {
       return {missing,proposalAfterMissing:!!after?.proposal,outputCommit:result.outputCommit,version:committed.findings_version,modelRequests:await this.ctx.storage.get("fixture:modelRequests")??0};
     }
 
-    const shell = async (command: string) =>
-      internal.terminal({
-        input: command,
-        cwd: this.directory,
-        detach: false,
-        timeout: 30,
-        message: "local probe",
-      });
+    const shell = (command: string) => exec(command);
     const checks: Record<string, unknown> = {};
     if(kind==="sdk-live-transport"){
       await this.lifecycle.start();
@@ -634,10 +626,10 @@ export class ProbeAttempt extends NativeAttempt {
       harness.submit=async(_text,options)=>{operations.push(options.operationId);return {operationId:options.operationId,session:{}};};
       harness.wait=async operation=>{
         if(operation.startsWith("finalize-")){
-          try{await internal.callTool("terminal",{input:"echo forbidden",message:"must not run"},"forbidden");}catch{checks.mutationFenced=true;}
+          try{await computer("computer_exec",{command:"echo forbidden"});}catch{checks.mutationFenced=true;}
           const tools=await internal.cloudflareTools(),tool=tools.find(t=>t.name==="pentcloud_kali_import")!;
           try{await internal.callCloudflareTool(tool,{path:"README.md"},"forbidden-file",new AbortController().signal);}catch{checks.fileMutationFenced=true;}
-          try{await internal.javascript("export default function(){return 'forbidden'}");}catch{checks.javascriptFenced=true;}
+          try{await exec("export default function(){return 'forbidden'}", "native-javascript");}catch{checks.javascriptFenced=true;}
           await internal.callTool("code_result",{result:"Existing work finalized",message:"done"},"final-result");
         }
         return {status:"done"};
@@ -665,7 +657,7 @@ export class ProbeAttempt extends NativeAttempt {
       await internal.captureToolEvidence("fixture-command",{},"call-one",{status:"completed",output:"pushed before cancellation"});
       const execution=await this.execution();checks.evidence=execution.evidence;
       await internal.checkpointEvidence();
-      try{await internal.callTool("terminal",{input:"echo forbidden",message:"stop"},"after-cancel");}catch{checks.cancelFenced=true;}
+      try{await computer("computer_exec",{command:"echo forbidden"});}catch{checks.cancelFenced=true;}
       checks.pushes=pushes;checks.registrations=(await this.ctx.storage.get("fixture:evidenceReceipts"))??[];return checks;
     }else if(kind==="evidence-transfer"){
       const bytes=new TextEncoder().encode("config = ß\n\u0000binary-boundary");
@@ -921,7 +913,7 @@ export class ProbeAttempt extends NativeAttempt {
       await this.lifecycle.start();
       await this.lifecycle.alarm();
       checks.lifecycleStartupSkipped = !(await this.ctx.storage.get("startup"));
-      try { await internal.callTool("terminal", {input:"printf unsafe", cwd:this.directory,detach:false,timeout:30,message:"probe"}, "sealed-call"); checks.callFenced = false; }
+      try { await computer("computer_exec", {command:"printf unsafe"}); checks.callFenced = false; }
       catch { checks.callFenced = true; }
       if (kind === "platform-recovery-held") return checks;
       await this.ctx.storage.put("remote:platform-unknown", { state: "reconciled", name: "nmap_port_scan", fingerprint: "held" });
@@ -1038,6 +1030,14 @@ export class ProbeAttempt extends NativeAttempt {
         catch (error) { return {content:JSON.stringify({error:String(error)})}; }
       };
       checks.read = await call("computer_read", {path:"README.md"});
+      await this.workspace.fs.symlink(`${this.directory}/README.md`, `${this.directory}/source-link`);
+      checks.symlink = await call("computer_read", {path:"source-link"});
+      checks.captured = await call("computer_write", {path:`.pentagi/evidence/${id}/captured/forbidden.txt`,content:"forbidden"});
+      checks.retired = {};
+      for (const [name,args] of Object.entries({file:{action:"write_file",path:"README.md",content:"changed",message:"recorded"},terminal:{input:"echo changed > README.md",message:"recorded"},workspace_javascript:{source:"export default()=>42"}})) {
+        try { await internal.callTool(name,args,"recorded-legacy"); (checks.retired as Record<string,unknown>)[name] = "executed"; }
+        catch (error) { (checks.retired as Record<string,unknown>)[name] = String(error); }
+      }
       checks.write = await call("computer_write", {path:`.pentagi/evidence/${id}/computer.txt`,content:"computer native marker"});
       checks.exec = await call("computer_exec", {backend:"native-shell",command:`cat .pentagi/evidence/${id}/computer.txt`});
       checks.javascript = await call("computer_exec", {backend:"native-javascript",command:'export default async function() { return 42; }'});
@@ -1072,21 +1072,28 @@ export class ProbeAttempt extends NativeAttempt {
         `mkdir -p .pentagi/evidence/${id}; echo native-shell > .pentagi/evidence/${id}/shell.txt; cat .pentagi/evidence/${id}/shell.txt`,
       );
       checks.unsupported = await shell("nmap 127.0.0.1");
+      checks.outputWindow = await shell("seq 1 2500");
+      const tool = (await internal.cloudflareTools()).find(tool => tool.name === "computer_exec")!;
+      try { await internal.callCloudflareTool(tool,{backend:"native-shell",command:"sleep 30"},"shell-timeout",AbortSignal.timeout(25)); checks.timeout = false; }
+      catch { checks.timeout = true; }
+      checks.drainedAfterTimeout = (await this.execution()).drained;
       // Exercise the production backend: optional curl modules, real HTTP
       // egress, request options, and guarded Workspace output files.
       checks.curl = await shell(`curl --include --fail --silent --show-error --max-time 5 -X POST -H 'X-Curl-Fixture: native' --data 'curl fixture body' '${origin}/curl-fixture' > .pentagi/evidence/${id}/curl-response.txt; cat .pentagi/evidence/${id}/curl-response.txt`);
       checks.curlFile = await this.workspace.fs.readFile(`${this.directory}/.pentagi/evidence/${id}/curl-response.txt`, "utf8").catch(() => "");
     } else if (kind === "javascript") {
-      checks.scratch = await internal.javascript(
+      const javascript = (source: string) => exec(source, "native-javascript");
+      checks.scratch = await javascript(
         'import fs from "node:fs/promises"; export default async function() { await fs.writeFile("hello.txt", "isolated scratch"); console.log(await fs.readFile("hello.txt", "utf8")); }',
       );
-      checks.blockEscape = await internal.javascript(
+      checks.blockEscape = await javascript(
         'import fs from "node:fs/promises"; export default async function() { console.log(await fs.readFile("/workspace/repo/.git/config", "utf8")); }',
       );
-      checks.fileRead = await internal.javascript(
+      checks.memory = await javascript('import {call} from "ws:attempt"; export default async function() { return await call("search_code", {questions:["accepted memory"],lang:"typescript",message:"Read accepted memory"}); }');
+      checks.fileRead = await javascript(
         'import {call} from "ws:attempt"; export default async function() { console.log(await call("file", {action:"read_file",path:"README.md",message:"probe"})); }',
       );
-      checks.fileWrite = await internal.javascript(
+      checks.fileWrite = await javascript(
         'import {call} from "ws:attempt"; export default async function() { console.log(await call("file", {action:"write_file",path:"README.md",content:"changed",message:"probe"})); }',
       );
     } else if (kind === "publish" || kind === "replay") {
@@ -1128,70 +1135,6 @@ export class ProbeAttempt extends NativeAttempt {
           ref: "HEAD",
         });
       }
-    } else if (kind === "codemode") {
-      const original = contracts.get("file")!;
-      const inventory: CodeModeTool.Inventory = {
-        tools: new Map([
-          [
-            "file",
-            {
-              name: "file",
-              description: original.description,
-              input: original.input_schema,
-              options: { codemode: true },
-              execute: () =>
-                Effect.succeed({ content: [{ type: "text", text: "unused" }] }),
-            },
-          ],
-        ]),
-      };
-      const execute = (code: string) =>
-        Effect.runPromise(
-          CodeModeTool.check(
-            inventory,
-            code,
-            {},
-            { maxToolCalls: 8 },
-            (name, _tool, args) =>
-              Effect.tryPromise({
-                try: async () => ({
-                  content: [
-                    {
-                      type: "text" as const,
-                      text: JSON.stringify(
-                        await internal.callTool(
-                          name,
-                          args as object,
-                          "native-codemode-probe",
-                        ),
-                      ),
-                    },
-                  ],
-                }),
-                catch: (error) =>
-                  new Tool.Error({
-                    message:
-                      error instanceof Error ? error.message : String(error),
-                  }),
-              }),
-          ),
-        );
-      checks.read = await execute(
-        'return await tools.file({action:"read_file",path:"README.md",message:"probe"});',
-      );
-      checks.denied = await execute(
-        'return await tools.file({action:"write_file",path:"README.md",content:"changed",message:"probe"});',
-      );
-      checks.terminalUnavailable = await execute(
-        'return await tools.yield({message:"probe",plan:"stop"});',
-      );
-      checks.invalidSchema = await execute(
-        'return await tools.file({action:"read_file",path:"README.md",message:"probe",extra:true});',
-      );
-      checks.baseline = await this.workspace.fs.readFile(
-        `${this.directory}/README.md`,
-        "utf8",
-      );
     } else if (
       kind === "session" ||
       kind === "session-cleanup-failure" ||

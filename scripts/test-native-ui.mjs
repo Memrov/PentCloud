@@ -97,6 +97,7 @@ page.on('console',message=>{
 await page.route('**/v1/ui/**',async route=>{
   const request=route.request();const url=new URL(request.url());const path=url.pathname;calls.push({path,method:request.method(),body:request.postData(),headers:request.headers()});
   const json=value=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value)});
+  if(path==='/v1/ui/setup')return json({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true});
   const sse=body=>route.fulfill({status:200,contentType:'text/event-stream',headers:{'cache-control':'no-cache'},body});
   if(path==='/v1/ui/runs')return json({runs:[run,...Array.from({length:23},(_,index)=>({...run,id:`history-${String(index).padStart(2,'0')}`,status:'completed'}))]});
   if(path.endsWith('/jobs')){
@@ -143,7 +144,7 @@ await page.route('**/v1/ui/**',async route=>{
     const settled=job.status==='completed'&&!!job.outputCommit;
     const fence={type:'Error',message:'Attempt has settled'};
     const transcript=job.id==='job-state-child'?'Newer State child transcript remains selected.':'Native session transcript is ready.';
-    return sse('id: 10\nevent: snapshot\ndata: '+JSON.stringify({messages:[{id:'msg_user',type:'user',text:'Inspect the authorized fixture',time:{created:1}},{id:'msg_answer',type:'assistant',content:[{type:'reasoning',text:'Review target scope first.',time:{created:1,completed:2}},{type:'tool',id:'call-1',name:'terminal',state:{status:'completed',input:{command:'pwd'},content:[{type:'text',text:'/workspace/'+('abcdef0123456789'.repeat(80))}]}},{type:'text',text:transcript}],time:{created:1,completed:2}},...(settled?[{id:'msg_fence',type:'idle',outcome:'failed',error:fence}]:[])],pending:[],busy:false,job,cursor:10})+(settled?'\n\nid: 11\nevent: session\ndata: '+JSON.stringify({id:'evt_fence',created:4,type:'session.execution.failed',data:{sessionID:'ses_fixture',error:fence},durable:{seq:11}}):'')+'\n\nevent: end\ndata: {}\n\n');
+    return sse('id: 10\nevent: snapshot\ndata: '+JSON.stringify({messages:[{id:'msg_user',type:'user',text:'Inspect the authorized fixture',time:{created:1}},{id:'msg_answer',type:'assistant',content:[{type:'reasoning',text:'Review target scope first.',time:{created:1,completed:2}},{type:'tool',id:'call-1',name:'computer_exec',state:{status:'completed',input:{command:'pwd'},content:[{type:'text',text:'/workspace/'+('abcdef0123456789'.repeat(80))}]}},{type:'text',text:transcript}],time:{created:1,completed:2}},...(settled?[{id:'msg_fence',type:'idle',outcome:'failed',error:fence}]:[])],pending:[],busy:false,job,cursor:10})+(settled?'\n\nid: 11\nevent: session\ndata: '+JSON.stringify({id:'evt_fence',created:4,type:'session.execution.failed',data:{sessionID:'ses_fixture',error:fence},durable:{seq:11}}):'')+'\n\nevent: end\ndata: {}\n\n');
   }
   return route.fulfill({status:404,body:'unhandled fixture'});
 });
@@ -181,16 +182,16 @@ try{
  expect(JSON.parse(heldRunJobsBody).jobs.map(job=>job.id)).toEqual(['job-1']);
  const stateChild={...jobs[0],id:'job-state-child',parentJobId:'job-1',logicalThreadId:'job-state-child',role:'maintenance',tool:'maintenance',depth:1,revision:1};
  jobs.push(stateChild);broadcastState();
- const stateChildButton=page.getByRole('complementary',{name:'Run navigation'}).getByRole('button',{name:/maintenance/});
+ const stateChildButton=page.getByRole('complementary',{name:'Run navigation'}).getByRole('button',{name:'Maintenance',exact:true});
  await stateChildButton.click();
- await expect(stateChildButton).toHaveClass(/is-selected/);
+ await expect(stateChildButton).toHaveAttribute('data-active','true');
  await expect(page.getByRole('region',{name:'maintenance chat',exact:true})).toBeVisible();
  await expect(page.getByText('Newer State child transcript remains selected.',{exact:true})).toBeVisible();
  const oldRestResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/v1/ui/runs/run-1/jobs'&&response.request().method()==='GET');
  releaseHeldRunJobs();
  await (await oldRestResponse).finished();
  await page.waitForLoadState('networkidle');
- await expect(stateChildButton).toHaveClass(/is-selected/);
+ await expect(stateChildButton).toHaveAttribute('data-active','true');
  await expect(page.getByRole('region',{name:'maintenance chat',exact:true})).toBeVisible();
  await expect(page.getByText('Newer State child transcript remains selected.',{exact:true})).toBeVisible();
  expect(JSON.parse(heldRunJobsBody).jobs.map(job=>job.id)).toEqual(['job-1']);
@@ -199,13 +200,16 @@ try{
  jobs.splice(jobs.indexOf(stateChild),1);
  await page.goto(origin+'/?run=run-1&job=job-1');
  await expect(page.getByText('Native session transcript is ready.')).toBeVisible();
+ await page.getByRole('button',{name:'Conversation details',exact:true}).click();
  jobs[0].revision++;jobs[0].model='fixture-state-model';broadcastState();
  await expect(page.getByText('fixture-state-model',{exact:true})).toBeVisible();
  for(const socket of stateSockets)socket.send(JSON.stringify({type:'cf_agent_state',state:{...stateProjection(),revision:0,jobs:[{...jobs[0],model:'stale-state-model',revision:1}]}}));
  await expect(page.getByText('fixture-state-model',{exact:true})).toBeVisible();
  jobs[0].revision++;jobs[0].model='opencode-go:deepseek-v4-pro';broadcastState();
  await expect(page.getByText('opencode-go:deepseek-v4-pro',{exact:true})).toBeVisible();
- await expect(page.getByText('terminal',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Activity 1 tool',exact:true}).click();
+ await page.getByRole('button',{name:'computer exec Done',exact:true}).click();
+ await expect(page.getByText('Tool: computer_exec',{exact:true})).toBeVisible();
  await expect(page.getByText('Operator question',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Approach',{exact:false})).toHaveCount(0);
  await page.getByLabel('Continue?',{exact:false}).selectOption('true');
