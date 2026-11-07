@@ -2,10 +2,12 @@
 import {launch} from '@cloudflare/playwright';
 const packs=['recon','http','nuclei','sqlmap','service','web-context','pcap','file-analysis','password','reference','metasploit'];
 const check=(ok,message)=>{if(!ok)throw Error(message);};
+const networkErrors=['ERR_ABORTED','ERR_FAILED','ERR_BLOCKED_BY_CLIENT','ERR_BLOCKED_BY_RESPONSE','ERR_CONNECTION_CLOSED','ERR_CONNECTION_RESET','ERR_CONNECTION_REFUSED','ERR_NAME_NOT_RESOLVED','ERR_TIMED_OUT','ERR_CERT_AUTHORITY_INVALID','ERR_HTTP_RESPONSE_CODE_FAILURE','ERR_CONTENT_DECODING_FAILED','ERR_INVALID_RESPONSE'];
+const runtimeErrors=['Error','TypeError','ReferenceError','SyntaxError','RangeError','SecurityError','AbortError'];
 export default {
   async fetch(request,env){
     if(!env.CI_PROBE_TOKEN||!/^\d{13}$/.test(env.CI_PROBE_EXPIRES_AT??'')||Date.now()>=Number(env.CI_PROBE_EXPIRES_AT)||request.headers.get('Authorization')!=='Bearer '+env.CI_PROBE_TOKEN)return new Response('Not found',{status:404});
-    let input={},checkpoint,httpStatus;
+    let input={},checkpoint,httpStatus,browserDiagnostics;
     try{
       input=await request.json();
       if(input.action==='ready')return Response.json({ready:'passed'});
@@ -36,6 +38,8 @@ export default {
         check(new URL(env.APP_ORIGIN).origin===env.APP_ORIGIN&&env.APP_ORIGIN.startsWith('https://'),'Invalid app origin');
         checkpoint='browser-launch';
         const browser=await launch(env.BROWSER);
+        let page,browserApiJson;
+        const counts={scriptResponses:{ok:0,redirect:0,clientError:0,serverError:0},requestFailures:{},runtimeErrors:{}},increment=(record,key)=>{record[key]=Math.min(20,(record[key]??0)+1);};
         try{
           checkpoint='browser-context';
           const context=await browser.newContext({serviceWorkers:'block'});
@@ -43,12 +47,17 @@ export default {
           const deadline=Date.now()+60000;
           for(;;){
             const access=await context.request.get(env.APP_ORIGIN+'/v1/runs',{headers:input.headers,maxRedirects:0,timeout:15000});
-            const status=access.status();httpStatus=status;await access.dispose();
+            const status=access.status();httpStatus=status;
+            if(status===200){try{browserApiJson=Array.isArray((await access.json())?.runs);}catch{browserApiJson=false;}}
+            await access.dispose();
             if(status===200)break;
             check([302,303,401,403].includes(status)&&Date.now()<deadline,'Browser Access did not become ready');
             await new Promise(resolve=>setTimeout(resolve,2000));
           }
-          const page=await context.newPage();
+          page=await context.newPage();
+          page.on('response',response=>{try{if(response.request().resourceType()!=='script')return;const status=response.status(),key=status>=200&&status<300?'ok':status>=300&&status<400?'redirect':status>=400&&status<500?'clientError':status>=500&&status<600?'serverError':null;if(key)increment(counts.scriptResponses,key);}catch{}});
+          page.on('requestfailed',request=>{try{const code=/^(?:net::)?(ERR_[A-Z_]+)(?:$|\s)/.exec(request.failure()?.errorText??'')?.[1];increment(counts.requestFailures,networkErrors.includes(code)?code:'Other');}catch{}});
+          page.on('pageerror',error=>increment(counts.runtimeErrors,runtimeErrors.includes(error?.name)?error.name:'Other'));
           await context.route('**/*',async route=>{
             if(new URL(route.request().url()).origin!==env.APP_ORIGIN)return route.abort();
             // route.continue header overrides survive redirects. Fetch privately
@@ -63,8 +72,17 @@ export default {
           httpStatus=result?.status();
           check(result?.status()===200,'Protected app did not load in Browser Run');
           checkpoint='browser-content';
+          await page.locator('#root :text-is("PentCloud"):visible').first().waitFor({state:'visible',timeout:30000});
           check((await page.locator('body').innerText()).includes('PentCloud'),'Browser received a login page instead of PentCloud');
           return Response.json({browser:'passed',status:result.status()});
+        }catch{
+          if(page){
+            let dom;try{dom=await page.evaluate(()=>{const root=document.querySelector('#root'),url=new URL(location.href);return {hasRoot:!!root,documentTitlePentCloud:document.title.includes('PentCloud'),hasRenderedPentCloud:!!root&&root.innerText.includes('PentCloud'),isAccessLoginPage:url.pathname.startsWith('/cdn-cgi/access/')||url.hostname.endsWith('.cloudflareaccess.com')||!!document.querySelector('form[action*="/cdn-cgi/access/"]'),hasCloudflareChallenge:!!document.querySelector('#challenge-running,#challenge-stage,[name="cf-turnstile-response"]')||document.title.includes('Just a moment'),rootChildCount:Math.min(20,root?.childElementCount??0)};});}catch{}
+            browserDiagnostics={...counts,...(typeof browserApiJson==='boolean'?{browserApiJson}:{})};
+            for(const key of ['hasRoot','documentTitlePentCloud','hasRenderedPentCloud','isAccessLoginPage','hasCloudflareChallenge'])if(typeof dom?.[key]==='boolean')browserDiagnostics[key]=dom[key];
+            if(Number.isInteger(dom?.rootChildCount)&&dom.rootChildCount>=0&&dom.rootChildCount<=20)browserDiagnostics.rootChildCount=dom.rootChildCount;
+          }
+          throw Error('Installation browser probe failed');
         }finally{await browser.close();}
       }
       if(input.action==='pack'){
@@ -85,7 +103,7 @@ export default {
       return new Response('Not found',{status:404});
     }catch{
       const action=['ready','artifacts','loader','markdown','browser','pack'].includes(input?.action)?input.action:undefined;
-      return Response.json({error:'Installation probe failed',...(action?{action}:{}),...(packs.includes(input?.pack)?{pack:input.pack}:{}),...(checkpoint?{checkpoint}:{}),...(Number.isInteger(httpStatus)&&httpStatus>=100&&httpStatus<=599?{httpStatus}:{})},{status:500});
+      return Response.json({error:'Installation probe failed',...(action?{action}:{}),...(packs.includes(input?.pack)?{pack:input.pack}:{}),...(checkpoint?{checkpoint}:{}),...(Number.isInteger(httpStatus)&&httpStatus>=100&&httpStatus<=599?{httpStatus}:{}),...(browserDiagnostics?{browserDiagnostics}:{})},{status:500});
     }
   },
 };

@@ -129,7 +129,7 @@ test('shared verifier reports bounded native checks and passes private exact ima
   const previousFetch=globalThis.fetch;globalThis.fetch=async(url,options={})=>{
     const u=new URL(url);if(u.hostname==='app.customer.example')return new Response(null,{status:failure?.path===u.pathname?500:u.pathname==='/v1/toolbox/status'?404:200});
     const input=JSON.parse(options.body);requests.push(input);if(input.action==='ready')return Response.json({ready:'passed'});
-    if(failure?.action===input.action)return Response.json({error:'PRIVATE_PROVIDER_BODY',checkpoint:failure.checkpoint,provider:'PRIVATE_PROVIDER_ID',status:999,httpStatus:failure.httpStatus},{status:502});
+    if(failure?.action===input.action)return Response.json({error:'PRIVATE_PROVIDER_BODY',checkpoint:failure.checkpoint,provider:'PRIVATE_PROVIDER_ID',status:999,httpStatus:failure.httpStatus,browserDiagnostics:failure.diagnostics},{status:502});
     if(input.action==='pack'){assert.equal(input.expectedImage,images[input.pack]);return Response.json({pack:input.pack,status:'passed'});}
     return Response.json({[input.action]:'passed'});
   };
@@ -146,12 +146,14 @@ test('shared verifier reports bounded native checks and passes private exact ima
       {action:'loader',checkpoint:'loader-create',stage:'native-loader'},{action:'markdown',checkpoint:'markdown-result',stage:'native-markdown'},{action:'browser',checkpoint:'browser-navigate',stage:'native-browser'},
       {action:'browser',checkpoint:'browser-access',httpStatus:403,stage:'native-browser'},
       {action:'browser',checkpoint:'browser-request',httpStatus:999,stage:'native-browser'},
+      {action:'browser',checkpoint:'browser-content',stage:'native-browser',diagnostics:{hasRoot:true,rootChildCount:0,url:'PRIVATE_URL',runtimeErrors:{TypeError:1,message:'PRIVATE_TEXT'}}},
       {action:'browser',checkpoint:'PRIVATE_PROVIDER_BODY',stage:'native-browser'},
     ]){
       failure=scenario;
       await assert.rejects(verifyPackageInstallation({installer,root,run,temporaryDirectory:directory,sourceCommit:'d'.repeat(40),log:value=>logs.push(value)}),error=>{
         assert.equal(error.code,'PC_INSTALLATION_VERIFICATION');assert.equal(error.verificationStage,scenario.stage);assert.equal(error.probeStatus,scenario.httpStatus===403?403:scenario.path?500:502);
-        assert.equal(error.probeCheckpoint,scenario.checkpoint==='PRIVATE_PROVIDER_BODY'?undefined:scenario.checkpoint);assert(!JSON.stringify(error).includes('PRIVATE_'));return true;
+        assert.equal(error.probeCheckpoint,scenario.checkpoint==='PRIVATE_PROVIDER_BODY'?undefined:scenario.checkpoint);
+        assert.deepEqual(error.browserDiagnostics,scenario.diagnostics?{hasRoot:true,rootChildCount:0,runtimeErrors:{TypeError:1}}:undefined);assert(!JSON.stringify(error).includes('PRIVATE_'));return true;
       });
       assert.equal(p.tokens.length,0);assert.equal(p.scripts.size,0);assert.equal(p.domains.length,0);
     }
@@ -171,23 +173,42 @@ test('shared worker requires the selected pack image and always retires its runt
     });
   }finally{await rm(directory,{recursive:true,force:true});}
 });
-test('Browser probe confines service credentials to exact-origin fetches and rejects redirects',async()=>{
-  const origin='https://app.customer.example',headers={'CF-Access-Client-Id':'private-client','CF-Access-Client-Secret':'private-secret'},events=[];let handler,failFetch=false;
+test('Browser probe waits for visible rendered root content while confining credentials and redirects',async()=>{
+  const origin='https://app.customer.example',headers={'CF-Access-Client-Id':'private-client','CF-Access-Client-Secret':'private-secret'},events=[];let handler,failFetch=false,rendered=false;
   const prior=globalThis.__installationProbeLaunch;
   globalThis.__installationProbeLaunch=async()=>({async newContext(options){
     assert.equal(options.extraHTTPHeaders,undefined);assert.equal(options.serviceWorkers,'block');
-    return {request:{async get(url,options){assert.equal(url,origin+'/v1/runs');assert.equal(options.maxRedirects,0);assert.deepEqual(options.headers,headers);events.push('ready');return {status:()=>200,async dispose(){}};}},async route(pattern,callback){handler=callback;},async newPage(){return {async goto(){
+    return {request:{async get(url,options){assert.equal(url,origin+'/v1/runs');assert.equal(options.maxRedirects,0);assert.deepEqual(options.headers,headers);events.push('ready');return {status:()=>200,json:async()=>({runs:[]}),async dispose(){}};}},async route(pattern,callback){handler=callback;},async newPage(){return {async goto(){
       for(const url of [origin,origin+'/redirect','https://foreign.invalid'])await handler({request:()=>({url:()=>url,headers:()=>({accept:'text/html'})}),async fetch(options){assert.equal(new URL(url).origin,origin);assert.equal(options.maxRedirects,0);assert.equal(options.headers['CF-Access-Client-Secret'],headers['CF-Access-Client-Secret']);if(failFetch)throw Error('PRIVATE_FETCH_ERROR');events.push('fetch');return {status:()=>url.endsWith('/redirect')?302:200,async dispose(){events.push('dispose');}};},async fulfill(){events.push('fulfill');},async abort(){events.push('abort');},async continue(){throw Error('unsafe redirect propagation');}});
-      return {status:()=>200};},locator:()=>({innerText:async()=>'PentCloud'})};}};
+      return {status:()=>200};},on(){},evaluate:async()=>({hasRoot:true,documentTitlePentCloud:true,hasRenderedPentCloud:false,rootChildCount:0}),locator:selector=>({first(){return this;},async waitFor(options){assert.equal(selector,'#root :text-is("PentCloud"):visible');assert.deepEqual(options,{state:'visible',timeout:30000});rendered=true;events.push('visible');},innerText:async()=>rendered?'PentCloud':'Loading'})};}};
   },async close(){events.push('close');}});
   try{
     // Replace only the external Browser Run dependency; exercise the shipped handler.
     const source=(await readFile(join(root,'scripts/lib/installation-probe-worker.mjs'),'utf8')).replace("import {launch} from '@cloudflare/playwright';",'const launch=globalThis.__installationProbeLaunch;');
     const {default:probe}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     const response=await probe.fetch(new Request('https://probe.invalid',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'browser',headers})}),{APP_ORIGIN:origin,CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)});
-    assert.equal(response.status,200);assert.deepEqual(events,['ready','fetch','fulfill','dispose','fetch','abort','dispose','abort','close']);
+    assert.equal(response.status,200);assert.equal((await response.json()).browserDiagnostics,undefined);assert.deepEqual(events,['ready','fetch','fulfill','dispose','fetch','abort','dispose','abort','visible','close']);
     failFetch=true;
     const failed=await probe.fetch(new Request('https://probe.invalid',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'browser',headers})}),{APP_ORIGIN:origin,CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)});
-    assert.equal(failed.status,500);assert.deepEqual(await failed.json(),{error:'Installation probe failed',action:'browser',checkpoint:'browser-request'});
+    assert.equal(failed.status,500);assert.deepEqual(await failed.json(),{error:'Installation probe failed',action:'browser',checkpoint:'browser-request',browserDiagnostics:{hasRoot:true,documentTitlePentCloud:true,hasRenderedPentCloud:false,browserApiJson:true,rootChildCount:0,scriptResponses:{ok:0,redirect:0,clientError:0,serverError:0},requestFailures:{},runtimeErrors:{}}});
+  }finally{if(prior===undefined)delete globalThis.__installationProbeLaunch;else globalThis.__installationProbeLaunch=prior;}
+});
+test('Browser diagnostics admit only fixed booleans, capped counts and known error categories',async()=>{
+  const verifier=await import('./lib/installation-verify.mjs');assert.equal(typeof verifier.sanitizeBrowserDiagnostics,'function');
+  const input={hasRoot:true,documentTitlePentCloud:true,hasRenderedPentCloud:false,isAccessLoginPage:false,hasCloudflareChallenge:true,browserApiJson:false,rootChildCount:3,scriptResponses:{ok:2,redirect:0,clientError:1,serverError:0,url:'PRIVATE_URL'},requestFailures:{ERR_CONTENT_DECODING_FAILED:1,PRIVATE_URL:2,ERR_FAILED:99},runtimeErrors:{TypeError:1,PRIVATE_MESSAGE:2},url:'PRIVATE_URL',html:'PRIVATE_HTML',text:'PRIVATE_TEXT'};
+  assert.deepEqual(verifier.sanitizeBrowserDiagnostics(input),{hasRoot:true,documentTitlePentCloud:true,hasRenderedPentCloud:false,isAccessLoginPage:false,hasCloudflareChallenge:true,browserApiJson:false,rootChildCount:3,scriptResponses:{ok:2,redirect:0,clientError:1,serverError:0},requestFailures:{ERR_CONTENT_DECODING_FAILED:1},runtimeErrors:{TypeError:1}});
+  assert.equal(verifier.sanitizeBrowserDiagnostics({url:'PRIVATE_URL'}),undefined);assert.equal(verifier.sanitizeBrowserDiagnostics(null),undefined);assert.equal(verifier.sanitizeBrowserDiagnostics([]),undefined);
+});
+test('Browser failure diagnostics cap script, network and runtime counts without forwarding private values',async()=>{
+  const prior=globalThis.__installationProbeLaunch,handlers={};
+  globalThis.__installationProbeLaunch=async()=>({async newContext(){return {request:{async get(){return {status:()=>200,async dispose(){}};}},async route(){},async newPage(){return {on(name,callback){handlers[name]=callback;},async goto(){
+    for(let i=0;i<25;i++){handlers.response({request:()=>({resourceType:()=>'script'}),status:()=>200});handlers.pageerror({name:'TypeError',message:'PRIVATE_RUNTIME_MESSAGE'});}
+    handlers.response({request:()=>({resourceType:()=>'script'}),status:()=>404});handlers.requestfailed({failure:()=>({errorText:'net::ERR_CONTENT_DECODING_FAILED https://PRIVATE_URL'})});handlers.requestfailed({failure:()=>({errorText:'PRIVATE_NETWORK_MESSAGE'})});handlers.pageerror({name:'PRIVATE_RUNTIME_NAME'});return {status:()=>200};
+  },locator(){return {first(){return this;},async waitFor(){throw Error('PRIVATE_TIMEOUT_MESSAGE');}};},async evaluate(){return {hasRoot:true,documentTitlePentCloud:true,hasRenderedPentCloud:false,isAccessLoginPage:false,hasCloudflareChallenge:true,rootChildCount:0,html:'PRIVATE_HTML'};}};}};},async close(){}});
+  try{
+    const source=(await readFile(join(root,'scripts/lib/installation-probe-worker.mjs'),'utf8')).replace("import {launch} from '@cloudflare/playwright';",'const launch=globalThis.__installationProbeLaunch;')+'\n// Bounded failure diagnostic fixture\n';
+    const {default:probe}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+    const result=await probe.fetch(new Request('https://probe.invalid',{method:'POST',headers:{Authorization:'Bearer fixture-token'},body:JSON.stringify({action:'browser',headers:{'CF-Access-Client-Id':'private-id','CF-Access-Client-Secret':'private-secret'}})}),{APP_ORIGIN:'https://app.customer.example',CI_PROBE_TOKEN:'fixture-token',CI_PROBE_EXPIRES_AT:String(Date.now()+60000)});
+    assert.equal(result.status,500);const body=await result.json();assert(!JSON.stringify(body).includes('PRIVATE_'));assert.deepEqual(body.browserDiagnostics,{hasRoot:true,documentTitlePentCloud:true,hasRenderedPentCloud:false,isAccessLoginPage:false,hasCloudflareChallenge:true,browserApiJson:false,rootChildCount:0,scriptResponses:{ok:20,redirect:0,clientError:1,serverError:0},requestFailures:{ERR_CONTENT_DECODING_FAILED:1,Other:1},runtimeErrors:{TypeError:20,Other:1}});
   }finally{if(prior===undefined)delete globalThis.__installationProbeLaunch;else globalThis.__installationProbeLaunch=prior;}
 });

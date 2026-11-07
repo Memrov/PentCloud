@@ -12,7 +12,7 @@ import {withArtifactGit} from '../lib/artifact-state.mjs';
 import {REGCTL_VERSION} from '../lib/private-image.mjs';
 import {recipeIdentity} from './image-manifest.mjs';
 import {environment,client,validateAccount,waitRepo} from './artifacts.mjs';
-import {withInstallationAccess,waitForAccessReady,VERIFICATION_STAGES,PROBE_CHECKPOINTS} from '../lib/installation-verify.mjs';
+import {withInstallationAccess,waitForAccessReady,VERIFICATION_STAGES,PROBE_CHECKPOINTS,sanitizeBrowserDiagnostics} from '../lib/installation-verify.mjs';
 export {waitForProbeReady,waitForAccessReady,waitForWorkflowProof} from '../lib/installation-verify.mjs';
 
 const PACKS=['http','recon','nuclei','service','sqlmap','web-context','file-analysis','password','pcap','reference','metasploit'];
@@ -26,9 +26,11 @@ const cliStages=['arguments','prerequisites','source','authorization','private-s
 function safeCustomerFailure(text){
   let value;try{value=JSON.parse(text);}catch{return;}
   if(!value||!/^PC_[A-Z_]{2,70}$/.test(value.error??'')||!cliStages.includes(value.stage))return;
+  const browserDiagnostics=value.error==='PC_INSTALLATION_VERIFICATION'&&value.check==='native-browser'?sanitizeBrowserDiagnostics(value.browserDiagnostics):undefined;
   return {error:value.error,stage:value.stage,
     ...(VERIFICATION_STAGES.includes(value.check)?{check:value.check}:{}),
     ...(PROBE_CHECKPOINTS.includes(value.checkpoint)?{checkpoint:value.checkpoint}:{}),
+    ...(browserDiagnostics?{browserDiagnostics}:{}),
     ...(Number.isInteger(value.httpStatus)&&value.httpStatus>=100&&value.httpStatus<=599?{httpStatus:value.httpStatus}:{}),
     ...(Array.isArray(value.providerCodes)&&value.providerCodes.length<=16&&value.providerCodes.every(code=>Number.isSafeInteger(code)&&code>=0&&code<=1_000_000_000)?{providerCodes:[...value.providerCodes]}:{})};
 }

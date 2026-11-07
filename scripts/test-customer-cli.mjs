@@ -55,6 +55,8 @@ test('public output and failures exclude private metadata and assertion/provider
  const diagnostic=customerFailure(Object.assign(Error('private provider body'),{code:'PC_INSTALLATION_VERIFICATION',verificationStage:'native-browser',probeCheckpoint:'browser-navigate',probeStatus:302}),'verification');
  assert.equal(diagnostic.check,'native-browser');assert.equal(diagnostic.checkpoint,'browser-navigate');assert.equal(diagnostic.httpStatus,302);assert(!JSON.stringify(diagnostic).includes('private provider body'));
  const invalid=customerFailure(Object.assign(Error('private'),{code:'PC_INSTALLATION_VERIFICATION',verificationStage:'SECRET_MARKER',probeCheckpoint:'SECRET_MARKER',probeStatus:999}),'verification');assert(!JSON.stringify(invalid).includes('SECRET_MARKER'));assert(!invalid.httpStatus);
+ const browser=customerFailure(Object.assign(Error('private'),{code:'PC_INSTALLATION_VERIFICATION',verificationStage:'native-browser',browserDiagnostics:{hasRoot:true,runtimeErrors:{TypeError:1,SECRET_MARKER:1},url:'SECRET_MARKER',html:'SECRET_MARKER',rootChildCount:99}}),'verification');
+ assert.deepEqual(browser.browserDiagnostics,{hasRoot:true,runtimeErrors:{TypeError:1}});assert(!JSON.stringify(browser).includes('SECRET_MARKER'));
 });
 test('teardown resume and repeated removal do not need the already removed app or Access application',async()=>{
  for(const state of [{removed:true},{packageUninstall:{authorized:true}}]){

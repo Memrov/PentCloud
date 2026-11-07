@@ -20,6 +20,17 @@ export {cleanupInstallationVerification,withInstallationAccess} from './owned-pr
 export const VERIFICATION_STAGES=Object.freeze(['verification-prepare','probe-deploy','probe-secret','probe-readiness','access','access-setup','api-runs','api-onboarding','api-lifecycle','no-kali','native-loader','native-markdown','native-browser','access-cleanup','artifacts','workflow','tool-packs','doctor']);
 export const PROBE_CHECKPOINTS=Object.freeze(['loader-create','loader-fetch','markdown-convert','markdown-result','browser-launch','browser-context','browser-access','browser-request','browser-redirect','browser-fulfill','browser-navigate','browser-content','pack-ready','pack-command','pack-stop']);
 const safeHttpStatus=value=>Number.isInteger(value)&&value>=100&&value<=599;
+const browserNetworkErrors=['ERR_ABORTED','ERR_FAILED','ERR_BLOCKED_BY_CLIENT','ERR_BLOCKED_BY_RESPONSE','ERR_CONNECTION_CLOSED','ERR_CONNECTION_RESET','ERR_CONNECTION_REFUSED','ERR_NAME_NOT_RESOLVED','ERR_TIMED_OUT','ERR_CERT_AUTHORITY_INVALID','ERR_HTTP_RESPONSE_CODE_FAILURE','ERR_CONTENT_DECODING_FAILED','ERR_INVALID_RESPONSE','Other'];
+const browserRuntimeErrors=['Error','TypeError','ReferenceError','SyntaxError','RangeError','SecurityError','AbortError','Other'];
+export function sanitizeBrowserDiagnostics(value){
+  const record=item=>item!==null&&typeof item==='object'&&!Array.isArray(item);
+  if(!record(value))return;
+  const count=item=>Number.isInteger(item)&&item>=0&&item<=20,result={};
+  for(const key of ['hasRoot','documentTitlePentCloud','hasRenderedPentCloud','isAccessLoginPage','hasCloudflareChallenge','browserApiJson'])if(typeof value[key]==='boolean')result[key]=value[key];
+  if(count(value.rootChildCount))result.rootChildCount=value.rootChildCount;
+  for(const [key,allowed]of [['scriptResponses',['ok','redirect','clientError','serverError']],['requestFailures',browserNetworkErrors],['runtimeErrors',browserRuntimeErrors]])if(record(value[key]))result[key]=Object.fromEntries(allowed.filter(name=>count(value[key][name])).map(name=>[name,value[key][name]]));
+  if(Object.keys(result).length)return result;
+}
 
 export async function waitForProbeReady({request,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),timeoutMs=120000,onStatus=()=>{}}){
   const deadline=now()+timeoutMs;
@@ -79,10 +90,10 @@ export async function waitForWorkflowProof({api,path,before,identity,now=Date.no
   }
 }
 export async function verifyPackageInstallation({installer,root,run,temporaryDirectory,sourceCommit,log=()=>{}}){
-  let stage='verification-prepare',journal,probeConfig,gitDirectory,probeStatus,probeCheckpoint;
+  let stage='verification-prepare',journal,probeConfig,gitDirectory,probeStatus,probeCheckpoint,browserDiagnostics;
   const {api,config}=installer,accountId=config.accountId,instance=config.instance;
   const report=(check,status,extra={})=>log({check,status,...extra});
-  const enter=value=>{stage=value;probeStatus=undefined;probeCheckpoint=undefined;};
+  const enter=value=>{stage=value;probeStatus=undefined;probeCheckpoint=undefined;browserDiagnostics=undefined;};
   const observed=(check,status)=>{if(safeHttpStatus(status))probeStatus=status;report(check,status);};
   try{
     assert.match(sourceCommit??'',/^[a-f0-9]{40}$/,'INSTALLATION_SOURCE_COMMIT_INVALID');
@@ -119,6 +130,7 @@ export async function verifyPackageInstallation({installer,root,run,temporaryDir
       const response=await requestProbe(body),result=await response.json().catch(()=>null);
       probeStatus=safeHttpStatus(result?.httpStatus)?result.httpStatus:response.status;
       if(PROBE_CHECKPOINTS.includes(result?.checkpoint))probeCheckpoint=result.checkpoint;
+      if(body.action==='browser'&&response.status!==200)browserDiagnostics=sanitizeBrowserDiagnostics(result?.browserDiagnostics);
       report('native-'+body.action,response.status,{...(body.pack?{pack:body.pack}:{}),...(probeCheckpoint?{checkpoint:probeCheckpoint}:{}),...(safeHttpStatus(result?.httpStatus)?{httpStatus:result.httpStatus}:{})});
       assert.equal(response.status,200,'INSTALLATION_NATIVE_PROBE_FAILED');
       assert(result&&!result.error,'INSTALLATION_NATIVE_PROBE_FAILED');
@@ -166,7 +178,7 @@ export async function verifyPackageInstallation({installer,root,run,temporaryDir
     }
     enter('doctor');await installer.doctor({authenticate:false});proof.checks.push('doctor');
     report('verification','passed');return proof;
-  }catch{report(stage,'failed');throw Object.assign(Error('INSTALLATION_VERIFICATION_FAILED'),{code:'PC_INSTALLATION_VERIFICATION',verificationStage:stage,...(PROBE_CHECKPOINTS.includes(probeCheckpoint)?{probeCheckpoint}:{}),...(safeHttpStatus(probeStatus)?{probeStatus}:{})});}
+  }catch{report(stage,'failed');throw Object.assign(Error('INSTALLATION_VERIFICATION_FAILED'),{code:'PC_INSTALLATION_VERIFICATION',verificationStage:stage,...(PROBE_CHECKPOINTS.includes(probeCheckpoint)?{probeCheckpoint}:{}),...(safeHttpStatus(probeStatus)?{probeStatus}:{}),...(browserDiagnostics?{browserDiagnostics}:{})});}
   finally{
     if(journal)await cleanupInstallationVerification({api,temporaryDirectory,accountId,instance});
     if(probeConfig)await rm(probeConfig,{force:true});
