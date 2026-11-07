@@ -9,8 +9,8 @@ import {
   supportedOptionalTools,
 } from "../../src/native/tool-policy";
 import { NativeAttempt } from "../../src/native/attempt";
-import {renderLaunch,promptRendererMemory} from "../../src/native/prompts";
-import primaryPrompt from "../../../../upstream/pentagi/prompts/primary_agent.tmpl?raw";
+import {renderLaunch} from "../../src/native/prompts";
+import {specialistSources} from "../../src/native/specialist-sources";
 import { pinToolSkill } from "../../src/native/skills";
 import {recordedWorkPage} from "../../src/native/recorded-work";
 import {redact} from "../../src/native/tool-policy";
@@ -383,7 +383,7 @@ export class ProbeAttempt extends NativeAttempt {
       remote: "https://example.invalid/repo.git",
       settingsRevision: "a".repeat(64),
       settings: {
-        ...(kind.startsWith("sdk-managed-specialist")||kind==="package-only" ? { promptFormat: "markdown" as const } : {}),
+        promptFormat: "markdown",
         promptTemplate: "Probe",
         upstreamPromptDigest: "b".repeat(64),
         model: "opencode-go:deepseek-v4-pro",
@@ -493,6 +493,27 @@ export class ProbeAttempt extends NativeAttempt {
       checkpointEvidence():Promise<import("../../src/native/evidence").EvidenceCheckpoint|undefined>;
     };
     const internal = this as unknown as Internals;
+    if(kind === "prompt-compatibility") {
+      const results = [];
+      for (const format of [undefined, "pentagi-template"] as const) {
+        if (format === undefined) delete input.settings.promptFormat;
+        else input.settings.promptFormat = format;
+        input.settings.promptTemplate = "Historical {{.Cwd}}";
+        const saved = {
+          input: structuredClone(input), fingerprint: await digest(input),
+          prompt: "Previously rendered /workspace/original", promptDigest: "d".repeat(64),
+          status: "running", prepared: true, startedAt: 1,
+        };
+        await this.ctx.storage.put("attempt", saved);
+        await internal.initialize(input);
+        const replayed = await this.ctx.storage.get("attempt");
+        await this.ctx.storage.delete("attempt");
+        let error: string | undefined;
+        try { await internal.initialize(input); } catch (failure) { error = String(failure); }
+        results.push({ saved, replayed, error, created: !!await this.ctx.storage.get("attempt") });
+      }
+      return { results, modelRequests: await this.ctx.storage.get("fixture:modelRequests") ?? 0 };
+    }
     if(kind.startsWith("package-only")){
       const checks:Record<string,unknown>={};
       delete this.env.TOOLBOX;
@@ -966,14 +987,13 @@ export class ProbeAttempt extends NativeAttempt {
       await this.harness.dispose();
       await this.ctx.storage.deleteAlarm();
     } else if (kind.startsWith("sdk-role-") || kind === "sdk-startup" || kind === "sdk-searcher-tools" || kind === "sdk-memorist-tools" || kind === "sdk-pentester-tools") {
-      const launch = await renderLaunch("primary",{task:"Local harmless startup probe"},primaryPrompt,{cwd:this.directory,now:new Date(0)});
+      const launch = await renderLaunch("primary",{task:"Local harmless startup probe"},specialistSources.primary,{promptFormat:"markdown",cwd:this.directory,now:new Date(0)});
       const state = (await this.ctx.storage.get<Record<string,unknown>>("attempt"))!;
       await this.ctx.storage.put("attempt",{...state,prompt:launch.prompt,promptDigest:launch.promptDigest});
       await this.ctx.storage.put(kind === "sdk-startup" ? "fixture:stopBeforeModel" : "fixture:inspectProviderTools",true);
       await this.lifecycle.start();
       const receipt = await this.harness.submit("Stop before inference HTTP",{operationId:"local-startup-no-model"});
       checks.answer = await this.harness.wait(receipt.operationId,{session:receipt.session});
-      checks.renderer = await promptRendererMemory();
       checks.startup = await this.ctx.storage.get("startup");
       checks.messages = (await this.harness.session().history()).length;
       if(kind==="sdk-startup"){

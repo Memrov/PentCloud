@@ -9,7 +9,7 @@ interface TailProps { kind: DynamicWorkerKind; version?: RuntimeVersion }
 export class NativeDynamicWorkerTail extends WorkerEntrypoint<NativeEnv, TailProps> {
   override async tail(events: TraceItem[]): Promise<void> {
     const kind = this.ctx.props.kind;
-    if (!["prompt-renderer", "shell", "javascript"].includes(kind)) return;
+    if (!["shell", "javascript"].includes(kind)) return;
     const version = runtimeVersion({ CF_VERSION_METADATA: this.ctx.props.version });
     for (const event of events) {
       const failure = dynamicWorkerFailure(event);

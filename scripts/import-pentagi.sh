@@ -26,7 +26,7 @@ fi
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-mkdir -p "$stage/upstream/pentagi/prompts" "$stage/contracts" "$stage/backend/.pentagi-export-tools" "$stage/backend/.pentagi-render-golden" "$stage/golden"
+mkdir -p "$stage/upstream/pentagi/prompts" "$stage/contracts" "$stage/backend/.pentagi-export-tools"
 
 for name in "${prompt_names[@]}"; do
   cp "$source_dir/$name" "$stage/upstream/pentagi/prompts/$name"
@@ -67,23 +67,10 @@ PY
 
 cp -a "$upstream_root/backend/." "$stage/backend/"
 cp "$repo_root/scripts/export-tools/main.go" "$stage/backend/.pentagi-export-tools/main.go"
-cp "$repo_root/scripts/render-golden/main.go" "$stage/backend/.pentagi-render-golden/main.go"
 (
   cd "$stage/backend"
   go run -tags pentagi_import ./.pentagi-export-tools
 ) > "$stage/contracts/pentagi-tools.json"
-(
-  cd "$stage/backend"
-  go run -tags pentagi_import ./.pentagi-render-golden \
-    "$stage/upstream/pentagi/prompts/primary_agent.tmpl" \
-    "$repo_root/internal/prompts/testdata/render-cases.json" primary
-) > "$stage/golden/primary_agent.golden"
-(
-  cd "$stage/backend"
-  go run -tags pentagi_import ./.pentagi-render-golden \
-    "$stage/upstream/pentagi/prompts/pentester.tmpl" \
-    "$repo_root/internal/prompts/testdata/render-cases.json" pentester
-) > "$stage/golden/pentester.golden"
 
 python3 - "$stage/contracts/pentagi-tools.json" "$stage/contracts/pentagi-roles.json" <<'PY'
 from __future__ import annotations
@@ -137,7 +124,7 @@ payload = {"roles": roles, "optional": optional}
 roles_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 PY
 
-mkdir -p "$repo_root/upstream/pentagi" "$repo_root/contracts" "$repo_root/internal/contracts/assets" "$repo_root/internal/prompts/assets" "$repo_root/internal/prompts/testdata"
+mkdir -p "$repo_root/upstream/pentagi" "$repo_root/contracts" "$repo_root/internal/contracts/assets" "$repo_root/internal/prompts/assets"
 rm -rf "$repo_root/upstream/pentagi/prompts"
 cp -a "$stage/upstream/pentagi/prompts" "$repo_root/upstream/pentagi/prompts"
 cp "$stage/upstream/pentagi/manifest.json" "$repo_root/upstream/pentagi/manifest.json"
@@ -147,5 +134,3 @@ cp "$stage/contracts/pentagi-tools.json" "$repo_root/internal/contracts/assets/p
 cp "$stage/contracts/pentagi-roles.json" "$repo_root/internal/contracts/assets/pentagi-roles.json"
 rm -rf "$repo_root/internal/prompts/assets"
 cp -a "$stage/upstream/pentagi/prompts" "$repo_root/internal/prompts/assets"
-cp "$stage/golden/primary_agent.golden" "$repo_root/internal/prompts/testdata/primary_agent.golden"
-cp "$stage/golden/pentester.golden" "$repo_root/internal/prompts/testdata/pentester.golden"

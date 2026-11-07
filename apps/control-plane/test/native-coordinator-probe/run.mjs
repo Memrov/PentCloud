@@ -582,7 +582,7 @@ await fixture(async () => {
   await get("/release?id=" + created.rootJob.id);
 });
 await fixture(async () => {
-  for (const kind of ["roles", "template", "type"]) {
+  for (const kind of ["roles", "template", "missing-format", "type"]) {
     const rejected = await get("/invalid-settings?kind=" + kind, 500);
     assert.match(
       rejected.error,

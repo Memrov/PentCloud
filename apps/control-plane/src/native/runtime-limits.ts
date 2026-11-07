@@ -1,9 +1,8 @@
-export type DynamicWorkerKind = "prompt-renderer" | "shell" | "javascript";
+export type DynamicWorkerKind = "shell" | "javascript";
 export type DynamicWorkerBudget = Required<workerdResourceLimits>;
 
 /** Per invocation compute/I/O bounds; these impose no attempt lifetime deadline. */
 export const dynamicWorkerBudgets = {
-  "prompt-renderer": { cpuMs: 30000, subRequests: 1 },
   shell: { cpuMs: 30000, subRequests: 256 },
   javascript: { cpuMs: 30000, subRequests: 256 },
 } satisfies Record<DynamicWorkerKind, DynamicWorkerBudget>;

@@ -48,8 +48,8 @@ const jobs = [
   {id:'job-legacy-no-metadata',runId:run.id,role:'adviser',tool:'adviser',depth:1,status:'failed',revision:3},
 ];
 const roleIds=['primary','adviser','coder','maintenance','memorist','pentester','searcher'];
-const roles=Object.fromEntries(roleIds.map(id=>[id,{promptTemplate:`\t${id} template {{ .Task }}\r\n  original guidance  \r\n\r\n`,upstreamPromptDigest:'a'.repeat(64),model:'opencode-go:deepseek-v4-pro',reasoningEffort:'default'}]));
-let settings={settings:{schemaVersion:1,revision:'b'.repeat(64),upstreamManifestDigest:'c'.repeat(64),savedAt:'2026-10-31T00:00:00Z',savedBy:'fixture-operator',roles},casRevision:3,locked:false,blockingRunIds:[],upstreamRoles:Object.fromEntries(roleIds.map(id=>[id,{promptTemplate:roles[id].promptTemplate,upstreamPromptDigest:'a'.repeat(64)}]))};
+const roles=Object.fromEntries(roleIds.map(id=>[id,{promptFormat:"markdown",promptTemplate:`\t${id} template {{ .Task }}\r\n  original guidance  \r\n\r\n`,upstreamPromptDigest:'a'.repeat(64),model:'opencode-go:deepseek-v4-pro',reasoningEffort:'default'}]));
+let settings={settings:{schemaVersion:1,revision:'b'.repeat(64),upstreamManifestDigest:'c'.repeat(64),savedAt:'2026-10-31T00:00:00Z',savedBy:'fixture-operator',roles},casRevision:3,locked:false,blockingRunIds:[],upstreamRoles:Object.fromEntries(roleIds.map(id=>[id,{promptFormat:"markdown",promptTemplate:`# ${id} default instructions`,upstreamPromptDigest:'a'.repeat(64)}]))};
 const catalog={models:[{id:'opencode-go:deepseek-v4-pro',name:'DeepSeek V4 Pro',provider:'opencode-go',contextLength:128000,inputModalities:['text'],outputModalities:['text'],supportedParameters:[],reasoningEfforts:['default']}],fetchedAt:'2026-10-31T00:00:00Z',stale:false};
 catalog.models.push(
   {...catalog.models[0],id:'anthropic/claude-fixture',name:'Claude Fixture',provider:'anthropic',reasoningEfforts:['low','high']},
@@ -267,11 +267,16 @@ try{
  await assertHealthy('dashboard');
  const dashboard=join(screenshotDir, 'dashboard-desktop.png');await page.screenshot({path:dashboard});shots.push(dashboard);
  settings.settings.roles.primary.model='retired/saved-model';
+ delete settings.settings.roles.primary.promptFormat;
  const originalSettingsRoles=structuredClone(settings.settings.roles);
  const promptDraft='\tPrimary revised template {{- if .Task }}\n  {{ .Task }}  \n{{ end -}}\n\n';
  await page.goto(origin+'/settings');
  await expect(page.getByRole('heading',{name:'Prompts and models'})).toBeVisible();
- await expect(page.getByRole('combobox',{name:'Instruction format',exact:true})).toContainText('Go template');
+ await expect(page.getByRole('status').filter({hasText:'Go template execution is retired'})).toBeVisible();
+ await expect(page.getByLabel('Primary prompt template')).toHaveValue(originalSettingsRoles.primary.promptTemplate.replaceAll('\r\n','\n'));
+ await page.getByRole('button',{name:'Reset to default',exact:true}).click();
+ await expect(page.getByLabel('Primary prompt template')).toHaveValue('# primary default instructions');
+ expect(settings.settings.roles.primary).toEqual(originalSettingsRoles.primary);
  const modelSearch=page.getByRole('combobox',{name:'Search connected models',exact:true});
  const selectedModel=page.locator('.settings-model-selection');
  await expect(modelSearch).toHaveValue('retired/saved-model');
@@ -347,7 +352,7 @@ try{
  await expect(page.getByRole('status').filter({hasText:'Saved revision dddddddddddd'})).toBeVisible();
  expect(calls.some(call=>call.method==='PUT'&&call.path==='/v1/ui/settings'&&call.headers['if-match']==='3')).toBe(true);
  const savedRoles=JSON.parse(calls.find(call=>call.method==='PUT'&&call.path==='/v1/ui/settings').body).roles;
- expect(savedRoles.primary).toEqual({...originalSettingsRoles.primary,promptTemplate:promptDraft,model:'anthropic/claude-fixture',reasoningEffort:'low'});
+ expect(savedRoles.primary).toEqual({...originalSettingsRoles.primary,promptFormat:'markdown',promptTemplate:promptDraft,model:'anthropic/claude-fixture',reasoningEffort:'low'});
  for(const role of roleIds.filter(role=>role!=='primary'))expect(savedRoles[role]).toEqual(originalSettingsRoles[role]);
  await assertHealthy('settings');
  const settingsShot=join(screenshotDir, 'settings-desktop.png');await page.screenshot({path:settingsShot});shots.push(settingsShot);
@@ -357,7 +362,6 @@ try{
  await expect(modelSearch).toBeDisabled();
  await expect(page.getByLabel('Primary prompt template')).toBeDisabled();
  await expect(page.getByRole('combobox',{name:'Reasoning effort',exact:true})).toBeDisabled();
- await expect(page.getByRole('combobox',{name:'Instruction format',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Reset to default',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Apply to all roles',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Validate and save',exact:true}).first()).toBeDisabled();

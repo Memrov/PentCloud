@@ -16,7 +16,7 @@ and the installed Go compiler, and prepare the Go/Wasm assets themselves.
 | `npm run test:workers:watch` | Watch native Worker tests |
 | `npm run verify` | App checks and production bundle |
 | `npm run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
-| `npm run verify:full` | Both Worker gates, Go/renderer, auth, lifecycle, Git publication and recovery checks |
+| `npm run verify:full` | Both Worker gates, Go specialist generation, auth, lifecycle, Git publication and recovery checks |
 | `npm run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
 | `npm run test:browser` | Attachment/browser fixtures; requires installed Chrome |
 
@@ -77,7 +77,10 @@ approvals.
 
 ## Prompt sources
 
-The original PentAGI templates and golden rendering fixtures are preserved.
+The original PentAGI templates and their import/provenance hashes are preserved.
+Go template execution is retired for new settings and launches; reset historical
+roles to Markdown in settings before starting new work. Historical settings and
+already-rendered attempts retain their original bytes and digests.
 Regenerate the native Markdown defaults with `go run ./scripts/native-specialists`
 and check them with `go run ./scripts/native-specialists -check`.
 The full gate verifies deterministic generation and original prompt hashes.

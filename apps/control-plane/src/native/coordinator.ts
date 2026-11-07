@@ -27,9 +27,7 @@ import {
   type AgentSettings,
   type RoleSettings,
 } from "../settings/catalog";
-import reporterPrompt from "../../../../upstream/pentagi/prompts/reporter.tmpl?raw";
 import { specialistSources } from "./specialist-sources";
-import { renderLaunch } from "./prompts";
 import { memoryRecovery, recoveryPending, runtimeVersion, type RuntimeRecovery } from "./runtime-diagnostics";
 import { knownRuntimeSecrets } from "../../../../shared/runtime-secrets";
 import { TargetDefinitions, type TargetDefinition } from "./target-definitions";
@@ -1176,27 +1174,6 @@ export class Coordinator extends DurableObject<NativeEnv> {
     for (const role of ACTIVE_ROLES) {
       if (!/^(opencode-go|opencode):[A-Za-z0-9][A-Za-z0-9._~/-]{0,180}$/.test(settings.roles[role].model))
         throw new Error("400: choose an OpenCode Console or Go model");
-      try {
-        await renderLaunch(
-          role,
-          {
-            task: "Validate role template",
-            question: "Validate role template",
-            instructions: "Validate role template",
-          },
-          settings.roles[role].promptTemplate,
-          { now: new Date(0), ...(settings.roles[role].promptFormat ? { promptFormat: settings.roles[role].promptFormat } : {}) },
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (
-          /^(?:parse|render) prompt |^prompt template override is empty/.test(
-            message,
-          )
-        )
-          throw new Error(`400: ${role} template validation: ${message}`);
-        throw error;
-      }
     }
     this.ctx.storage.transactionSync(() => {
       const current = this.get<{ revision: number }>("settings:current");
@@ -1748,6 +1725,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
     if (outstanding(this.admissionJobs()) >= 3)
       throw new Error("429: queue full");
     const current = await this.settings();
+    if (ACTIVE_ROLES.some(role => current.settings.roles[role].promptFormat !== "markdown"))
+      throw new Error("400: Legacy prompt template execution is retired; reset legacy roles to Markdown instructions in settings before starting a new run");
     if (uploadIds.length) await this.materials.selection(id, uploadIds);
     const creationInput:NewRunInput={run_id:id,task:input.task,target_id:input.target_id,target_revision:input.target_revision!,authorized:true,...(input.launch_time?{launch_time:input.launch_time}:{}),...(uploadIds.length?{upload_ids:uploadIds}:{})};
     const intent=this.get<{input:NewRunInput}>("onboarding:creation:"+id);
@@ -1839,7 +1818,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     identifier(id);
     const settings: RoleSettings =
       role === "reporter"
-        ? { ...run.settings.roles.primary, promptTemplate: run.settings.roles.primary.promptFormat === "markdown" ? specialistSources.reporter : reporterPrompt }
+        ? { ...run.settings.roles.primary, promptTemplate: run.settings.roles.primary.promptFormat === "markdown" ? specialistSources.reporter : run.settings.roles.primary.promptTemplate }
         : run.settings.roles[role];
     const input: AttemptInput = {
       id,

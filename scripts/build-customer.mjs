@@ -33,7 +33,6 @@ const run=(command,args,cwd=root)=>execFileSync(command,args,{cwd,stdio:'inherit
 run('tar',['-xzf','source.tgz','--strip-components','1'],root+'/.pentcloud-tools');
 // The Docker preparation stage needs the pinned source, not host-specific tools or caches.
 await writeFile(new URL('../.pentcloud-tools/.dockerignore',import.meta.url),'.cache/\nnode_modules/\n.git/\nsource.tgz\n');
-run('npm',['run','build:prompts']);
 run('npm',['exec','--workspace','@pentagi-artifacts/control-plane','--','vite','build']);
 run(process.execPath,['scripts/build-native-app.mjs','--config','wrangler.jsonc']);
 

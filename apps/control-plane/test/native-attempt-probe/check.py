@@ -28,9 +28,12 @@ assert packages['execution']['drained'] and not packages['execution']['sessionCl
 assert 'bounded profiles' in packages['prompt'] and 'pentcloud_tool' in packages['skill'], packages
 assert 'Kali tools are unavailable' in packages['skill'], packages
 assert 'pentcloud_tool' in packages['shell']['capability'], packages
-_, package_template = probe('package-only-template')
-assert 'bounded profiles' in package_template['prompt'] and 'Kali tools are unavailable' in package_template['prompt'], package_template
-assert package_template['readies'] == package_template['initializes'] == 0 and package_template['execution']['drained'], package_template
+_, compatibility = probe('prompt-compatibility')
+for case in compatibility['results']:
+    assert case['saved'] == case['replayed'], case
+    assert 'template execution is retired' in case['error'] and 'Markdown' in case['error'], case
+    assert not case['created'], case
+assert compatibility['modelRequests'] == 0, compatibility
 # Exercise different DOs concurrently: unique Git directories must prevent global
 # isomorphic-git locks from crossing DO-owned SQLite I/O contexts.
 with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:
@@ -289,7 +292,7 @@ assert not stale_inventory['after']['drained'] and stale_inventory['terminate'][
 startup = results['sdk-startup']
 assert not startup['storedModelSecret'], 'Native SDK session storage must not persist the binding value'
 assert startup['startup']['stage'] == 'model.request.ready' and startup['startup']['promptCharacters'] > 1000, startup
-assert startup['renderer']['isolated'] and startup['renderer']['linearMemoryBytes'] > 0 and startup['messages'] == 2, startup
+assert startup['messages'] == 2, startup
 assert startup['answer']['status'] == 'unanswered' and startup['answer']['reason'] == 'failed', startup
 import pathlib
 browser_schema = next(tool['input_schema'] for tool in json.loads((pathlib.Path(__file__).resolve().parents[4]/'contracts/pentagi-tools.json').read_text())['tools'] if tool['name']=='browser')

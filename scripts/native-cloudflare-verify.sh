@@ -34,7 +34,6 @@ if [[ "$worker" != gateway ]]; then
   export PENTCLOUD_GO_BINARY="$native_go"
   export GO_BIN="$native_go"
   export PATH="$(dirname -- "$native_go"):$PATH"
-  npm run build:prompts
   npm run types --workspace @pentagi-artifacts/control-plane
   npm run typecheck --workspace @pentagi-artifacts/control-plane
   npm run typecheck --workspace @pentcloud/tool-packs
@@ -53,7 +52,6 @@ if [[ "$worker" != gateway ]]; then
     node scripts/test-native-run-lifecycle.mjs
     node --test apps/control-plane/test/native-kali-canary/contract.node.mjs
     npm run test:integration
-    node scripts/test-prompt-renderer.mjs
   fi
   if (( ! check_only )); then
     npm run deploy:dry-run --workspace @pentagi-artifacts/control-plane

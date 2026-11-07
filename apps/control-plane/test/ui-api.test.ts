@@ -117,6 +117,7 @@ describe("operator UI API client", () => {
     const roles = Object.fromEntries(SETTINGS_ROLES.map(({ id }) => [id, {
       promptTemplate: `${id} prompt`, upstreamPromptDigest: "a".repeat(64), model: "openai/gpt-6-sol", reasoningEffort: "max",
     }])) as SettingsRoles;
+    roles.primary.promptFormat = "pentagi-template";
     const settings = {
       settings: { schemaVersion: 1, revision: "b".repeat(64), upstreamManifestDigest: "c".repeat(64), savedAt: "2026-10-30T00:00:00.000Z", savedBy: "operator@example.com", roles },
       casRevision: 3,
@@ -133,7 +134,10 @@ describe("operator UI API client", () => {
       .mockResolvedValueOnce(json(models))
       .mockResolvedValueOnce(json({ ...settings, casRevision: 4 }));
 
-    await expect(getSettings(fetcher)).resolves.toMatchObject({ casRevision: 3, settings: { roles: { primary: { model: "openai/gpt-6-sol" } } } });
+    const historical = await getSettings(fetcher);
+    expect(historical.settings).toEqual(settings.settings);
+    expect(historical.settings.roles.primary.promptFormat).toBe("pentagi-template");
+    expect(historical.settings.roles.coder).not.toHaveProperty("promptFormat");
     await expect(listSettingsModels(true, fetcher)).resolves.toMatchObject({ models: [{ provider: "openai" }] });
     await expect(saveSettings(roles, 3, fetcher)).resolves.toMatchObject({ casRevision: 4 });
     expect(fetcher).toHaveBeenNthCalledWith(2, "/v1/ui/settings/models?refresh=1", {});

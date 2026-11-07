@@ -650,6 +650,7 @@ export class ProbeCoordinator extends Coordinator {
       roles.primary.promptTemplate = "{{if}}";
       roles.primary.promptFormat = "pentagi-template";
     }
+    if (kind === "missing-format") delete roles.primary.promptFormat;
     if (kind === "type")
       roles.primary.promptTemplate = 123 as unknown as string;
     if (kind === "infrastructure") {

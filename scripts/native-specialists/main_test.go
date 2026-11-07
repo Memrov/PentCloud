@@ -8,9 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/Memrov/pentagi-artifacts/internal/contracts"
-	"github.com/Memrov/pentagi-artifacts/internal/prompts"
+	"text/template"
 )
 
 func repository(t *testing.T) string {
@@ -52,13 +50,18 @@ func TestAllSourceSectionsAndParagraphsAreAccountedFor(t *testing.T) {
 		if len(role.Sections) < 10 {
 			t.Errorf("%s has suspiciously few sections", role.Role)
 		}
-		// Independently render through the legacy production renderer. This
+		// Independently render the pinned original with Go text/template. This
 		// catches accidental omissions by the generator's section/paragraph
 		// iterator and proves original substitution/branch semantics survive.
-		rendered, _, err := prompts.Render(contracts.Role(role.Role), prompts.RenderData(renderData()))
+		tmpl, err := template.New(role.Role).Parse(string(original))
 		if err != nil {
 			t.Fatal(err)
 		}
+		var output bytes.Buffer
+		if err := tmpl.Execute(&output, renderData()); err != nil {
+			t.Fatal(err)
+		}
+		rendered := output.Bytes()
 		if digest(rendered) != role.RenderedSHA256 {
 			t.Errorf("%s differs from legacy Go rendering", role.Role)
 		}

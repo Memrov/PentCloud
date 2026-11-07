@@ -60,7 +60,7 @@ import {selectionManifest} from "./materials";
 import {SOURCE_INSTRUCTIONS} from "./source-context";
 import {assertPreparationPromotion,preparationTool,PREPARATION_INSTRUCTIONS} from "./preparation";
 import type { MaterialSelection } from "./materials";
-import { renderLaunch } from "./prompts";
+import { assertMarkdownPromptFormat, renderLaunch } from "./prompts";
 import { embeddedToolSkill, pinToolSkill, type PinnedToolSkill } from "./skills";
 import { observe, workspaceObserver } from "./observe";
 import { dynamicWorkerTails } from "./dynamic-worker-tail";
@@ -884,6 +884,10 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     const previous=await this.ctx.storage.get<AttemptState>("attempt");
     if(previous && !(previous.preparation&&!preparation&&!previous.result) && previous.fingerprint!==digest)
       throw new Error("409: attempt identity cannot be reused with different input/settings");
+    // Reject obsolete new executions before the concurrency gate: validation
+    // must not reset a host that may still hold an already-rendered attempt.
+    if (!input.execution && (!previous || (previous.preparation && !preparation && !previous.result)))
+      assertMarkdownPromptFormat(input.settings.promptFormat);
     await this.ctx.blockConcurrencyWhile(async () => {
       await this.assertNotPurged();
       const state = await this.ctx.storage.get<AttemptState>("attempt");

@@ -8,7 +8,6 @@
     "infra/tool-packs"
   ],
   "scripts": {
-    "build:prompts": "bash scripts/build-prompt-renderer.sh",
     "test": "npm run test:unit && npm run test:workers",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "verify": "bash scripts/native-cloudflare-verify.sh",
