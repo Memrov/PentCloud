@@ -7,16 +7,17 @@ external model/scanner services.
 
 Use Node 26.12.1 or a compatible later 26.x, Go 1.26.5 and Python 3.11+.
 Run `npm ci` after checkout or a lockfile change. The gates reuse dependencies
-and the installed Go compiler, and prepare the Go/Wasm assets themselves.
+and the installed Go compiler. Go checks the preserved prompt sources and generated
+Markdown defaults; it is not part of the deployed prompt renderer.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run check` | App types, prompt preservation, unit/native API and source-map checks |
+| `npm run check` | App types, prompt preservation and unit/native API checks |
 | `npm run test:watch` | Watch unit tests |
 | `npm run test:workers:watch` | Watch native Worker tests |
-| `npm run verify` | App checks and production bundle |
+| `npm run verify` | App checks, Vite production build, compiled stack/map checks and Wrangler dry run |
 | `npm run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
-| `npm run verify:full` | Both Worker gates, Go/renderer, auth, lifecycle, Git publication and recovery checks |
+| `npm run verify:full` | Both Worker gates, Go specialist generation, auth, lifecycle, Git publication and recovery checks |
 | `npm run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
 | `npm run test:browser` | Attachment/browser fixtures; requires installed Chrome |
 
@@ -70,14 +71,49 @@ both shipped migration histories are accepted without rewriting migration tags.
 Required secret names are declared for generated types; their values stay bound.
 Keep actual API keys in bound Worker secrets; the JSON must contain
 configuration metadata only. Never upload the generated config or deployment
-logs as public CI artifacts. Use the existing app deploy helper to preserve the
-prebuilt module catalog and source maps. Protect `main` with passing GitHub
-checks; Cloudflare's push-triggered build does not wait for GitHub environment
+logs as public CI artifacts. Vite builds the client and Worker together; deploy
+with `npm run deploy --workspace @pentagi-artifacts/control-plane`. That command
+builds and uses `dist/worker/wrangler.json`, the native generated config. Existing
+private build metadata with Wrangler minify/Text rules is normalized to the Vite
+source configuration without changing installation identity or migration history.
+If an existing native Builds connection still uses
+`node scripts/deploy-native-app.mjs`, change its deploy command to
+`npm run deploy --workspace @pentagi-artifacts/control-plane` before selecting
+this source revision. That npm command also works with the previous source
+revision. The customer/root connection continues to use `npm run build` and
+`npm run deploy`. These are configuration instructions; no existing connection
+is changed by the repository update.
+
+Protect `main` with passing GitHub checks; Cloudflare's push-triggered build does not wait for GitHub environment
 approvals.
 
 ## Prompt sources
 
-The original PentAGI templates and golden rendering fixtures are preserved.
+The original PentAGI templates and their import/provenance hashes are preserved.
+Go template execution is retired for new settings and launches; reset historical
+roles to Markdown in settings before starting new work. Historical settings and
+already-rendered attempts retain their original bytes and digests.
 Regenerate the native Markdown defaults with `go run ./scripts/native-specialists`
 and check them with `go run ./scripts/native-specialists -check`.
 The full gate verifies deterministic generation and original prompt hashes.
+
+## Worker build output
+
+The pinned [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/vite-plugin/)
+uses one `worker` environment. The app build emits assets and generated config
+under `apps/control-plane/dist/`; the customer build uses the separate sibling
+`apps/control-plane/dist-customer/`. Customer mode selects the root source config
+with `vite build --mode customer`; the ordinary app build selects the app source
+config and retains its gateway binding. Root `npm run deploy` explicitly uses
+`apps/control-plane/dist-customer/worker/wrangler.json`; app deployment uses
+`dist/worker/wrangler.json` from the app workspace. Building either target leaves
+the other's output intact. A missing target config fails deployment instead of
+falling back to the other Worker. Build the intended target before deploying it.
+
+Worker maps omit `sourcesContent` through Rolldown's `sourcemapExcludeSources`.
+`upload_source_maps: true` makes Wrangler reject missing maps. The build checks
+every emitted Worker map against the 60 MiB raw/15 MiB gzip limits and executes
+the real compiled identifier validator to map its exception back to TypeScript.
+There is no second bundling or map-rewriting pass. Browser-only fixtures select
+`--mode browser-fixture`; normal Vite development and preview use the Workers
+runtime. Vitest's `test` mode disables the build plugins.

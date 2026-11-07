@@ -3,7 +3,7 @@ import {prepareSetupStorage,saveSetupKey,setupStatus} from '../src/native/setup'
 
 describe('small first-run setup',()=>{
   it('checks native connections without creating resources or exposing secrets',async()=>{
-    const create=vi.fn(),repo={info:async()=>({id:'repo'}),revokeToken:async()=>{},listTokens:async()=>({tokens:[]}),[Symbol.dispose]:()=>{}},env={ARTIFACTS:{get:async()=>repo,create},COORDINATOR:{},ATTEMPTS:{},MODEL_TESTS:{},RESULTS:{},BROWSER:{},AI:{},LOADER:{},CF_VERSION_METADATA:{id:'fixture'},TOOL_PACKS:{},OPENCODE_GO_API_KEY:'private-key'};
+    const create=vi.fn(),repo={info:async()=>({id:'repo'}),revokeToken:async()=>{},listTokens:async()=>({tokens:[]}),[Symbol.dispose]:()=>{}},env={ARTIFACTS:{get:async()=>repo,create},COORDINATOR:{},ATTEMPTS:{},MODEL_TESTS:{},BROWSER:{},AI:{},LOADER:{},CF_VERSION_METADATA:{id:'fixture'},TOOL_PACKS:{},OPENCODE_GO_API_KEY:'private-key'};
     const status=await setupStatus(env);
     expect(status.ready).toBe(true);expect(create).not.toHaveBeenCalled();expect(JSON.stringify(status)).not.toContain('private-key');
   });

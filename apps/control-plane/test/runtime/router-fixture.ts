@@ -11,11 +11,9 @@ export default {fetch(request:Request,env:RuntimeFixtureEnv){
     async ready(generation?:string){await coordinator.noteRemote("toolboxReady",JSON.stringify([generation??null]));return generation?{error:"generation_lost"}:{state:"booting",generation:"fixture-generation"};},
   }} as unknown as Parameters<typeof worker.fetch>[1]);
 }};
-export { ResultValidation } from "../../src/native/worker";
 export interface RuntimeFixtureEnv {
   COORDINATOR: DurableObjectNamespace<RouterControl>;
   ATTEMPTS: DurableObjectNamespace<RouterAttempt>;
-  RESULTS: Workflow<unknown>;
   CONTROL_TOKEN: string;
   OPENCODE_GO_API_KEY: string;
 }
@@ -181,10 +179,6 @@ export class RouterControl extends DurableObject<RuntimeFixtureEnv> {
   async reconcileToolOutcome(id: string) {
     this.record("reconcileToolOutcome", id);
     return { reconciling: true };
-  }
-  async reconcile(repoName: string, ref: string, commit: string) {
-    this.record("reconcile", repoName, ref, commit);
-    return repoName==="run-fixture"&&ref==="refs/heads/attempts/job-1"?{ accepted: true }:{ ignored: true };
   }
   override async fetch(request: Request) {
     this.record("fetch", request.url, request.headers.get("Upgrade"));

@@ -22,7 +22,7 @@ const ready = (id: string, runId: string, name: string, body: Buffer) => {
   return {id, runId, name, sha256, size: body.length, mediaType: "text/plain", kind: "text", status: "ready", sourcePath: `.pentagi/materials/${sha256}/source`, textPath: `.pentagi/materials/${sha256}/source`};
 };
 beforeAll(async () => {
-  server = await createServer({root: fileURLToPath(new URL("../", import.meta.url)), mode: "development", server: {host: "127.0.0.1", port: 0}});
+  server = await createServer({root: fileURLToPath(new URL("../", import.meta.url)), mode: "browser-fixture", server: {host: "127.0.0.1", port: 0}});
   await server.listen();
   origin = server.resolvedUrls!.local[0]!;
   browser = await chromium.launch({channel: "chrome", headless: true});

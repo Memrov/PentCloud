@@ -1,9 +1,24 @@
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { cloudflare } from '@cloudflare/vite-plugin';
 import { defineConfig } from 'vite';
 
-// Vite owns the browser bundle; Wrangler owns the Worker bundle and bindings.
-export default defineConfig(({mode}) => ({
-  plugins: mode === 'test' ? [] : [react(), tailwindcss()],
-  build: {outDir: 'dist/client'},
+export default defineConfig(({ mode }) => ({
+  plugins: mode === 'test' ? [] : [
+    react(), tailwindcss(),
+    ...(mode === 'browser-fixture' ? [] : [cloudflare({
+      configPath: mode === 'customer' ? '../../wrangler.jsonc' : './wrangler.jsonc',
+      viteEnvironment: { name: 'worker' },
+    })]),
+  ],
+  build: { outDir: mode === 'customer' ? 'dist-customer' : mode === 'browser-fixture' ? 'dist/client' : 'dist' },
+  environments: {
+    worker: {
+      build: {
+        minify: true,
+        sourcemap: true,
+        rolldownOptions: { output: { sourcemapExcludeSources: true } },
+      },
+    },
+  },
 }));

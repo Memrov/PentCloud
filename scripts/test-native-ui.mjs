@@ -21,10 +21,10 @@ const appDirectory = fileURLToPath(new URL('../apps/control-plane', import.meta.
 const viteBinary = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
 const bundleDirectory = join(screenshotDir, 'bundle');
 if (!process.env.PENTCLOUD_UI_BASE_URL) {
-  const build = await promisify(execFile)(process.execPath, [viteBinary, 'build', '--outDir', bundleDirectory, '--emptyOutDir'], { cwd: appDirectory, maxBuffer: 8 * 1024 * 1024 });
+  const build = await promisify(execFile)(process.execPath, [viteBinary, 'build', '--mode', 'browser-fixture', '--outDir', bundleDirectory, '--emptyOutDir'], { cwd: appDirectory, maxBuffer: 8 * 1024 * 1024 });
   await fs.writeFile(join(screenshotDir, 'build.log'), build.stdout + build.stderr);
 }
-const server = process.env.PENTCLOUD_UI_BASE_URL ? undefined : spawn(process.execPath, [viteBinary, 'preview', '--outDir', bundleDirectory, '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+const server = process.env.PENTCLOUD_UI_BASE_URL ? undefined : spawn(process.execPath, [viteBinary, 'preview', '--mode', 'browser-fixture', '--outDir', bundleDirectory, '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
   cwd: appDirectory, stdio: ['ignore', 'pipe', 'pipe'],
 });
 let serverOutput = '';
@@ -48,8 +48,8 @@ const jobs = [
   {id:'job-legacy-no-metadata',runId:run.id,role:'adviser',tool:'adviser',depth:1,status:'failed',revision:3},
 ];
 const roleIds=['primary','adviser','coder','maintenance','memorist','pentester','searcher'];
-const roles=Object.fromEntries(roleIds.map(id=>[id,{promptTemplate:`\t${id} template {{ .Task }}\r\n  original guidance  \r\n\r\n`,upstreamPromptDigest:'a'.repeat(64),model:'opencode-go:deepseek-v4-pro',reasoningEffort:'default'}]));
-let settings={settings:{schemaVersion:1,revision:'b'.repeat(64),upstreamManifestDigest:'c'.repeat(64),savedAt:'2026-10-31T00:00:00Z',savedBy:'fixture-operator',roles},casRevision:3,locked:false,blockingRunIds:[],upstreamRoles:Object.fromEntries(roleIds.map(id=>[id,{promptTemplate:roles[id].promptTemplate,upstreamPromptDigest:'a'.repeat(64)}]))};
+const roles=Object.fromEntries(roleIds.map(id=>[id,{promptFormat:"markdown",promptTemplate:`\t${id} template {{ .Task }}\r\n  original guidance  \r\n\r\n`,upstreamPromptDigest:'a'.repeat(64),model:'opencode-go:deepseek-v4-pro',reasoningEffort:'default'}]));
+let settings={settings:{schemaVersion:1,revision:'b'.repeat(64),upstreamManifestDigest:'c'.repeat(64),savedAt:'2026-10-31T00:00:00Z',savedBy:'fixture-operator',roles},casRevision:3,locked:false,blockingRunIds:[],upstreamRoles:Object.fromEntries(roleIds.map(id=>[id,{promptFormat:"markdown",promptTemplate:`# ${id} default instructions`,upstreamPromptDigest:'a'.repeat(64)}]))};
 const catalog={models:[{id:'opencode-go:deepseek-v4-pro',name:'DeepSeek V4 Pro',provider:'opencode-go',contextLength:128000,inputModalities:['text'],outputModalities:['text'],supportedParameters:[],reasoningEfforts:['default']}],fetchedAt:'2026-10-31T00:00:00Z',stale:false};
 catalog.models.push(
   {...catalog.models[0],id:'anthropic/claude-fixture',name:'Claude Fixture',provider:'anthropic',reasoningEfforts:['low','high']},
@@ -97,6 +97,7 @@ page.on('console',message=>{
 await page.route('**/v1/ui/**',async route=>{
   const request=route.request();const url=new URL(request.url());const path=url.pathname;calls.push({path,method:request.method(),body:request.postData(),headers:request.headers()});
   const json=value=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value)});
+  if(path==='/v1/ui/setup')return json({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true});
   const sse=body=>route.fulfill({status:200,contentType:'text/event-stream',headers:{'cache-control':'no-cache'},body});
   if(path==='/v1/ui/runs')return json({runs:[run,...Array.from({length:23},(_,index)=>({...run,id:`history-${String(index).padStart(2,'0')}`,status:'completed'}))]});
   if(path.endsWith('/jobs')){
@@ -136,14 +137,14 @@ await page.route('**/v1/ui/**',async route=>{
     const fresh={...jobs[1],id:'job-revision',revisionOf:'job-coder',attempt:2,status:'created',revision:1};delete fresh.outputCommit;jobs.push(fresh);broadcastState();return json({job:fresh});
   }
   if(request.method()==='POST')return json({ok:true});
-  if(path.endsWith('/workflow-events'))return sse('id: 1\nevent: activity\ndata: '+JSON.stringify({instanceId:run.id,eventId:1,timestamp:Date.now()-2000,type:'run.started'})+'\n\nid: 2\nevent: activity\ndata: '+JSON.stringify({instanceId:run.id,eventId:2,timestamp:Date.now()-1500,type:'phase.started',stepName:'Primary review'})+'\n\nid: 3\nevent: activity\ndata: '+JSON.stringify({instanceId:run.id,eventId:3,timestamp:Date.now()-1000,type:'phase.completed',stepName:'Primary review'})+'\n\nid: 4\nevent: activity\ndata: '+JSON.stringify({instanceId:run.id,eventId:4,timestamp:Date.now()-500,type:'run.completed'})+'\n\nevent: end\ndata: {}\n\n');
+  if(path.endsWith('/workflow-events'))return sse('id: 0\ndata: '+JSON.stringify({instanceId:path.split('/').at(-2),eventId:0,timestamp:Date.now()-2000,type:'run.started'})+'\n\nid: 1\ndata: '+JSON.stringify({instanceId:path.split('/').at(-2),eventId:1,timestamp:Date.now()-1500,type:'phase.started',stepName:'Primary review'})+'\n\nid: 2\ndata: '+JSON.stringify({instanceId:path.split('/').at(-2),eventId:2,timestamp:Date.now()-1000,type:'phase.completed',stepName:'Primary review'})+'\n\nid: 3\ndata: '+JSON.stringify({instanceId:path.split('/').at(-2),eventId:3,timestamp:Date.now()-500,type:'run.completed'})+'\n\nevent: up-to-date\ndata: {}\n\n');
   if(path.includes('/jobs/')&&path.endsWith('/events')){
     const job=jobs.find(job=>path.includes('/'+job.id+'/'))??jobs[0];
     if(job.id.startsWith('job-legacy'))return route.fulfill({status:200,contentType:'text/event-stream',headers:{'cache-control':'no-store','x-legacy-state-commit':'fad4ac3b8c97e1370565d9d968f22e6a2e707ca8'},body:'event: snapshot\ndata: '+JSON.stringify({messages:[{id:'legacy-answer',role:'assistant',parts:[{type:'text',text:'Preserved legacy transcript',state:'done'}]}],busy:false,pending:[],cursor:0,job})+'\n\nevent: end\ndata: {}\n\n'});
     const settled=job.status==='completed'&&!!job.outputCommit;
     const fence={type:'Error',message:'Attempt has settled'};
     const transcript=job.id==='job-state-child'?'Newer State child transcript remains selected.':'Native session transcript is ready.';
-    return sse('id: 10\nevent: snapshot\ndata: '+JSON.stringify({messages:[{id:'msg_user',type:'user',text:'Inspect the authorized fixture',time:{created:1}},{id:'msg_answer',type:'assistant',content:[{type:'reasoning',text:'Review target scope first.',time:{created:1,completed:2}},{type:'tool',id:'call-1',name:'terminal',state:{status:'completed',input:{command:'pwd'},content:[{type:'text',text:'/workspace/'+('abcdef0123456789'.repeat(80))}]}},{type:'text',text:transcript}],time:{created:1,completed:2}},...(settled?[{id:'msg_fence',type:'idle',outcome:'failed',error:fence}]:[])],pending:[],busy:false,job,cursor:10})+(settled?'\n\nid: 11\nevent: session\ndata: '+JSON.stringify({id:'evt_fence',created:4,type:'session.execution.failed',data:{sessionID:'ses_fixture',error:fence},durable:{seq:11}}):'')+'\n\nevent: end\ndata: {}\n\n');
+    return sse('id: 10\nevent: snapshot\ndata: '+JSON.stringify({messages:[{id:'msg_user',type:'user',text:'Inspect the authorized fixture',time:{created:1}},{id:'msg_answer',type:'assistant',content:[{type:'reasoning',text:'Review target scope first.',time:{created:1,completed:2}},{type:'tool',id:'call-1',name:'computer_exec',state:{status:'completed',input:{command:'pwd'},content:[{type:'text',text:'/workspace/'+('abcdef0123456789'.repeat(80))}]}},{type:'text',text:transcript}],time:{created:1,completed:2}},...(settled?[{id:'msg_fence',type:'idle',outcome:'failed',error:fence}]:[])],pending:[],busy:false,job,cursor:10})+(settled?'\n\nid: 11\nevent: session\ndata: '+JSON.stringify({id:'evt_fence',created:4,type:'session.execution.failed',data:{sessionID:'ses_fixture',error:fence},durable:{seq:11}}):'')+'\n\nevent: end\ndata: {}\n\n');
   }
   return route.fulfill({status:404,body:'unhandled fixture'});
 });
@@ -158,14 +159,16 @@ const layouts=[];
 const assertChatLayout=async(label)=>{
  const layout=await page.evaluate(()=>{
   const rect=selector=>{const box=document.querySelector(selector).getBoundingClientRect();return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,height:box.height};};
-  return {viewport:innerWidth,height:innerHeight,scrollY,header:rect('.chat-header'),frame:rect('.app-frame'),attempts:rect('.attempt-nav'),messages:rect('.message-scroll'),composer:rect('.composer-wrap'),toolCards:[...document.querySelectorAll('.tool-card')].map(card=>{const box=card.getBoundingClientRect();return {left:box.left,right:box.right};}),actions:[...document.querySelectorAll('.header-actions button')].map(button=>{const box=button.getBoundingClientRect();return {left:box.left,right:box.right};})};
+  const attemptsOpen=document.querySelector('.conversation-details [aria-expanded]').getAttribute('aria-expanded')==='true';
+  return {viewport:innerWidth,height:innerHeight,scrollY,header:rect('.chat-header'),frame:rect('.app-frame'),details:rect('.conversation-details'),attemptsOpen,...(attemptsOpen?{attempts:rect('[role="tablist"]')}:{}),messages:rect('.message-scroll'),composer:rect('.composer-wrap'),toolCards:[...document.querySelectorAll('.tool-card')].map(card=>{const box=card.getBoundingClientRect();return {left:box.left,right:box.right};}),actions:[...document.querySelectorAll('.chat-header button')].map(button=>{const box=button.getBoundingClientRect();return {left:box.left,right:box.right};})};
  });
  layouts.push({label,...layout});
  expect(layout.scrollY).toBe(0);
  expect(layout.frame.height).toBeLessThanOrEqual(layout.height);
  expect(layout.header.top).toBeGreaterThanOrEqual(0);
- expect(layout.attempts.top).toBeGreaterThanOrEqual(0);
- expect(layout.attempts.height).toBeLessThan(80);
+ expect(layout.details.top).toBeGreaterThanOrEqual(0);
+ expect(layout.details.right).toBeLessThanOrEqual(layout.viewport);
+ if(layout.attemptsOpen){expect(layout.attempts.top).toBeGreaterThanOrEqual(0);expect(layout.attempts.height).toBeLessThan(80);}
  expect(layout.messages.height).toBeGreaterThan(200);
  expect(layout.composer.right).toBeLessThanOrEqual(layout.viewport);
  expect(layout.composer.bottom).toBeLessThanOrEqual(layout.height);
@@ -173,6 +176,10 @@ const assertChatLayout=async(label)=>{
  for(const action of layout.actions){expect(action.left).toBeGreaterThanOrEqual(0);expect(action.right).toBeLessThanOrEqual(layout.viewport);}
 };
 const shots=[];
+const choose=async(label,option)=>{
+ await page.getByLabel(label,{exact:false}).click();
+ await page.getByRole('option',{name:option,exact:true}).click();
+};
 try{
  holdNextRunJobs=true;
  await page.goto(origin+'/?run=run-1&job=job-1');
@@ -181,16 +188,16 @@ try{
  expect(JSON.parse(heldRunJobsBody).jobs.map(job=>job.id)).toEqual(['job-1']);
  const stateChild={...jobs[0],id:'job-state-child',parentJobId:'job-1',logicalThreadId:'job-state-child',role:'maintenance',tool:'maintenance',depth:1,revision:1};
  jobs.push(stateChild);broadcastState();
- const stateChildButton=page.getByRole('complementary',{name:'Run navigation'}).getByRole('button',{name:/maintenance/});
+ const stateChildButton=page.getByRole('complementary',{name:'Run navigation'}).getByRole('button',{name:'Maintenance',exact:true});
  await stateChildButton.click();
- await expect(stateChildButton).toHaveClass(/is-selected/);
+ await expect(stateChildButton).toHaveAttribute('data-active','true');
  await expect(page.getByRole('region',{name:'maintenance chat',exact:true})).toBeVisible();
  await expect(page.getByText('Newer State child transcript remains selected.',{exact:true})).toBeVisible();
  const oldRestResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/v1/ui/runs/run-1/jobs'&&response.request().method()==='GET');
  releaseHeldRunJobs();
  await (await oldRestResponse).finished();
  await page.waitForLoadState('networkidle');
- await expect(stateChildButton).toHaveClass(/is-selected/);
+ await expect(stateChildButton).toHaveAttribute('data-active','true');
  await expect(page.getByRole('region',{name:'maintenance chat',exact:true})).toBeVisible();
  await expect(page.getByText('Newer State child transcript remains selected.',{exact:true})).toBeVisible();
  expect(JSON.parse(heldRunJobsBody).jobs.map(job=>job.id)).toEqual(['job-1']);
@@ -199,17 +206,20 @@ try{
  jobs.splice(jobs.indexOf(stateChild),1);
  await page.goto(origin+'/?run=run-1&job=job-1');
  await expect(page.getByText('Native session transcript is ready.')).toBeVisible();
+ await page.getByRole('button',{name:'Conversation details',exact:true}).click();
  jobs[0].revision++;jobs[0].model='fixture-state-model';broadcastState();
  await expect(page.getByText('fixture-state-model',{exact:true})).toBeVisible();
  for(const socket of stateSockets)socket.send(JSON.stringify({type:'cf_agent_state',state:{...stateProjection(),revision:0,jobs:[{...jobs[0],model:'stale-state-model',revision:1}]}}));
  await expect(page.getByText('fixture-state-model',{exact:true})).toBeVisible();
  jobs[0].revision++;jobs[0].model='opencode-go:deepseek-v4-pro';broadcastState();
  await expect(page.getByText('opencode-go:deepseek-v4-pro',{exact:true})).toBeVisible();
- await expect(page.getByText('terminal',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Activity 1 tool',exact:true}).click();
+ await page.getByRole('button',{name:'computer exec Done',exact:true}).click();
+ await expect(page.getByText('Tool: computer_exec',{exact:true})).toBeVisible();
  await expect(page.getByText('Operator question',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Approach',{exact:false})).toHaveCount(0);
- await page.getByLabel('Continue?',{exact:false}).selectOption('true');
- await page.getByLabel('Approach',{exact:false}).selectOption('safe');
+ await choose('Continue?','Yes');
+ await choose('Approach','Safe choice');
  const pendingDesktop=join(screenshotDir,'native-controls-desktop.png');await page.screenshot({path:pendingDesktop});shots.push(pendingDesktop);
  await page.getByRole('button',{name:'Send answer',exact:true}).click();
  await expect(page.getByText('Operator question',{exact:true})).toHaveCount(0);
@@ -217,28 +227,30 @@ try{
  await page.getByRole('button',{name:'Allow once',exact:true}).click();
  await expect(page.getByRole('button',{name:'Allow once',exact:true})).toHaveCount(0);
  expect(calls.some(call=>call.path.endsWith('/permissions/per_operator/reply')&&JSON.parse(call.body).decision==='once'&&JSON.parse(call.body).session==='ses_root')).toBe(true);
- await expect(page.getByText(/Recorded usage/)).toBeVisible();
+ await page.getByRole('button',{name:'Usage',exact:true}).click();
+ await expect(page.getByText('2 steps · 1,200 input / 350 output tokens',{exact:true})).toBeVisible();
  sessionControls.forms=[stockQuestion];
  await page.reload();
  await expect(page.getByText('Native question choices',{exact:true})).toBeVisible();
- await expect(page.getByText('Keep the existing scope',{exact:true})).toBeVisible();
- await expect(page.getByText('Include the optional section',{exact:true})).toBeVisible();
- await page.getByRole('radio',{name:/Focused/}).check();
+ await expect(page.getByText('Focused: Keep the existing scope',{exact:true})).toBeVisible();
+ await expect(page.getByText('Broader: Include the optional section',{exact:true})).toBeVisible();
+ await choose('Approach preference','Focused');
  await page.getByLabel('Focused details',{exact:false}).fill('Only the existing scope');
  const stockChoices=join(screenshotDir,'native-stock-question.png');await page.screenshot({path:stockChoices});shots.push(stockChoices);
- await page.getByRole('radio',{name:'Type your own answer',exact:true}).check();
+ await choose('Approach preference','Type your own answer');
  await expect(page.getByLabel('Focused details',{exact:false})).toHaveCount(0);
  await page.getByLabel('Approach preference custom answer',{exact:true}).fill('My custom approach');
  const stockCustom=join(screenshotDir,'native-stock-question-custom.png');await page.screenshot({path:stockCustom});shots.push(stockCustom);
  await page.getByRole('button',{name:'Send answer',exact:true}).click();
  await expect(page.getByText('Native question choices',{exact:true})).toHaveCount(0);
  expect(calls.some(call=>call.path.endsWith('/forms/frm_native_custom/reply')&&JSON.stringify(JSON.parse(call.body).answer)===JSON.stringify({q0:'My custom approach'}))).toBe(true);
- await page.getByLabel('Steer specialist').fill('Continue with the authorized scope');
- await page.getByRole('button',{name:'Send steer',exact:true}).click();
- await expect(page.getByLabel('Steer specialist')).toHaveValue('');
+ await page.getByRole('textbox',{name:'Message Primary',exact:true}).fill('Continue with the authorized scope');
+ await page.getByRole('button',{name:'Send message',exact:true}).click();
+ await expect(page.getByRole('textbox',{name:'Message Primary',exact:true})).toHaveValue('');
  expect(calls.some(call=>call.path.endsWith('/steer')&&JSON.parse(call.body).message==='Continue with the authorized scope')).toBe(true);
  await page.getByRole('button',{name:'Stop attempt',exact:true}).click();
  expect(calls.some(call=>call.path.endsWith('/interrupt'))).toBe(true);
+ await page.getByRole('button',{name:'Conversation details',exact:true}).click();
  await assertHealthy('chat');
  await assertChatLayout('desktop');
  const desktop=join(screenshotDir, 'chat-desktop.png');await page.screenshot({path:desktop});shots.push(desktop);
@@ -253,11 +265,12 @@ try{
    const archiveShot=join(screenshotDir,id+'.png');await page.screenshot({path:archiveShot});shots.push(archiveShot);
  }
  await page.goto(origin+'/?run=run-1&job=job-coder');
- await expect(page.getByLabel('Steer specialist')).toHaveAttribute('placeholder',/fresh revision/);
+ await expect(page.getByRole('textbox',{name:'Message Coder',exact:true})).toHaveAttribute('placeholder',/fresh revision/);
  await expect(page.getByText('Attempt has settled',{exact:false})).toHaveCount(0);
- await page.getByLabel('Steer specialist').fill('Review the result once more');
- await page.getByRole('button',{name:'Send steer',exact:true}).click();
- await expect(page.getByRole('navigation',{name:'Specialist attempts'}).getByRole('button',{name:/Attempt 2/})).toBeVisible();
+ await page.getByRole('textbox',{name:'Message Coder',exact:true}).fill('Review the result once more');
+ await page.getByRole('button',{name:'Send message',exact:true}).click();
+ await page.getByRole('button',{name:'Conversation details',exact:true}).click();
+ await expect(page.getByRole('tab',{name:/Attempt 2/})).toBeVisible();
  expect(calls.some(call=>call.path.endsWith('/revisions')&&JSON.parse(call.body).instructions==='Review the result once more'&&typeof JSON.parse(call.body).request_id==='string')).toBe(true);
  run.status='completed';jobs.forEach(job=>{job.status='completed';job.revision+=1;});
  await page.goto(origin+'/dashboard/runs/run-1/jobs/job-coder');
@@ -267,11 +280,16 @@ try{
  await assertHealthy('dashboard');
  const dashboard=join(screenshotDir, 'dashboard-desktop.png');await page.screenshot({path:dashboard});shots.push(dashboard);
  settings.settings.roles.primary.model='retired/saved-model';
+ delete settings.settings.roles.primary.promptFormat;
  const originalSettingsRoles=structuredClone(settings.settings.roles);
  const promptDraft='\tPrimary revised template {{- if .Task }}\n  {{ .Task }}  \n{{ end -}}\n\n';
  await page.goto(origin+'/settings');
  await expect(page.getByRole('heading',{name:'Prompts and models'})).toBeVisible();
- await expect(page.getByRole('combobox',{name:'Instruction format',exact:true})).toContainText('Go template');
+ await expect(page.getByRole('status').filter({hasText:'Go template execution is retired'})).toBeVisible();
+ await expect(page.getByLabel('Primary prompt template')).toHaveValue(originalSettingsRoles.primary.promptTemplate.replaceAll('\r\n','\n'));
+ await page.getByRole('button',{name:'Reset to default',exact:true}).click();
+ await expect(page.getByLabel('Primary prompt template')).toHaveValue('# primary default instructions');
+ expect(settings.settings.roles.primary).toEqual(originalSettingsRoles.primary);
  const modelSearch=page.getByRole('combobox',{name:'Search connected models',exact:true});
  const selectedModel=page.locator('.settings-model-selection');
  await expect(modelSearch).toHaveValue('retired/saved-model');
@@ -305,6 +323,7 @@ try{
  await expect(page.locator('html')).toHaveAttribute('data-mode',themeBefore==='dark'?'light':'dark');
  expect(await page.evaluate(()=>localStorage.getItem('theme'))).toBe(themeBefore==='dark'?'light':'dark');
  await page.getByRole('button',{name:'Toggle theme',exact:true}).click();
+ await page.getByRole('button',{name:'Runtime diagnostics and recovery',exact:true}).click();
  const recoveryPanel=page.getByRole('region',{name:'Runtime recovery',exact:true});
  await expect(recoveryPanel.getByText('Coordinator recovery paused after memory resets',{exact:true})).toBeVisible();
  await expect(recoveryPanel).toContainText('1 waiting · No active attempt · Version fixture-runtime-v1');
@@ -347,17 +366,16 @@ try{
  await expect(page.getByRole('status').filter({hasText:'Saved revision dddddddddddd'})).toBeVisible();
  expect(calls.some(call=>call.method==='PUT'&&call.path==='/v1/ui/settings'&&call.headers['if-match']==='3')).toBe(true);
  const savedRoles=JSON.parse(calls.find(call=>call.method==='PUT'&&call.path==='/v1/ui/settings').body).roles;
- expect(savedRoles.primary).toEqual({...originalSettingsRoles.primary,promptTemplate:promptDraft,model:'anthropic/claude-fixture',reasoningEffort:'low'});
+ expect(savedRoles.primary).toEqual({...originalSettingsRoles.primary,promptFormat:'markdown',promptTemplate:promptDraft,model:'anthropic/claude-fixture',reasoningEffort:'low'});
  for(const role of roleIds.filter(role=>role!=='primary'))expect(savedRoles[role]).toEqual(originalSettingsRoles[role]);
  await assertHealthy('settings');
  const settingsShot=join(screenshotDir, 'settings-desktop.png');await page.screenshot({path:settingsShot});shots.push(settingsShot);
  settings={...settings,locked:true,blockingRunIds:['run-1']};
  await page.reload();
- await expect(page.getByText('Locked by active runs',{exact:true})).toBeVisible();
+ await expect(page.getByText('Defaults locked by unfinished runs',{exact:true})).toBeVisible();
  await expect(modelSearch).toBeDisabled();
  await expect(page.getByLabel('Primary prompt template')).toBeDisabled();
  await expect(page.getByRole('combobox',{name:'Reasoning effort',exact:true})).toBeDisabled();
- await expect(page.getByRole('combobox',{name:'Instruction format',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Reset to default',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Apply to all roles',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Validate and save',exact:true}).first()).toBeDisabled();
@@ -370,16 +388,16 @@ try{
  await expect(page.getByText('Operator question',{exact:true})).toBeVisible();
  await assertChatLayout('mobile-native-controls');
  const pendingMobile=join(screenshotDir,'native-controls-mobile.png');await page.screenshot({path:pendingMobile});shots.push(pendingMobile);
- await page.getByLabel('Continue?',{exact:false}).selectOption('false');
+ await choose('Continue?','No');
  await page.getByRole('button',{name:'Send answer',exact:true}).click();
  await expect(page.getByText('Operator question',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Reject',exact:true}).click();
  await expect(page.getByRole('button',{name:'Reject',exact:true})).toHaveCount(0);
  expect(calls.some(call=>call.path.endsWith('/permissions/per_operator/reply')&&JSON.parse(call.body).decision==='reject')).toBe(true);
  await page.getByRole('button',{name:'Open navigation',exact:true}).click();
- await expect(page.getByRole('complementary',{name:'Run navigation'})).toHaveClass(/run-rail-open/);
- await page.getByRole('complementary',{name:'Run navigation'}).getByRole('button',{name:'Close navigation',exact:true}).click();
- await expect.poll(async()=> (await page.getByRole('complementary',{name:'Run navigation'}).boundingBox()).x).toBeLessThan(-300);
+ await expect(page.getByRole('navigation',{name:'Run navigation',exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'Run navigation',exact:true}).getByRole('button',{name:'Close navigation',exact:true}).click();
+ await expect(page.getByRole('navigation',{name:'Run navigation',exact:true})).toBeHidden();
  await assertChatLayout('mobile');
  const width=await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth}));
  expect(width.scroll).toBeLessThanOrEqual(width.viewport);
@@ -397,9 +415,11 @@ try{
  await page.locator('.workflow-panel').scrollIntoViewIfNeeded();
  const mobileInspector=join(screenshotDir,'dashboard-mobile-inspector.png');await page.screenshot({path:mobileInspector});shots.push(mobileInspector);
  runtimeDiagnostics={coordinator:{version:{id:'fixture-runtime-v1'}},backlog:{waiting:1,oldestWaitingMs:2000},active:{id:'job-1',state:'cancelled',drained:true,unresolvedRemote:0,sessionCleanupPending:false,recovery:{reason:'alarm_memory_limit',sealed:true,observedAt:200,purgedJobs:1}}};
- await page.getByRole('navigation',{name:'Product navigation'}).getByRole('link',{name:'Settings',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Prompts and models'})).toBeVisible();
+ await page.getByRole('link',{name:'All runs',exact:true}).click();
+ await page.getByRole('tab',{name:'Settings',exact:true}).click();
+ await expect(page.getByRole('tab',{name:'Settings',exact:true})).toHaveAttribute('aria-selected','true');
  await expect(page.getByLabel('Primary prompt template')).not.toHaveValue('');
+ await page.getByRole('button',{name:'Runtime diagnostics and recovery',exact:true}).click();
  await expect(recoveryPanel.getByText('Attempt recovery paused after memory resets',{exact:true})).toBeVisible();
  await expect(recoveryPanel).toContainText('Active attempt: job-1');
  const attemptPaused=join(screenshotDir,'runtime-recovery-paused-mobile.png');await recoveryPanel.screenshot({path:attemptPaused});shots.push(attemptPaused);
@@ -417,7 +437,8 @@ try{
  const popupBounds=await page.locator('.settings-model-popup').boundingBox();
  expect(popupBounds.x).toBeGreaterThanOrEqual(0);expect(popupBounds.x+popupBounds.width).toBeLessThanOrEqual(390);
  await modelSearch.press('Escape');
- for(const name of ['Chats','Dashboard','Settings']) await expect(page.getByRole('navigation',{name:'Product navigation'}).getByRole('link',{name,exact:true})).toBeVisible();
+ for(const name of ['Chats','Dashboard']) await expect(page.getByRole('navigation',{name:'Product navigation'}).getByRole('link',{name,exact:true})).toBeVisible();
+ await expect(page.getByRole('tab',{name:'Settings',exact:true})).toHaveAttribute('aria-selected','true');
  await assertHealthy('settings-mobile');
  expect(clientStateWrites).toEqual([]);
  expect(calls.some(call=>/^\/v1\/ui\/runs\/[^/]+\/events$/.test(call.path))).toBe(false);
@@ -425,7 +446,7 @@ try{
  await fs.writeFile(join(screenshotDir, 'result.json'),JSON.stringify({url:origin,title:await page.title(),viewports:['1440x1000','390x844'],consoleErrors,expectedConflictConsoleErrors,externalRequests,screenshots:shots,requestCount:calls.length,stateEvidence,recoveryEvidence,recoveryRequests:recoveryCalls().map(call=>JSON.parse(call.body)),interactions:['native transcript and tool render','native conditional form reply','native permission allow once','recorded session usage','steer','interrupt','fresh revision','dashboard native phases','settings recovery stale CAS rejection without retry','unresolved scanner refusal','explicit coordinator and attempt recovery','settings save If-Match','selected State child survives delayed root-only REST','Kumo keyboard model selection and missing saved selection','exact edited and untouched prompt bytes','locked Kumo settings controls','shared theme persistence','mobile Kumo popup bounds','mobile navigation'],mobileWidth:width,layouts},null,2));
  console.log(JSON.stringify({passed:true,screenshots:shots,consoleErrors,expectedConflictConsoleErrors,externalRequests,stateEvidence,recoveryEvidence,requests:calls.length}));
 }catch(error){
- await fs.writeFile(join(screenshotDir,'failure.json'),JSON.stringify({url:page.url(),consoleErrors,expectedConflictConsoleErrors,externalRequests,stateEvidence,recoveryEvidence,recoveryRequests:recoveryCalls().map(call=>JSON.parse(call.body)),layouts,serverOutput,error:String(error)},null,2));
+ await fs.writeFile(join(screenshotDir,'failure.json'),JSON.stringify({url:page.url(),consoleErrors,expectedConflictConsoleErrors,externalRequests,stateEvidence,recoveryEvidence,recoveryRequests:recoveryCalls().map(call=>JSON.parse(call.body)),layouts,serverOutput,error:String(error),snapshot:await page.locator('body').ariaSnapshot()},null,2));
  await page.screenshot({path:join(screenshotDir,'failure.png')}).catch(()=>{});
  throw error;
 }finally{await browser.close();server?.kill();}

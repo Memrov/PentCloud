@@ -6,7 +6,7 @@ import {expect as check} from 'playwright/test';
 import {createServer,type ViteDevServer} from 'vite';
 describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('target findings dashboard',()=>{
  let server:ViteDevServer,browser:Browser,origin:string;
- beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL('../',import.meta.url)),server:{host:'127.0.0.1',port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!.replace(/\/$/,'');browser=await chromium.launch({channel:'chrome',headless:true});},30000);
+ beforeAll(async()=>{server=await createServer({mode: 'browser-fixture',root:fileURLToPath(new URL('../',import.meta.url)),server:{host:'127.0.0.1',port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!.replace(/\/$/,'');browser=await chromium.launch({channel:'chrome',headless:true});},30000);
  afterAll(async()=>{await browser?.close();await server?.close();});
  it.each([1440,390])('separates targets, retains archived assessments and handles thirty findings at %i px',async width=>{
   const context=await browser.newContext({viewport:{width,height:900}}),page=await context.newPage(),commit='b'.repeat(40);

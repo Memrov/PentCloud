@@ -2,7 +2,7 @@
 type Repo = Disposable & {info():Promise<{id:string;description?:string|null}>;listTokens():Promise<{tokens:{id:string;state:string}[]}>;revokeToken(token:string):Promise<unknown>};
 interface SetupEnv {
   ARTIFACTS?:{get(name:string):Promise<Repo>;list?(options:{limit:number}):Promise<{repos:{id:string}[]}>;create(name:string,options:{description:string;setDefaultBranch:string}):Promise<{token:string}>};
-  COORDINATOR?:unknown;ATTEMPTS?:unknown;MODEL_TESTS?:unknown;RESULTS?:unknown;
+  COORDINATOR?:unknown;ATTEMPTS?:unknown;MODEL_TESTS?:unknown;
   BROWSER?:unknown;AI?:unknown;LOADER?:unknown;TOOL_PACKS?:unknown;TOOLBOX?:unknown;
   ACCESS_TEAM_DOMAIN?:string;ACCESS_AUD?:string;PENTCLOUD_ACCOUNT_ID?:string;PENTCLOUD_WORKER_NAME?:string;
   OPENCODE_GO_API_KEY?:unknown;OPENCODE_API_KEY?:unknown;CF_VERSION_METADATA?:{id:string};
@@ -15,7 +15,7 @@ async function workspaceReady(env:SetupEnv){
   catch(error){if(errorCode(error)!=='NOT_FOUND')throw error;return !!(await env.ARTIFACTS!.list?.({limit:1}))?.repos.length;}
 }
 export async function setupStatus(env:SetupEnv){
-  const missing=(['COORDINATOR','ATTEMPTS','MODEL_TESTS','ARTIFACTS','RESULTS','BROWSER','AI','LOADER','CF_VERSION_METADATA'] as const).filter(name=>!env[name]) as string[];
+  const missing=(['COORDINATOR','ATTEMPTS','MODEL_TESTS','ARTIFACTS','BROWSER','AI','LOADER','CF_VERSION_METADATA'] as const).filter(name=>!env[name]) as string[];
   if(!env.TOOL_PACKS&&!env.TOOLBOX)missing.push('TOOL_PACKS');
   let storage=false;try{if(env.ARTIFACTS)storage=await workspaceReady(env);}catch{/* Public status never includes provider errors. */}
   const models=!!(env.OPENCODE_GO_API_KEY||env.OPENCODE_API_KEY);

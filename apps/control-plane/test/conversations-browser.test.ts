@@ -8,7 +8,7 @@ import {SETTINGS_ROLES} from '../src/ui/settings/model';
 // Isolated local API fixtures: no production requests, model calls or scanners.
 describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversations and report reader',()=>{
  let server:ViteDevServer,browser:Browser,origin:string;
- beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL('../',import.meta.url)),mode:'development',server:{host:'127.0.0.1',port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!;browser=await chromium.launch({channel:'chrome',headless:true});},30000);
+ beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL('../',import.meta.url)),mode:'browser-fixture',server:{host:'127.0.0.1',port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!;browser=await chromium.launch({channel:'chrome',headless:true});},30000);
  afterAll(async()=>{await browser?.close();await server?.close();});
  it.each([{width:1440,height:1000},{width:390,height:844}])('isolates agent chats, retains navigation and reads the accepted report at $width px',async viewport=>{
   const context=await browser.newContext({viewport});

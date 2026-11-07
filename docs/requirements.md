@@ -38,7 +38,6 @@ resources and costs.
 | Containers + Cloudflare Registry | Eleven smaller tool packages | Product access/terms and capacity for the selected package profiles; existing legacy installations retain their backend |
 | Artifacts | Per-install work/evidence repositories | Workers Paid; namespace/repository access and current terms |
 | Browser Run | Agent browser tools | Account access; browser-hour/concurrency allowance |
-| Workflows | Result validation | Account access; included allowance and overages |
 | Workers AI binding | Supported document-to-Markdown conversion | Service availability/terms; model-backed conversions may incur charges |
 | Zero Trust / Access | Protect operators' UI/API access | Free plan is sufficient within its limits; team domain, login provider and allowed operator emails |
 
@@ -72,7 +71,6 @@ and [R2 pricing](https://developers.cloudflare.com/r2/pricing/).
 | Container memory / active CPU / disk | 25 GiB-hours; 375 vCPU-minutes; 200 GB-hours/month | $0.0000025/GiB-second; $0.000020/active vCPU-second; $0.00000007/GB-second |
 | Browser Run | 10 browser-hours/month; 10 average concurrent Browser Sessions | $0.09/additional hour; $2/additional average concurrent browser for Sessions; Quick Actions has no concurrency charge |
 | Artifacts, billing starts **November 12, 2026** | 10,000 operations/month; 1 GB-month | $0.15/additional 1,000 operations; $0.50/additional GB-month |
-| Result Workflows | Requests/CPU share Workers allowances; 500,000 steps and 1 GB-month storage | $0.80/additional 100,000 steps; $0.20/GB-month; Workers request/CPU rates |
 | Native Builds, when configured | 6,000 build minutes/month | $0.005/additional minute |
 
 Sources: [Workers](https://developers.cloudflare.com/workers/platform/pricing/),
@@ -80,9 +78,8 @@ Sources: [Workers](https://developers.cloudflare.com/workers/platform/pricing/),
 [Containers](https://developers.cloudflare.com/containers/platform/pricing/),
 [Browser Run](https://developers.cloudflare.com/browser-run/pricing/),
 [Artifacts](https://developers.cloudflare.com/artifacts/platform/pricing/),
-[Workflows](https://developers.cloudflare.com/workflows/reference/pricing/),
 [Builds](https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/).
-Do not count shared Workers/Workflow allowances twice. Worker Loader execution
+Do not count shared Workers allowances twice. Worker Loader execution
 and native service calls can contribute to runtime meters. Dynamic Worker daily
 creation counting depends on ID and code; new IDs/code versions or loads without
 stable IDs can count repeatedly. See

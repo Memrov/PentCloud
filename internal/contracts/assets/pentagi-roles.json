@@ -69,62 +69,46 @@
     "assistant_agent": [
       "advice",
       "coder",
-      "file",
       "get_flow_status",
       "maintenance",
       "memorist",
       "pentester",
-      "search",
-      "terminal"
+      "search"
     ],
     "assistant_direct": [
-      "file",
-      "get_flow_status",
-      "terminal"
+      "get_flow_status"
     ],
     "coder": [
       "advice",
       "code_result",
-      "file",
       "maintenance",
       "memorist",
-      "search",
-      "terminal"
+      "search"
     ],
     "enricher": [
-      "enricher_result",
-      "file",
-      "terminal"
+      "enricher_result"
     ],
     "generator": [
-      "file",
       "memorist",
       "search",
-      "subtask_list",
-      "terminal"
+      "subtask_list"
     ],
     "maintenance": [
       "advice",
-      "file",
       "maintenance_result",
       "memorist",
-      "search",
-      "terminal"
+      "search"
     ],
     "memorist": [
-      "file",
-      "memorist_result",
-      "terminal"
+      "memorist_result"
     ],
     "pentester": [
       "advice",
       "coder",
-      "file",
       "hack_result",
       "maintenance",
       "memorist",
-      "search",
-      "terminal"
+      "search"
     ],
     "primary": [
       "advice",
@@ -136,11 +120,9 @@
       "search"
     ],
     "refiner": [
-      "file",
       "memorist",
       "search",
-      "subtask_patch",
-      "terminal"
+      "subtask_patch"
     ],
     "reflector": [],
     "reporter": [

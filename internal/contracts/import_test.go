@@ -108,8 +108,8 @@ func TestPinnedImport(t *testing.T) {
 	}
 
 	tools := readJSON[toolSnapshot](t, filepath.Join(root, "contracts/pentagi-tools.json"))
-	if got := len(tools.Tools); got != 42 {
-		t.Fatalf("tool schema count = %d, want 42", got)
+	if got := len(tools.Tools); got != 40 {
+		t.Fatalf("tool schema count = %d, want 40", got)
 	}
 
 	roles := readJSON[roleSnapshot](t, filepath.Join(root, "contracts/pentagi-roles.json"))

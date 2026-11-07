@@ -342,9 +342,9 @@ export async function saveSettings(
 export function parseActivityEvent(value: unknown): UIActivityEvent {
   if (!isRecord(value)
     || typeof value.instanceId !== "string"
-    || !Number.isSafeInteger(value.eventId)
+    || !Number.isSafeInteger(value.eventId) || (value.eventId as number) < 0
     || typeof value.timestamp !== "number" || !Number.isFinite(value.timestamp)
-    || !["run.started", "run.completed", "run.failed", "run.interrupted", "phase.started", "phase.completed", "phase.failed", "platform.memory_recovery_sealed", "platform.memory_recovery_backoff"].includes(String(value.type))
+    || !["run.started", "run.completed", "run.failed", "run.interrupted", "phase.started", "phase.completed", "phase.failed", "platform.memory_recovery_sealed", "platform.memory_recovery_backoff", "input.committed", "input.rejected", "discovery.acknowledged", "conversation.preparation_failed", "attempt.recovery_needed", "recovery.failed"].includes(String(value.type))
     || (value.stepName !== undefined && typeof value.stepName !== "string")
     || (value.jobId !== undefined && typeof value.jobId !== "string")
     || (value.error !== undefined && (!isRecord(value.error) || typeof value.error.name !== "string" || typeof value.error.message !== "string"))) throw new Error("invalid activity event");

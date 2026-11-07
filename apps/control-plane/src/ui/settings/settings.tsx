@@ -205,16 +205,14 @@ export default function Settings({embedded=false}:{embedded?:boolean}={}) {
               </div>
 
               <div className="settings-prompt-heading"><div><strong>Specialist instructions</strong><small>{selected.promptFormat === "markdown" ? "Specialist guidance adapted for the current tools" : "Legacy Go template"}</small></div></div>
-              <div className="settings-format-field">
-                <Select<"markdown" | "pentagi-template"> label="Instruction format" items={{ markdown: "Markdown", "pentagi-template": "Go template" }} value={selected.promptFormat ?? "pentagi-template"} disabled={disabled} onValueChange={(promptFormat) => { if (promptFormat) updateSelected({ promptFormat }); }} />
-              </div>
+              {selected.promptFormat !== "markdown" && <p role="status">Go template execution is retired. Reset this role to the current Markdown instructions before saving or starting new work. The saved template remains available here for reference.</p>}
               <PromptEditor
                 roleLabel={roleMeta.label}
                 value={selected.promptTemplate}
                 upstreamDigest={snapshot.upstreamRoles[selectedRole].upstreamPromptDigest}
                 revision={snapshot.settings.revision}
                 disabled={disabled}
-                canReset={selected.promptTemplate !== snapshot.upstreamRoles[selectedRole].promptTemplate}
+                canReset={selected.promptFormat !== "markdown" || selected.promptTemplate !== snapshot.upstreamRoles[selectedRole].promptTemplate}
                 onChange={(promptTemplate) => updateSelected({ promptTemplate })}
                 onReset={() => setDraft(resetRole(draft, selectedRole, snapshot.upstreamRoles[selectedRole]))}
               />

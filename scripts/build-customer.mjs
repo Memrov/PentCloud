@@ -14,9 +14,6 @@ config.artifacts[0].namespace=namespace;
 config.vars.ARTIFACTS_NAMESPACE=namespace;
 config.vars.PENTCLOUD_WORKER_NAME=config.name;
 if(/^[a-f0-9]{32}$/.test(options.accountId??''))config.vars.PENTCLOUD_ACCOUNT_ID=options.accountId;
-config.workflows[0].name=config.name;
-config.triggers.events[0].filter.namespace=namespace;
-config.triggers.events[0].targets[0].workflow_name=config.name;
 return config;
 }
 async function main(){
@@ -33,9 +30,8 @@ const run=(command,args,cwd=root)=>execFileSync(command,args,{cwd,stdio:'inherit
 run('tar',['-xzf','source.tgz','--strip-components','1'],root+'/.pentcloud-tools');
 // The Docker preparation stage needs the pinned source, not host-specific tools or caches.
 await writeFile(new URL('../.pentcloud-tools/.dockerignore',import.meta.url),'.cache/\nnode_modules/\n.git/\nsource.tgz\n');
-run('npm',['run','build:prompts']);
-run('npm',['exec','--workspace','@pentagi-artifacts/control-plane','--','vite','build']);
-run(process.execPath,['scripts/build-native-app.mjs','--config','wrangler.jsonc']);
+run('npm',['exec','--workspace','@pentagi-artifacts/control-plane','--','vite','build','--mode','customer']);
+run(process.execPath,['scripts/check-native-worker-build.mjs','apps/control-plane/dist-customer/worker']);
 
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();

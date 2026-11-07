@@ -2,8 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pentcloud",
   "main": "apps/control-plane/src/customer/worker.ts",
-  "minify": true,
-  "upload_source_maps": false,
+  "upload_source_maps": true,
   "compatibility_date": "2026-10-30",
   "compatibility_flags": [
     "nodejs_compat",
@@ -29,7 +28,7 @@
   },
   "assets": {
     "binding": "ASSETS",
-    "directory": "apps/control-plane/dist/client",
+    "directory": "apps/control-plane/dist-customer/client",
     "not_found_handling": "single-page-application",
     "run_worker_first": [
       "/*"
@@ -154,35 +153,8 @@
   "ai": {
     "binding": "AI"
   },
-  "workflows": [
-    {
-      "binding": "RESULTS",
-      "name": "pentcloud",
-      "class_name": "ResultValidation"
-    }
-  ],
-  "triggers": {
-    "events": [
-      {
-        "type": "cf.artifacts.repo.pushed",
-        "filter": { "namespace": "pentcloud" },
-        "targets": [{ "type": "workflow", "workflow_name": "pentcloud" }]
-      }
-    ]
-  },
+  "triggers": { "events": [] },
   "vars": {},
-  "rules": [
-    {
-      "type": "Text",
-      "globs": [
-        "**/*.tmpl",
-        "**/*.tmpl?raw",
-        "**/*.md?raw",
-        "**/*.md"
-      ],
-      "fallthrough": true
-    }
-  ],
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
   },

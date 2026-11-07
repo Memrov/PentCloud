@@ -18,7 +18,7 @@ export interface RunHubState {
   waveMode?: boolean;
 }
 
-export type UIActivityEventType = "run.started" | "run.completed" | "run.failed" | "run.interrupted" | "phase.started" | "phase.completed" | "phase.failed" | "platform.memory_recovery_sealed" | "platform.memory_recovery_backoff";
+export type UIActivityEventType = "run.started" | "run.completed" | "run.failed" | "run.interrupted" | "phase.started" | "phase.completed" | "phase.failed" | "platform.memory_recovery_sealed" | "platform.memory_recovery_backoff" | "input.committed" | "input.rejected" | "discovery.acknowledged" | "conversation.preparation_failed" | "attempt.recovery_needed" | "recovery.failed";
 export interface UIActivityEvent {
   instanceId: string;
   eventId: number;

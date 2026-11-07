@@ -5,7 +5,7 @@ import {createServer,type ViteDevServer} from "vite";
 import {fileURLToPath} from "node:url";
 describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first setup in a real browser",()=>{
   let server:ViteDevServer,browser:Browser,origin:string;
-  beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL("../",import.meta.url)),mode:"development",server:{host:"127.0.0.1",port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!;browser=await chromium.launch({channel:"chrome",headless:true});},30000);
+  beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL("../",import.meta.url)),mode:"browser-fixture",server:{host:"127.0.0.1",port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!;browser=await chromium.launch({channel:"chrome",headless:true});},30000);
   afterAll(async()=>{await browser?.close();await server?.close();});
   for(const viewport of [{width:1440,height:1000},{width:390,height:844}])it('stops a setup-stage run without opening chat at '+viewport.width+'px',async()=>{
     const context=await browser.newContext({viewport}),page=await context.newPage();

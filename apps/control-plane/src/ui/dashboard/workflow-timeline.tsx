@@ -6,6 +6,37 @@ import { chatPath, reduceWorkflowEvents, type WorkflowTimeline, type WorkflowTim
 
 export type TimelineConnection = "connecting" | "live" | "reconnecting" | "closed";
 
+/** Replay must reach the native tail before an old terminal event can close the client. */
+export function connectWorkflowActivity(runId: string, handlers: {
+  event: (event: UIActivityEvent) => void;
+  connection: (connection: TimelineConnection) => void;
+}, createSource: (url: string) => EventSource = url => new EventSource(url)): () => void {
+  const source = createSource(`/v1/ui/runs/${encodeURIComponent(runId)}/workflow-events?protocol=2`);
+  let caughtUp = false, terminal = false;
+  const close = () => { handlers.connection("closed"); source.close(); };
+  source.addEventListener("up-to-date", () => {
+    caughtUp = true;
+    if (terminal) close(); else handlers.connection("live");
+  });
+  source.onopen = () => { caughtUp = false; };
+  source.onerror = () => {
+    caughtUp = false;
+    handlers.connection(source.readyState === 2 ? "closed" : "reconnecting");
+  };
+  source.addEventListener("message", ((message: MessageEvent<string>) => {
+    try {
+      const event = parseActivityEvent(JSON.parse(message.data) as unknown);
+      if (event.instanceId !== runId || message.lastEventId !== String(event.eventId)) throw new Error("Activity identity mismatch");
+      if (event.type === "run.started") terminal = false;
+      if (["run.completed", "run.failed", "run.interrupted"].includes(event.type)) terminal = true;
+      handlers.event(event);
+      if (caughtUp && terminal) close();
+    } catch { handlers.connection("reconnecting"); }
+  }) as EventListener);
+  source.addEventListener("done", close);
+  return () => source.close();
+}
+
 export function WorkflowTimeline({ job }: { job: UIJob }) {
   const [events, setEvents] = useState<UIActivityEvent[]>([]);
   const [connection, setConnection] = useState<TimelineConnection>("connecting");
@@ -17,24 +48,10 @@ export function WorkflowTimeline({ job }: { job: UIJob }) {
   useEffect(() => {
     setEvents([]);
     setConnection("connecting");
-    const source = new EventSource(`/v1/ui/runs/${encodeURIComponent(job.runId)}/workflow-events`);
-    source.onopen = () => setConnection("live");
-    source.onerror = () => setConnection(source.readyState === EventSource.CLOSED ? "closed" : "reconnecting");
-    const receive = (message: MessageEvent<string>) => {
-      try {
-        const event = parseActivityEvent(JSON.parse(message.data) as unknown);
-        setEvents((current) => current.some((candidate) => candidate.eventId === event.eventId) ? current : [...current, event]);
-        if (["run.completed", "run.failed", "run.interrupted"].includes(event.type)) {
-          setConnection("closed");
-          source.close();
-        }
-      } catch {
-        setConnection("reconnecting");
-      }
-    };
-    source.addEventListener("activity", receive as EventListener);
-    source.addEventListener("end", () => { setConnection("closed"); source.close(); });
-    return () => source.close();
+    return connectWorkflowActivity(job.runId, {
+      event: event => setEvents(current => current.some(candidate => candidate.eventId === event.eventId) ? current : [...current, event]),
+      connection: setConnection,
+    });
   }, [job.runId, job.id]);
   const timeline = useMemo(() => reduceWorkflowEvents(events, now), [events, now]);
   return <WorkflowTimelineView job={job} timeline={timeline} connection={connection} />;
