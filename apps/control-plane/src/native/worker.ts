@@ -12,6 +12,7 @@ import { normalizeUploadIds, MATERIAL_FILE_LIMIT } from "./materials";
 import { confinedRelative } from "./tool-policy";
 import { hostedUIResponse } from "./ui-response";
 import {readVerificationEmail} from './verification-email';
+import {prepareSetupStorage,saveSetupKey,setupStatus} from './setup';
 
 import { TOOLBOX_GENERATION_HEADER, toolboxOperatorReply } from "../../../../shared/toolbox-rpc";
 
@@ -91,6 +92,8 @@ export default {
   },
   async fetch(request: Request, env: NativeEnv): Promise<Response> {
     const url = new URL(request.url);
+    if(url.pathname==='/v1/ui/setup'&&request.method==='GET'&&(!env.ACCESS_TEAM_DOMAIN||!env.ACCESS_AUD))
+      return Response.json({schemaVersion:1,access:false,missing:['Cloudflare Access'],storage:false,models:false,ready:false},{headers:browserViewHeaders});
     if (url.pathname === "/health")
       return Response.json({
         application: "PentCloud",
@@ -116,6 +119,13 @@ export default {
         const origin=request.headers.get("Origin");
         if ((origin && origin !== url.origin) || request.headers.get("Sec-Fetch-Site") === "cross-site")
           throw new Error("403: Use this application's origin for browser actions");
+      }
+      if(url.pathname==='/v1/ui/setup'&&request.method==='GET')return Response.json(await setupStatus(env),{headers:browserViewHeaders});
+      if(url.pathname==='/v1/ui/setup/storage'&&request.method==='POST'){
+        await body(request,64);await prepareSetupStorage(env);return Response.json({prepared:true},{headers:browserViewHeaders});
+      }
+      if(url.pathname==='/v1/ui/setup/model'&&request.method==='POST'){
+        await saveSetupKey(env,await body(request,16384));return Response.json({saved:true},{headers:browserViewHeaders});
       }
       const coordinator = env.COORDINATOR.getByName("global");
       const history = new LegacyHistory(env);

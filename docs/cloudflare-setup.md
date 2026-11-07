@@ -12,18 +12,24 @@ This guide covers your self-hosted installation.
 2. **Access:** choose Zero Trust Free when its limits fit, create the team domain
    and configure a login method. Put allowed emails in installation configuration.
    Do not purchase a paid Access tier by default.
-3. **Permissions:** confirm native CLI consent and the account roles for the
-   temporary deployment lease. The [authentication guide](operations/authentication.md)
-   lists permission names and separates operator login from account administration.
+3. **Permissions:** confirm the account roles needed for the native deployment.
+   The [authentication guide](operations/authentication.md) separates operator login from account administration.
 4. **OpenCode:** sign in to [Console](https://opencode.ai/console), choose billing
    in the intended workspace and create a personal key there. For Go, use the
    single-member workspace and inspect actual model/privacy availability.
    See [key creation](https://opencode.ai/v2/docs/console/api) for the current UI.
 5. **Deployment status:** review [deployment](deployment.md). The previous CLI
-   installer is removed and the in-app setup wizard is planned. Existing
-   installations can configure their model key below before starting analysis.
+   installer is removed. After deployment, open `/setup` for the three-step browser
+   wizard: Cloudflare bindings, Artifacts workspace and OpenCode secret. The
+   dashboard alternative below works for existing installations too.
 
 ## Add the OpenCode key in Cloudflare
+
+The `/setup` wizard can save the key using a temporary scoped account token;
+see [customer setup](deployment.md#customer-setup). It clears the submitted token
+and key from the form and never persists the account token. Revoke that token
+when finished. The following native dashboard option needs no token pasted into
+PentCloud.
 
 Select the app Worker belonging to your existing installation in the correct
 Cloudflare account. Keep its current name, bindings and secrets.
@@ -199,7 +205,7 @@ Preserve the native Email Routing address, receiver variables and Secrets Store
 bindings in the installation's Cloudflare deployment configuration. Configure
 secrets through Cloudflare's private entry controls. Review domain/store
 ownership and route conflicts before changing them; preserve existing MX records
-and mailbox services. The planned setup wizard will guide this configuration.
+and mailbox services. Optional email configuration remains in these native Cloudflare settings.
 
 ## Confirm setup
 

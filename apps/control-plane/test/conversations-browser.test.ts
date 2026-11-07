@@ -37,7 +37,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    return route.fulfill({status:404,contentType:'application/json',body:'{"error":"Unknown local fixture route"}'});
   });
   try{
-   await page.goto(`${origin}?run=${run.id}&job=s1-retry`);
+   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}?run=${run.id}&job=s1-retry`);
    await browserExpect(page.getByRole('heading',{name:'Searcher 1',exact:true})).toBeVisible();
    if(viewport.width<760)expect((await page.locator('.workspace').boundingBox())?.width).toBeGreaterThanOrEqual(viewport.width-1);
    await browserExpect(page.getByText('Messages only for s1-retry',{exact:true})).toBeVisible();
@@ -70,7 +70,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    await browserExpect(page.getByRole('textbox',{name:'Message Searcher 2',exact:true})).toHaveValue('Keep this newer draft');
    await browserExpect(page.getByRole('heading',{name:'Searcher 2',exact:true})).toBeVisible();
    expect(new URL(page.url()).searchParams.get('job')).toBe('s2');
-   await page.goto(`${origin}dashboard/runs/${run.id}`);
+   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}dashboard/runs/${run.id}`);
    await page.locator('.run-management').getByRole('button',{name:'Open report',exact:true}).click();
    const dialog=page.getByRole('dialog');
    await browserExpect(dialog.getByRole('heading',{name:'Assessment deliverable',exact:true})).toBeVisible();
@@ -83,7 +83,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    await browserExpect(page.locator('.assessment-document')).toHaveCSS('visibility','visible');
    await page.emulateMedia({media:'screen'});
    await dialog.getByRole('button',{name:'Close report',exact:true}).click();
-   await page.goto(`${origin}dashboard?run=${run.id}&job=s2`);
+   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}dashboard?run=${run.id}&job=s2`);
    await page.getByRole('link',{name:'Open chats',exact:true}).click();
    await browserExpect(page.getByRole('heading',{name:'Searcher 2',exact:true})).toBeVisible();
    expect(outside).toEqual([]);
@@ -103,7 +103,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    return json({});
   });
   try{
-   await page.goto(`${origin}settings`);
+   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}settings`);
    await browserExpect(page.getByRole('heading',{name:'Prompts and models',exact:true})).toBeVisible();
    if(viewport.width<721){await page.getByRole('combobox',{name:'Agent',exact:true}).click();await page.getByRole('option',{name:'Coder',exact:true}).click();}else await page.getByRole('button',{name:'Coder',exact:true}).click();
    await browserExpect(page.getByRole('textbox',{name:'Coder prompt template',exact:true})).toHaveValue('Instructions for Coder');
@@ -146,7 +146,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    return json({ok:true});
   });
   try{
-   await page.goto(`${origin}?run=${run.id}&job=${job.id}`);
+   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}?run=${run.id}&job=${job.id}`);
    await browserExpect(page.getByText('Assessment choices',{exact:true})).toBeVisible();
    await page.getByRole('button',{name:'Copy Code',exact:true}).click();
    await browserExpect.poll(()=>page.evaluate(()=>navigator.clipboard.readText())).toContain('printf copy-fixture');

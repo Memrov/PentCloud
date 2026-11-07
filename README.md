@@ -22,10 +22,12 @@ belongs to one owner or a trusted team in their own Cloudflare account. See
 
 ## Get started
 
-Customer setup is being redesigned around Cloudflare Workers Builds and an in-app
-setup wizard. The previous CLI installer has been removed; the replacement wizard
-and deployment button are not available yet. Existing installations continue to
-run. See [deployment status and phases](docs/deployment.md).
+After deploying the Cloudflare resources, open the protected app for a small
+three-step wizard: check Cloudflare bindings, prepare the Artifacts workspace and
+save your OpenCode key. Existing configured installations open the app directly;
+revisit the wizard at `/setup`. The previous CLI installer has been removed.
+A complete fresh-account deployment button is still pending. See
+[customer setup and deployment prerequisites](docs/deployment.md).
 
 ### Before you start
 
@@ -35,7 +37,7 @@ run. See [deployment status and phases](docs/deployment.md).
 | Operator access | **Zero Trust Free / Access**, $0 within its 50-user limit |
 | Model access | **OpenCode Go, $10/month**, recommended for a solo first install when its catalog fits; Console pay-as-you-go is an alternative |
 | Model credential | A workspace API key with **Models → Request**, entered directly into a Cloudflare app Worker Secret |
-| Source development tools | Node 26.12.1 or later 26.x, Go 1.26.5, Git, Bash, npm and Python 3.11+; the planned customer wizard runs in the browser |
+| Source development tools | Node 26.12.1 or later 26.x, Go 1.26.5, Git, Bash, npm and Python 3.11+; the customer wizard runs in the browser |
 
 **Starting subscriptions: $15/month with Go, plus metered usage.** This is not
 an all-inclusive assessment price. Containers, browser time, storage, logs and
@@ -192,7 +194,7 @@ does not establish that no vulnerabilities exist. [Report a vulnerability privat
 | [Architecture and diagrams](docs/architecture.md) | User journey, agent sessions, evidence, recovery and trust boundaries |
 | [Targets and onboarding](docs/operations/onboarding.md) | Saved targets, discovery, models and context |
 | [Findings and reporting](docs/operations/findings.md) | Target-level findings, reporter access and assessment formats |
-| [Install and deployment](docs/deployment.md) | Guided CLI, prerequisites, costs and observed/pending acceptance |
+| [Install and deployment](docs/deployment.md) | Browser setup, deployment prerequisites and current limits |
 | [Requirements and costs](docs/requirements.md) | Exact starting plans, native service access, usage charges and model-key requirements |
 | [Operations](docs/operations.md) | Files, lifecycle, cancellation and scanner uncertainty |
 | [Troubleshooting](docs/operations/debugging.md) | Setup errors, logs and recovery |
@@ -210,8 +212,7 @@ for backend, authentication, dependency or deployment changes. See
 The checked-in Wrangler configs are local compilation examples. They have no
 trusted Access issuer/audience, account IDs, model-provider connection, prepared
 image or secret values. They reject application access until configured. Preserve
-existing installation configurations. New customer setup is moving to Cloudflare
-Builds and an in-app wizard; see [deployment status](docs/deployment.md).
+existing installation configurations. Use Cloudflare Builds for deployment and the in-app wizard for first-run setup; see [deployment status](docs/deployment.md).
 Do not use another installation's Access issuer/audience or reuse credentials.
 
 See [security and disclosure](SECURITY.md) and [third-party notices](docs/third-party-notices.md).

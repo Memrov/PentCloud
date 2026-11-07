@@ -18,20 +18,30 @@ ToolboxGateway service binding, with generation and operation-ownership checks.
 The app and gateway have model/tool secrets, not account-admin API credentials.
 
 OpenCode keys belong in Cloudflare Worker Secrets (or supported Secrets Store
-bindings), entered through native Dashboard/CLI prompts. Optional BYOK provider
-keys stay in OpenCode. Target API credentials have a separate audience-bound
+bindings), entered through the first-run wizard or native Dashboard/CLI prompts.
+Optional BYOK provider keys stay in OpenCode. Target API credentials have a separate audience-bound
 storage/use path. Do not put credentials into prompts, Git or source config.
 
 ## Setup authorization
 
-The replacement setup wizard is planned. It must authenticate the installation
-owner and obtain scoped Cloudflare account authorization before creating resources
-or credentials. App sign-in alone does not authorize account administration.
+The small first-run wizard requires the same verified Access JWT as the app.
+Mutation routes reject foreign browser origins. The only unauthenticated setup
+status is a fixed indication that Access has not been configured; it cannot
+create storage or save secrets.
 
-Prefer configured native service bindings. If a step needs a new API token,
-the initiating authorization must include token-management permission. Keep
-account administration separate from normal runtime credentials and store
-persistent secrets in Cloudflare's native secret facilities.
+Artifacts preparation uses the deployment's native binding and revokes its unused
+initial Git credential. Model-key saving requires an administrator-supplied,
+scoped **Workers Scripts Edit** token. The wizard checks the exact current Worker
+version in the selected account/script before calling the native Secret API.
+It accepts only the two OpenCode secret names, never an arbitrary destination.
+The account token is never stored, and both password inputs are cleared after
+submission. Responses contain fixed errors, not Cloudflare response bodies.
+Revoke the temporary setup token after use. The Worker retains only the encrypted
+model secret, not account-administration credentials.
+
+Prefer native bindings for runtime access. Creating further account tokens would
+require separate token-management authorization; this wizard does not mint them.
+App sign-in alone does not grant Cloudflare account administration.
 
 The existing native browser-QA adapter still uses official Cloudflare clients
 for its temporary test authorization. It never scrapes CLI credential caches.

@@ -4,6 +4,7 @@ import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 
 import App from "./app";
+import {SetupGate} from './setup';
 
 const Dashboard = lazy(() => import("./dashboard/dashboard"));
 const Settings = lazy(() => import("./settings/settings"));
@@ -16,6 +17,6 @@ createRoot(root).render(
   <StrictMode>
     {settings ? <Suspense fallback={<div className="dashboard-boot">Opening settings…</div>}><Settings /></Suspense>
       : dashboard ? <Suspense fallback={<div className="dashboard-boot">Opening dashboard…</div>}><Dashboard /></Suspense>
-        : <App />}
+        : <SetupGate><App /></SetupGate>}
   </StrictMode>,
 );

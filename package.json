@@ -16,7 +16,7 @@
     "test:workers": "bash scripts/test-native-worker-runtime.sh",
     "test:watch": "npm exec --workspace @pentagi-artifacts/control-plane -- vitest watch",
     "test:workers:watch": "npm exec --workspace @pentagi-artifacts/control-plane -- vitest watch --config vitest.runtime.config.ts",
-    "test:browser": "PENTCLOUD_MATERIALS_BROWSER=1 npm exec --workspace @pentagi-artifacts/control-plane -- vitest run test/materials-browser.test.ts",
+    "test:browser": "PENTCLOUD_MATERIALS_BROWSER=1 PENTCLOUD_SETUP_BROWSER=1 npm exec --workspace @pentagi-artifacts/control-plane -- vitest run test/materials-browser.test.ts test/setup-browser.test.ts",
     "qa:ui": "node scripts/browser-run-qa.mjs",
     "qa:ui:interactive": "node scripts/browser-run-interactive-qa.mjs",
     "test:gateway": "npm test --workspace @pentagi-artifacts/aws-toolbox-control",
