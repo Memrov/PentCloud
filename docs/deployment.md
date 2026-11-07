@@ -48,6 +48,8 @@ do not deploy multiple Workers together, and subdirectory templates cannot impor
 files outside that subdirectory. Deploying the whole repository as one Worker
 avoids both restrictions. Worker names selected by Builds determine the Artifacts
 namespace and Workflow name, keeping separate installations isolated.
+Native [Artifacts push triggers](https://developers.cloudflare.com/artifacts/guides/build-and-deploy-on-push/)
+connect that namespace to the results Workflow; the wizard needs no event-subscription code.
 
 The build fetches a checksum-pinned revision of
 [PentCloud-tools](https://github.com/Memrov/PentCloud-tools) and uses its existing
@@ -89,10 +91,20 @@ installation name isolation, desktop/mobile UI and verified source maps.
 Source-only dry runs skip Container rollout; the actual deploy builds/publishes
 images through Wrangler. A dry run alone does not prove image provisioning.
 
-The earlier wizard was validated at `setup.heflare.app` with real Artifacts and
-Secret writes and a dummy model key. Hosted validation of the complete deployment
-button is in progress on this PR. Production remains separate. Human SSO, model
-inference and a complete assessment must be reported separately from source checks.
+The real deployment button was exercised against the PR branch in the separate
+Cloudflare Test Account, using a private disposable customer repository and
+`button.heflare.app`. Native Workers Builds completed the build and deployment.
+The hosted wizard created an owner-email Access policy, saved native Secrets,
+prepared Artifacts storage and reached the fresh Coordinator SQLite database.
+All eleven tool images passed hosted startup, SDK/image-pin validation and
+shutdown checks. Desktop and mobile hosted captures showed all three setup checks
+complete with a dummy model key. Setup tokens and temporary runtime probes were
+removed.
+
+A real model key, paid inference and a complete assessment are separate checks.
+The dummy key is removed after validation. Human owner SSO still needs its own
+interactive check; automated captures used temporary native Access service auth.
+Production remains separate and this PR is not merged.
 
 Use the copied repository's Workers Builds connection for updates. Preserve its
 configuration and secrets. Existing installations keep using their original

@@ -4,7 +4,7 @@ import {Button,Input,Text} from '@cloudflare/kumo';
 interface Status {schemaVersion:1;access:boolean;accountId?:string;worker?:string;missing:string[];storage:boolean;models:boolean;ready:boolean}
 const dashboard='https://dash.cloudflare.com/';
 const accessTokenURL=dashboard+'?'+new URLSearchParams({to:'/:account/api-tokens',permissionGroupKeys:JSON.stringify([{key:'e086da7e2179491d91ee5f35b3ca210a',type:'edit'},{key:'1e13c5124ca64b72b1969a67e8829049',type:'edit'},{key:'b219cc392cc843cfab473cf3abd06c5b',type:'read'}]),name:'PentCloud first setup'});
-const tokenURL=dashboard+'?'+new URLSearchParams({to:'/:account/api-tokens',permissionGroupKeys:JSON.stringify([{key:'workers_scripts',type:'edit'}]),name:'PentCloud setup'});
+const tokenURL=dashboard+'?'+new URLSearchParams({to:'/:account/api-tokens',permissionGroupKeys:JSON.stringify([{key:'e086da7e2179491d91ee5f35b3ca210a',type:'edit'}]),name:'PentCloud setup'});
 async function request(path:string,input?:Record<string,unknown>){
   const response=await fetch('/v1/ui/setup'+path,{method:input?'POST':'GET',cache:'no-store',...(input?{headers:{'Content-Type':'application/json'},body:JSON.stringify(input)}:{}),signal:AbortSignal.timeout(30000)});
   const value=await response.json() as Status&{error?:string};
