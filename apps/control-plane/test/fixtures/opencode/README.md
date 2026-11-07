@@ -1,20 +1,33 @@
 # OpenCode reference schemas
 
-OpenCode configuration/OpenAPI snapshots used by the contract comparison tests
-for the pinned OpenCode SDK 2.2.5 integration. These are test data, not active
-endpoints, installation configuration or runtime records. The tests compare the
-adopted contracts and retain the documented deprecated-skills schema difference.
+Frozen configuration/OpenAPI snapshots for the pinned OpenCode SDK **2.2.6**
+integration. These are test data, not active endpoints or runtime records.
+The comparator remains strict for the adopted contracts; mutation tests cover
+removed operations and changed nested request, response and error schemas.
 
-The configuration schema identifies its public source as
-https://opencode.ai/config.json. The OpenAPI snapshot identifies itself as the
-experimental opencode HttpApi, OpenAPI 3.1.0 / API 0.0.1. These fixtures are
-frozen references; they do not claim to track the latest upstream API.
+## Provenance
 
-Source project: [anomalyco/opencode](https://github.com/anomalyco/opencode).
-The [MIT license](LICENSE.txt) is retained from the SDK's
-[v2.2.5 source release](https://github.com/anomalyco/opencode/tree/v2.2.5).
+Source release: [anomalyco/opencode v2.2.6](https://github.com/anomalyco/opencode/tree/v2.2.6),
+commit `dc2ffcf8bf26f9e669b6aa22b95f50e12be15e06`.
 
-Snapshot checksums (SHA-256):
+- `config-schema.json`: generated from the published `@opencode/schema@2.2.6`
+  `Config.Info` export using that release's
+  [configuration schema generator](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/schema/script/config-schema.ts)
+  and frozen `config-v1.json`. Only module resolution and file I/O were adapted
+  to run under Node. This preserves the public schema's deprecated V1 skills
+  object branch; installed V2 declarations accept `string[]` only, which remains
+  the sole expected comparison difference.
+- `openapi.json`: generated with `OpenApi.fromApi(Api)` from the published
+  `@opencode/server@2.2.6` `Api` export and installed Effect 4.1.0, using the same
+  public declaration generator as `scripts/check-native-upstream-contracts.py`.
+  This is a frozen 2.2.6 declaration reference, not a snapshot of a live endpoint.
 
-- `config-schema.json`: `7feca1416fc02b39201e468160199cbe5957792523f482e35c050f8996dcb0ad`
-- `openapi.json`: `92cc33ef9a107c8af6295e6fcbdf6d339d4374955910924456bd91a76844a5db`
+The 2.2.5 to 2.2.6 review found additive `cache.warming` configuration and
+narrower optional parameter nullability. Adopted request bodies and response
+schemas were unchanged. Fixtures were refreshed instead of adding drift
+exceptions. The source project's [MIT license](LICENSE.txt) is retained.
+
+## Snapshot checksums (SHA-256)
+
+- `config-schema.json`: `d97487fda9279d43b08df45c53bdf644648cb815f3adc0399553de0a7c63aa0c`
+- `openapi.json`: `42eb6a8e52829b0623fcb22858c347bc523622ce7f76d99edb2453f88250b5cb`

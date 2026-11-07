@@ -33,10 +33,7 @@
               "pattern": "^[^#]+$"
             }
           },
-          "required": [
-            "providerID",
-            "model"
-          ],
+          "required": ["providerID", "model"],
           "additionalProperties": false
         }
       ],
@@ -48,20 +45,12 @@
     },
     "update": {
       "type": "string",
-      "enum": [
-        "disable",
-        "notify",
-        "auto"
-      ],
+      "enum": ["disable", "notify", "auto"],
       "description": "Disable updates, notify when one is available, or install updates automatically"
     },
     "share": {
       "type": "string",
-      "enum": [
-        "manual",
-        "auto",
-        "disabled"
-      ],
+      "enum": ["manual", "auto", "disabled"],
       "description": "Control whether sessions may be shared manually, automatically, or not at all"
     },
     "enterprise": {
@@ -101,7 +90,8 @@
               "integration.use",
               "mcp.use",
               "skill.use",
-              "plugin.use"
+              "plugin.use",
+              "websearch.use"
             ]
           },
           "resource": {
@@ -109,17 +99,10 @@
           },
           "effect": {
             "type": "string",
-            "enum": [
-              "allow",
-              "deny"
-            ]
+            "enum": ["allow", "deny"]
           }
         },
-        "required": [
-          "action",
-          "resource",
-          "effect"
-        ],
+        "required": ["action", "resource", "effect"],
         "additionalProperties": false
       },
       "description": "Ordered policies controlling access to providers, tools, and integrations"
@@ -176,14 +159,10 @@
                 "properties": {
                   "disabled": {
                     "type": "boolean",
-                    "enum": [
-                      true
-                    ]
+                    "enum": [true]
                   }
                 },
-                "required": [
-                  "disabled"
-                ],
+                "required": ["disabled"],
                 "additionalProperties": false
               },
               {
@@ -302,9 +281,7 @@
                 "type": "boolean"
               }
             },
-            "required": [
-              "enabled"
-            ],
+            "required": ["enabled"],
             "additionalProperties": false
           }
         ],
@@ -442,9 +419,7 @@
       "anyOf": [
         {
           "type": "boolean",
-          "enum": [
-            false
-          ]
+          "enum": [false]
         },
         {
           "$ref": "#/$defs/ConfigWebSearch.InfoEncoded"
@@ -493,6 +468,9 @@
         "portable_shell_scanner": {
           "type": "boolean"
         },
+        "all_flags": {
+          "type": "boolean"
+        },
         "todo": {
           "type": "boolean"
         },
@@ -500,6 +478,18 @@
           "type": "boolean"
         },
         "media_blob": {
+          "type": "boolean"
+        },
+        "schedules": {
+          "type": "boolean"
+        },
+        "artifacts": {
+          "type": "boolean"
+        },
+        "part_rows": {
+          "type": "boolean"
+        },
+        "codemode_vm": {
           "type": "boolean"
         },
         "image_generate": {
@@ -532,10 +522,7 @@
                           "pattern": "^[^#]+$"
                         }
                       },
-                      "required": [
-                        "providerID",
-                        "model"
-                      ],
+                      "required": ["providerID", "model"],
                       "additionalProperties": false
                     }
                   ]
@@ -544,12 +531,6 @@
               "additionalProperties": false
             }
           ]
-        },
-        "schedules": {
-          "type": "boolean"
-        },
-        "artifacts": {
-          "type": "boolean"
         },
         "subagent_depth": {
           "type": "integer",
@@ -563,9 +544,7 @@
             },
             {
               "type": "boolean",
-              "enum": [
-                false
-              ]
+              "enum": [false]
             }
           ]
         },
@@ -583,7 +562,8 @@
                   "integration.use",
                   "mcp.use",
                   "skill.use",
-                  "plugin.use"
+                  "plugin.use",
+                  "websearch.use"
                 ]
               },
               "resource": {
@@ -591,17 +571,10 @@
               },
               "effect": {
                 "type": "string",
-                "enum": [
-                  "allow",
-                  "deny"
-                ]
+                "enum": ["allow", "deny"]
               }
             },
-            "required": [
-              "action",
-              "resource",
-              "effect"
-            ],
+            "required": ["action", "resource", "effect"],
             "additionalProperties": false
           },
           "description": "Policy statements applied to supported resources, such as provider access"
@@ -678,9 +651,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "template"
-        ],
+        "required": ["template"],
         "additionalProperties": false
       },
       "description": "Command configuration, see https://opencode.ai/docs/commands",
@@ -745,9 +716,7 @@
         },
         {
           "type": "string",
-          "enum": [
-            "notify"
-          ]
+          "enum": ["notify"]
         }
       ],
       "description": "Check for new versions and show an update notice. Updates are never installed automatically; run /update or `opencode upgrade`. Set to false to disable update checks. true and 'notify' behave the same",
@@ -863,12 +832,7 @@
   "$defs": {
     "LogLevel": {
       "type": "string",
-      "enum": [
-        "DEBUG",
-        "INFO",
-        "WARN",
-        "ERROR"
-      ],
+      "enum": ["DEBUG", "INFO", "WARN", "ERROR"],
       "description": "Log level"
     },
     "ServerConfig": {
@@ -918,9 +882,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "repository"
-      ],
+      "required": ["repository"],
       "additionalProperties": false
     },
     "ConfigV2.Reference.Local": {
@@ -936,18 +898,12 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "path"
-      ],
+      "required": ["path"],
       "additionalProperties": false
     },
     "PermissionActionConfig": {
       "type": "string",
-      "enum": [
-        "ask",
-        "allow",
-        "deny"
-      ]
+      "enum": ["ask", "allow", "deny"]
     },
     "PermissionObjectConfig": {
       "type": "object",
@@ -1061,11 +1017,7 @@
         },
         "mode": {
           "type": "string",
-          "enum": [
-            "subagent",
-            "primary",
-            "all"
-          ]
+          "enum": ["subagent", "primary", "all"]
         },
         "hidden": {
           "type": "boolean",
@@ -1082,15 +1034,7 @@
             },
             {
               "type": "string",
-              "enum": [
-                "primary",
-                "secondary",
-                "accent",
-                "success",
-                "warning",
-                "error",
-                "info"
-              ]
+              "enum": ["primary", "secondary", "accent", "success", "warning", "error", "info"]
             }
           ],
           "description": "Hex color code (e.g., #FF5733) or theme color (e.g., primary)"
@@ -1171,9 +1115,7 @@
                 },
                 {
                   "type": "boolean",
-                  "enum": [
-                    false
-                  ]
+                  "enum": [false]
                 }
               ],
               "description": "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout."
@@ -1187,9 +1129,7 @@
                 },
                 {
                   "type": "boolean",
-                  "enum": [
-                    false
-                  ]
+                  "enum": [false]
                 }
               ],
               "description": "Timeout in milliseconds to wait for response headers (default: 300000). Set to false to disable timeout."
@@ -1203,9 +1143,7 @@
                 },
                 {
                   "type": "boolean",
-                  "enum": [
-                    false
-                  ]
+                  "enum": [false]
                 }
               ],
               "description": "Timeout in milliseconds between streamed SSE chunks for this provider (default: 300000). If no chunk arrives within this window, the request is aborted. Set to false to disable timeout."
@@ -1250,11 +1188,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "enum": [
-                          "reasoning",
-                          "reasoning_content",
-                          "reasoning_text"
-                        ]
+                        "enum": ["reasoning", "reasoning_content", "reasoning_text"]
                       },
                       {
                         "type": "string"
@@ -1268,11 +1202,7 @@
                         "anyOf": [
                           {
                             "type": "string",
-                            "enum": [
-                              "reasoning",
-                              "reasoning_content",
-                              "reasoning_text"
-                            ]
+                            "enum": ["reasoning", "reasoning_content", "reasoning_text"]
                           },
                           {
                             "type": "string"
@@ -1280,9 +1210,7 @@
                         ]
                       }
                     },
-                    "required": [
-                      "field"
-                    ],
+                    "required": ["field"],
                     "additionalProperties": false
                   }
                 ]
@@ -1318,17 +1246,11 @@
                         "type": "number"
                       }
                     },
-                    "required": [
-                      "input",
-                      "output"
-                    ],
+                    "required": ["input", "output"],
                     "additionalProperties": false
                   }
                 },
-                "required": [
-                  "input",
-                  "output"
-                ],
+                "required": ["input", "output"],
                 "additionalProperties": false
               },
               "limit": {
@@ -1344,10 +1266,7 @@
                     "type": "number"
                   }
                 },
-                "required": [
-                  "context",
-                  "output"
-                ],
+                "required": ["context", "output"],
                 "additionalProperties": false
               },
               "modalities": {
@@ -1357,26 +1276,14 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "enum": [
-                        "text",
-                        "audio",
-                        "image",
-                        "video",
-                        "pdf"
-                      ]
+                      "enum": ["text", "audio", "image", "video", "pdf"]
                     }
                   },
                   "output": {
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "enum": [
-                        "text",
-                        "audio",
-                        "image",
-                        "video",
-                        "pdf"
-                      ]
+                      "enum": ["text", "audio", "image", "video", "pdf"]
                     }
                   }
                 },
@@ -1387,12 +1294,7 @@
               },
               "status": {
                 "type": "string",
-                "enum": [
-                  "alpha",
-                  "beta",
-                  "deprecated",
-                  "active"
-                ]
+                "enum": ["alpha", "beta", "deprecated", "active"]
               },
               "provider": {
                 "type": "object",
@@ -1440,9 +1342,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "local"
-          ],
+          "enum": ["local"],
           "description": "Type of MCP server connection"
         },
         "command": {
@@ -1474,10 +1374,7 @@
           "description": "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."
         }
       },
-      "required": [
-        "type",
-        "command"
-      ],
+      "required": ["type", "command"],
       "additionalProperties": false
     },
     "McpOAuthConfig": {
@@ -1513,9 +1410,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "remote"
-          ],
+          "enum": ["remote"],
           "description": "Type of MCP server connection"
         },
         "url": {
@@ -1540,9 +1435,7 @@
             },
             {
               "type": "boolean",
-              "enum": [
-                false
-              ]
+              "enum": [false]
             }
           ],
           "description": "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection."
@@ -1554,18 +1447,12 @@
           "description": "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."
         }
       },
-      "required": [
-        "type",
-        "url"
-      ],
+      "required": ["type", "url"],
       "additionalProperties": false
     },
     "LayoutConfig": {
       "type": "string",
-      "enum": [
-        "auto",
-        "stretch"
-      ]
+      "enum": ["auto", "stretch"]
     },
     "ImageAttachmentConfig": {
       "type": "object",
@@ -1607,10 +1494,7 @@
     },
     "Policy.Effect": {
       "type": "string",
-      "enum": [
-        "allow",
-        "deny"
-      ]
+      "enum": ["allow", "deny"]
     },
     "ConfigV2.Experimental.Policy": {
       "type": "object",
@@ -1621,9 +1505,7 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "enum": [
-                    "provider.use"
-                  ]
+                  "enum": ["provider.use"]
                 }
               ]
             }
@@ -1636,20 +1518,12 @@
           "type": "string"
         }
       },
-      "required": [
-        "action",
-        "effect",
-        "resource"
-      ],
+      "required": ["action", "effect", "resource"],
       "additionalProperties": false
     },
     "Permission.Effect": {
       "type": "string",
-      "enum": [
-        "allow",
-        "deny",
-        "ask"
-      ]
+      "enum": ["allow", "deny", "ask"]
     },
     "Permission.Rule": {
       "type": "object",
@@ -1664,11 +1538,7 @@
           "$ref": "#/$defs/Permission.Effect"
         }
       },
-      "required": [
-        "action",
-        "resource",
-        "effect"
-      ],
+      "required": ["action", "resource", "effect"],
       "additionalProperties": false
     },
     "Permission.Ruleset": {
@@ -1702,10 +1572,7 @@
                   "pattern": "^[^#]+$"
                 }
               },
-              "required": [
-                "providerID",
-                "model"
-              ],
+              "required": ["providerID", "model"],
               "additionalProperties": false
             }
           ]
@@ -1733,11 +1600,7 @@
         },
         "mode": {
           "type": "string",
-          "enum": [
-            "subagent",
-            "primary",
-            "all"
-          ]
+          "enum": ["subagent", "primary", "all"]
         },
         "hidden": {
           "type": "boolean"
@@ -1815,18 +1678,12 @@
           "type": "object"
         }
       },
-      "required": [
-        "command"
-      ],
+      "required": ["command"],
       "additionalProperties": false
     },
     "Mcp.Protocol": {
       "type": "string",
-      "enum": [
-        "legacy",
-        "auto",
-        "2026-07-28"
-      ],
+      "enum": ["legacy", "auto", "2026-07-28"],
       "description": "MCP protocol negotiation. \"legacy\" (default) opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. \"auto\" probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. \"2026-07-28\" requires that revision and fails otherwise."
     },
     "Mcp.LocalConfigEncoded": {
@@ -1834,9 +1691,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "local"
-          ]
+          "enum": ["local"]
         },
         "command": {
           "type": "array",
@@ -1882,12 +1737,12 @@
         },
         "protocol": {
           "$ref": "#/$defs/Mcp.Protocol"
+        },
+        "pool": {
+          "type": "boolean"
         }
       },
-      "required": [
-        "type",
-        "command"
-      ],
+      "required": ["type", "command"],
       "additionalProperties": false
     },
     "Mcp.OAuthConfigEncoded": {
@@ -1921,9 +1776,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "remote"
-          ]
+          "enum": ["remote"]
         },
         "url": {
           "type": "string"
@@ -1941,9 +1794,7 @@
             },
             {
               "type": "boolean",
-              "enum": [
-                false
-              ]
+              "enum": [false]
             }
           ]
         },
@@ -1976,12 +1827,12 @@
         },
         "protocol": {
           "$ref": "#/$defs/Mcp.Protocol"
+        },
+        "pool": {
+          "type": "boolean"
         }
       },
-      "required": [
-        "type",
-        "url"
-      ],
+      "required": ["type", "url"],
       "additionalProperties": false
     },
     "Config.Compaction.Percent": {
@@ -2022,10 +1873,7 @@
                   "pattern": "^[^#]+$"
                 }
               },
-              "required": [
-                "providerID",
-                "model"
-              ],
+              "required": ["providerID", "model"],
               "additionalProperties": false
             }
           ]
@@ -2038,9 +1886,7 @@
           "description": "Deprecated alias for subagent."
         }
       },
-      "required": [
-        "template"
-      ],
+      "required": ["template"],
       "additionalProperties": false
     },
     "Config.Reference.GitEncoded": {
@@ -2059,9 +1905,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "repository"
-      ],
+      "required": ["repository"],
       "additionalProperties": false
     },
     "Config.Reference.LocalEncoded": {
@@ -2077,9 +1921,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "path"
-      ],
+      "required": ["path"],
       "additionalProperties": false
     },
     "WebSearch.ID": {
@@ -2092,9 +1934,7 @@
           "anyOf": [
             {
               "type": "string",
-              "enum": [
-                "random"
-              ],
+              "enum": ["random"],
               "description": "Reuse a randomly selected provider until it is rate limited, then switch to another available provider."
             },
             {
@@ -2103,9 +1943,7 @@
           ]
         }
       },
-      "required": [
-        "provider"
-      ],
+      "required": ["provider"],
       "additionalProperties": false
     },
     "Config.Plugin.EntryEncoded": {
@@ -2118,9 +1956,7 @@
           "type": "object"
         }
       },
-      "required": [
-        "package"
-      ],
+      "required": ["package"],
       "additionalProperties": false
     },
     "Config.Worktree": {
@@ -2130,9 +1966,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "directory"
-      ],
+      "required": ["directory"],
       "additionalProperties": false
     },
     "Config.WarmingEncoded": {
@@ -2142,7 +1976,15 @@
           "type": "string"
         },
         "interval": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": ["auto"]
+            },
+            {
+              "type": "string"
+            }
+          ]
         },
         "duration": {
           "type": "string"
@@ -2157,11 +1999,7 @@
       "anyOf": [
         {
           "type": "string",
-          "enum": [
-            "reasoning",
-            "reasoning_content",
-            "reasoning_text"
-          ]
+          "enum": ["reasoning", "reasoning_content", "reasoning_text"]
         },
         {
           "type": "string"
@@ -2170,25 +2008,15 @@
     },
     "Model.MaxTokensField": {
       "type": "string",
-      "enum": [
-        "max_completion_tokens",
-        "max_tokens"
-      ]
+      "enum": ["max_completion_tokens", "max_tokens"]
     },
     "Model.CacheFormat": {
       "type": "string",
-      "enum": [
-        "anthropic",
-        "alibaba"
-      ]
+      "enum": ["anthropic", "alibaba"]
     },
     "Model.MediaInput": {
       "type": "string",
-      "enum": [
-        "assets",
-        "state",
-        "root"
-      ]
+      "enum": ["assets", "state", "root"]
     },
     "Provider.Compatibility": {
       "type": "object",
@@ -2230,14 +2058,10 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": [
-                "summary"
-              ]
+              "enum": ["summary"]
             }
           },
-          "required": [
-            "type"
-          ],
+          "required": ["type"],
           "additionalProperties": false
         },
         {
@@ -2245,14 +2069,10 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": [
-                "native"
-              ]
+              "enum": ["native"]
             }
           },
-          "required": [
-            "type"
-          ],
+          "required": ["type"],
           "additionalProperties": false
         }
       ]
@@ -2261,29 +2081,52 @@
       "type": "string",
       "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?(?:ms|s|m|h|d)$"
     },
+    "Provider.CacheWarming": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "interval": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["auto"]
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "duration": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "Provider.Cache": {
       "type": "object",
       "properties": {
         "ttl": {
           "$ref": "#/$defs/Provider.CacheTTL"
+        },
+        "warming": {
+          "$ref": "#/$defs/Provider.CacheWarming"
         }
       },
       "additionalProperties": false
     },
     "Provider.Transport": {
       "type": "string",
-      "enum": [
-        "http",
-        "websocket"
-      ]
+      "enum": ["http", "websocket"]
     },
     "Provider.Encoding": {
       "type": "string",
-      "enum": [
-        "zstd",
-        "gzip",
-        "none"
-      ]
+      "enum": ["zstd", "gzip", "none"]
     },
     "Config.Provider.Settings": {
       "type": "object",
@@ -2295,9 +2138,7 @@
             },
             {
               "type": "boolean",
-              "enum": [
-                false
-              ]
+              "enum": [false]
             }
           ]
         },
@@ -2308,9 +2149,7 @@
             },
             {
               "type": "boolean",
-              "enum": [
-                false
-              ]
+              "enum": [false]
             }
           ]
         },
@@ -2321,9 +2160,7 @@
             },
             {
               "type": "boolean",
-              "enum": [
-                false
-              ]
+              "enum": [false]
             }
           ]
         },
@@ -2358,11 +2195,7 @@
       "anyOf": [
         {
           "type": "string",
-          "enum": [
-            "chat",
-            "decision",
-            "image"
-          ]
+          "enum": ["chat", "decision", "image"]
         },
         {
           "type": "string"
@@ -2442,14 +2275,10 @@
           "properties": {
             "supported": {
               "type": "boolean",
-              "enum": [
-                false
-              ]
+              "enum": [false]
             }
           },
-          "required": [
-            "supported"
-          ],
+          "required": ["supported"],
           "additionalProperties": false
         },
         {
@@ -2457,9 +2286,7 @@
           "properties": {
             "supported": {
               "type": "boolean",
-              "enum": [
-                true
-              ]
+              "enum": [true]
             },
             "toggle": {
               "type": "boolean"
@@ -2487,9 +2314,7 @@
               "additionalProperties": false
             }
           },
-          "required": [
-            "supported"
-          ],
+          "required": ["supported"],
           "additionalProperties": false
         }
       ]
@@ -2556,9 +2381,7 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": [
-                "context"
-              ]
+              "enum": ["context"]
             },
             "size": {
               "type": "integer",
@@ -2566,10 +2389,7 @@
               "maximum": 9007199254740991
             }
           },
-          "required": [
-            "type",
-            "size"
-          ],
+          "required": ["type", "size"],
           "additionalProperties": false
         },
         "input": {
@@ -2591,10 +2411,7 @@
           "additionalProperties": false
         }
       },
-      "required": [
-        "input",
-        "output"
-      ],
+      "required": ["input", "output"],
       "additionalProperties": false
     },
     "Config.ModelEncoded": {
@@ -2659,9 +2476,7 @@
                 "type": "object"
               }
             },
-            "required": [
-              "id"
-            ],
+            "required": ["id"],
             "additionalProperties": false
           }
         },
