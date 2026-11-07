@@ -7,14 +7,15 @@ external model/scanner services.
 
 Use Node 26.12.1 or a compatible later 26.x, Go 1.26.5 and Python 3.11+.
 Run `npm ci` after checkout or a lockfile change. The gates reuse dependencies
-and the installed Go compiler, and prepare the Go/Wasm assets themselves.
+and the installed Go compiler. Go checks the preserved prompt sources and generated
+Markdown defaults; it is not part of the deployed prompt renderer.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run check` | App types, prompt preservation, unit/native API and source-map checks |
+| `npm run check` | App types, prompt preservation and unit/native API checks |
 | `npm run test:watch` | Watch unit tests |
 | `npm run test:workers:watch` | Watch native Worker tests |
-| `npm run verify` | App checks and production bundle |
+| `npm run verify` | App checks, Vite production build, compiled stack/map checks and Wrangler dry run |
 | `npm run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
 | `npm run verify:full` | Both Worker gates, Go specialist generation, auth, lifecycle, Git publication and recovery checks |
 | `npm run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
@@ -70,9 +71,20 @@ both shipped migration histories are accepted without rewriting migration tags.
 Required secret names are declared for generated types; their values stay bound.
 Keep actual API keys in bound Worker secrets; the JSON must contain
 configuration metadata only. Never upload the generated config or deployment
-logs as public CI artifacts. Use the existing app deploy helper to preserve the
-prebuilt module catalog and source maps. Protect `main` with passing GitHub
-checks; Cloudflare's push-triggered build does not wait for GitHub environment
+logs as public CI artifacts. Vite builds the client and Worker together; deploy
+with `npm run deploy --workspace @pentagi-artifacts/control-plane`. That command
+builds and uses `dist/worker/wrangler.json`, the native generated config. Existing
+private build metadata with Wrangler minify/Text rules is normalized to the Vite
+source configuration without changing installation identity or migration history.
+If an existing native Builds connection still uses
+`node scripts/deploy-native-app.mjs`, change its deploy command to
+`npm run deploy --workspace @pentagi-artifacts/control-plane` before selecting
+this source revision. That npm command also works with the previous source
+revision. The customer/root connection continues to use `npm run build` and
+`npm run deploy`. These are configuration instructions; no existing connection
+is changed by the repository update.
+
+Protect `main` with passing GitHub checks; Cloudflare's push-triggered build does not wait for GitHub environment
 approvals.
 
 ## Prompt sources
@@ -84,3 +96,21 @@ already-rendered attempts retain their original bytes and digests.
 Regenerate the native Markdown defaults with `go run ./scripts/native-specialists`
 and check them with `go run ./scripts/native-specialists -check`.
 The full gate verifies deterministic generation and original prompt hashes.
+
+## Worker build output
+
+The pinned [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/vite-plugin/)
+uses one `worker` environment and emits `apps/control-plane/dist/client` assets
+and `dist/worker/wrangler.json`. The customer build selects the root source config
+with `vite build --mode customer`; the ordinary app build selects the app source
+config and retains its gateway binding. Root `npm run deploy` uses that generated
+customer config. Build the intended target immediately before deployment: both
+builds use the same output directory.
+
+Worker maps omit `sourcesContent` through Rolldown's `sourcemapExcludeSources`.
+`upload_source_maps: true` makes Wrangler reject missing maps. The build checks
+every emitted Worker map against the 60 MiB raw/15 MiB gzip limits and executes
+the real compiled identifier validator to map its exception back to TypeScript.
+There is no second bundling or map-rewriting pass. Browser-only fixtures select
+`--mode browser-fixture`; normal Vite development and preview use the Workers
+runtime. Vitest's `test` mode disables the build plugins.

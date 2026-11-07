@@ -11,7 +11,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('continuous nativ
  let server:ViteDevServer,browser:Browser,origin:string;
  const feeds=new Map<string,{snapshot:unknown,response:ServerResponse|undefined;connections:number}>();
  beforeAll(async()=>{
-  server=await createServer({root:fileURLToPath(new URL('../',import.meta.url)),mode:'development',server:{host:'127.0.0.1',port:0},plugins:[{name:'native-live-fixture',configureServer(vite){vite.middlewares.use((request,response,next)=>{
+  server=await createServer({root:fileURLToPath(new URL('../',import.meta.url)),mode:'browser-fixture',server:{host:'127.0.0.1',port:0},plugins:[{name:'native-live-fixture',configureServer(vite){vite.middlewares.use((request,response,next)=>{
    const id=request.url?.match(/^\/v1\/ui\/jobs\/([^/]+)\/events/)?.[1],feed=id?feeds.get(id):undefined;
    if(!feed)return next();
    response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'});

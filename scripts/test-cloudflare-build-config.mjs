@@ -52,3 +52,18 @@ test('app: obsolete result hint metadata is retired without changing installatio
   assert.equal(retired.workflows,undefined);assert.deepEqual(retired.triggers,{events:[]});
   assert.throws(()=>validateBuildConfig('app',JSON.stringify({...config,workflows:[{...config.workflows[0],binding:'RENAMED'}]}),template),/ResultValidation.*retired/);
 });
+
+
+test('app: legacy bundler metadata uses Vite map policy without changing installation metadata', async () => {
+  const template = JSON.parse(await readFile(new URL('../apps/control-plane/wrangler.jsonc', import.meta.url), 'utf8'));
+  const config = { ...template, name: 'existing-installation', minify: true, upload_source_maps: false,
+    rules: [{ type: 'Text', globs: ['**/*.tmpl', '**/*.tmpl?raw', '**/*.md?raw', '**/*.md'], fallthrough: true }],
+    dependencies_instrumentation: { enabled: false }, routes: [{ pattern: 'example.invalid/*', zone_name: 'example.invalid' }],
+    artifacts: [{ binding: 'ARTIFACTS', namespace: 'existing-artifacts' }], vars: { ...template.vars, ARTIFACTS_NAMESPACE: 'existing-artifacts' },
+  };
+  const { minify, rules, ...expected } = config;
+  expected.upload_source_maps = true;
+  const result = validateBuildConfig('app', JSON.stringify(config), template, config.name);
+  assert.deepEqual(result, expected);
+  assert.deepEqual(validateBuildConfig('app', JSON.stringify(result), template, config.name), result);
+});

@@ -2,8 +2,7 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "pentcloud-app",
   "main": "src/worker.ts",
-  "minify": true,
-  "upload_source_maps": false,
+  "upload_source_maps": true,
   "compatibility_date": "2026-10-30",
   "compatibility_flags": [
     "nodejs_compat",
@@ -109,18 +108,6 @@
     "ARTIFACTS_NAMESPACE": "pentcloud-local",
     "AI_GATEWAY_ID": ""
   },
-  "rules": [
-    {
-      "type": "Text",
-      "globs": [
-        "**/*.tmpl",
-        "**/*.tmpl?raw",
-        "**/*.md?raw",
-        "**/*.md"
-      ],
-      "fallthrough": true
-    }
-  ],
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
   }

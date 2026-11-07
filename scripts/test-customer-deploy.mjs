@@ -7,7 +7,7 @@ test('deployment button has one complete account-independent Worker and all elev
   assert.equal(config.main,'apps/control-plane/src/customer/worker.ts');assert.equal(config.account_id,undefined);assert.equal(config.services,undefined);assert.equal(config.workers_dev,true);assert.equal(config.preview_urls,false);
   assert.equal(config.containers.length,11);assert.deepEqual(config.containers.map(c=>c.class_name),packs.durable_objects.bindings.map(b=>b.class_name));
   const classes=new Set(config.migrations.flatMap(m=>m.new_sqlite_classes??[]));for(const c of config.containers){assert(classes.has(c.class_name));assert.equal(c.scheduling_policy,'durable_object');assert.equal(Object.keys(c.images).length,1);assert(!JSON.stringify(c).includes('Kali'));}
-  assert.equal(config.vars.ACCESS_AUD,undefined);assert.equal(config.vars.ACCESS_TEAM_DOMAIN,undefined);assert.equal(config.secrets,undefined);assert.equal(pkg.scripts.build,'node scripts/build-customer.mjs');assert.match(pkg.scripts.deploy,/--config wrangler.jsonc$/);
+  assert.equal(config.vars.ACCESS_AUD,undefined);assert.equal(config.vars.ACCESS_TEAM_DOMAIN,undefined);assert.equal(config.secrets,undefined);assert.equal(pkg.scripts.build,'node scripts/build-customer.mjs');assert.match(pkg.scripts.deploy,/--config apps\/control-plane\/dist\/worker\/wrangler.json$/);
 });
 
 test('selected Worker names isolate Artifacts and wizard metadata for each installation',async()=>{

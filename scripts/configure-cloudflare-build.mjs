@@ -27,6 +27,11 @@ export function validateBuildConfig(kind, value, template, expectedName, install
   if (kind === 'app') {
     if (!sourcePath(config.assets?.directory, template.assets.directory, 'dist/client')) throw new Error('Preserve the source assets directory.');
     config.assets.directory = template.assets.directory;
+    // Vite owns compilation now. Accept old private Builds metadata while
+    // using the current source's map policy; preserve installation settings.
+    delete config.minify;
+    delete config.rules;
+    config.upload_source_maps = template.upload_source_maps;
   }
   const contract = [template, installationTemplate].filter(Boolean).find(candidate => JSON.stringify(config.migrations) === JSON.stringify(candidate.migrations));
   const secretDeclarations = [template.secrets, installationTemplate?.secrets, ...(kind === 'app' ? [{ required: ['OPENCODE_GO_API_KEY'] }, { required: [] }] : [])];
@@ -35,7 +40,7 @@ export function validateBuildConfig(kind, value, template, expectedName, install
   // Model secrets are optional during first-run setup. Native deploys preserve
   // existing secret bindings; no secret values are transferred here.
   if (template.secrets) config.secrets = template.secrets; else delete config.secrets;
-  for (const key of ['main', 'compatibility_date', 'compatibility_flags', 'durable_objects', 'migrations', 'secrets', 'version_metadata', ...(kind === 'app' ? ['assets', 'rules', 'worker_loaders'] : [])]) {
+  for (const key of ['main', 'compatibility_date', 'compatibility_flags', 'durable_objects', 'migrations', 'secrets', 'version_metadata', ...(kind === 'app' ? ['assets', 'worker_loaders'] : [])]) {
     const expected = key === 'migrations' ? contract[key] : template[key];
     if (JSON.stringify(config[key]) !== JSON.stringify(expected)) throw new Error(`Preserve the source configuration's ${key}.`);
   }

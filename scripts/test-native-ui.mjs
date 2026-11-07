@@ -21,10 +21,10 @@ const appDirectory = fileURLToPath(new URL('../apps/control-plane', import.meta.
 const viteBinary = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
 const bundleDirectory = join(screenshotDir, 'bundle');
 if (!process.env.PENTCLOUD_UI_BASE_URL) {
-  const build = await promisify(execFile)(process.execPath, [viteBinary, 'build', '--outDir', bundleDirectory, '--emptyOutDir'], { cwd: appDirectory, maxBuffer: 8 * 1024 * 1024 });
+  const build = await promisify(execFile)(process.execPath, [viteBinary, 'build', '--mode', 'browser-fixture', '--outDir', bundleDirectory, '--emptyOutDir'], { cwd: appDirectory, maxBuffer: 8 * 1024 * 1024 });
   await fs.writeFile(join(screenshotDir, 'build.log'), build.stdout + build.stderr);
 }
-const server = process.env.PENTCLOUD_UI_BASE_URL ? undefined : spawn(process.execPath, [viteBinary, 'preview', '--outDir', bundleDirectory, '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+const server = process.env.PENTCLOUD_UI_BASE_URL ? undefined : spawn(process.execPath, [viteBinary, 'preview', '--mode', 'browser-fixture', '--outDir', bundleDirectory, '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
   cwd: appDirectory, stdio: ['ignore', 'pipe', 'pipe'],
 });
 let serverOutput = '';
