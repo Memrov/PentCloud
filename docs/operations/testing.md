@@ -16,7 +16,7 @@ and the installed Go compiler, and prepare the Go/Wasm assets themselves.
 | `npm run test:workers:watch` | Watch native Worker tests |
 | `npm run verify` | App checks and production bundle |
 | `npm run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
-| `npm run verify:full` | Both Worker gates, Go/renderer, installer/auth, lifecycle, Git publication and recovery checks |
+| `npm run verify:full` | Both Worker gates, Go/renderer, auth, lifecycle, Git publication and recovery checks |
 | `npm run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
 | `npm run test:browser` | Attachment/browser fixtures; requires installed Chrome |
 

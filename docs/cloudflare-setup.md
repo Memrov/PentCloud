@@ -12,22 +12,27 @@ This guide covers your self-hosted installation.
 2. **Access:** choose Zero Trust Free when its limits fit, create the team domain
    and configure a login method. Put allowed emails in installation configuration.
    Do not purchase a paid Access tier by default.
-3. **Permissions:** confirm native CLI consent and the account roles for the
-   temporary deployment lease. The [authentication guide](operations/authentication.md)
-   lists permission names and separates operator login from account administration.
+3. **Permissions:** confirm the account roles needed for the native deployment.
+   The [authentication guide](operations/authentication.md) separates operator login from account administration.
 4. **OpenCode:** sign in to [Console](https://opencode.ai/console), choose billing
    in the intended workspace and create a personal key there. For Go, use the
    single-member workspace and inspect actual model/privacy availability.
    See [key creation](https://opencode.ai/v2/docs/console/api) for the current UI.
-5. **Install:** follow [deployment](deployment.md) and preserve installation state.
-   A key can be added afterward; successful `doctor` does not prove inference
-   readiness. Configure it below before starting analysis.
+5. **Deployment status:** review [deployment](deployment.md). The previous CLI
+   installer is removed. Use the deployment button, then open `/setup` for the three-step browser
+   wizard: owner Access, Artifacts workspace and OpenCode secret. The
+   dashboard alternative below works for existing installations too.
 
 ## Add the OpenCode key in Cloudflare
 
-The installer names the app `<instance>-app` and gateway `<instance>-toolbox`.
-Use the app name from your installation's output/state and select the correct
-Cloudflare account.
+The `/setup` wizard can save the key using a temporary scoped account token;
+see [customer setup](deployment.md#customer-installation). It clears the submitted token
+and key from the form and never persists the account token. Revoke that token
+when finished. The following native dashboard option needs no token pasted into
+PentCloud.
+
+Select the app Worker belonging to your existing installation in the correct
+Cloudflare account. Keep its current name, bindings and secrets.
 
 In **Cloudflare Dashboard → Workers & Pages → app Worker → Settings → Variables
 and Secrets → Add**, choose **Secret** and one of these exact names:
@@ -146,12 +151,10 @@ main domain already receives email elsewhere.
 
 1. Choose an unused receiving address such as `verification@auth.example.com`.
    If using a subdomain, enable it once in Cloudflare Email Routing **Settings →
-   Subdomains**. The installer can onboard an unused apex through the native DNS
-   API; it refuses existing foreign MX/SPF records and does not guess subdomain
-   onboarding. It enables plus addressing and lets Wrangler create the literal
-   route. No catch-all is used.
-2. Configure the optional receiver in your private installer configuration as
-   described below. The installer preserves the address across upgrades.
+   Subdomains**. Configure the address in the native Email Routing dashboard.
+   Preserve existing MX/SPF records and use an explicit address, not a catch-all.
+2. Point the native email route at the app Worker and configure the receiver
+   address as `PENTCLOUD_VERIFICATION_EMAIL` in its deployment settings.
 3. In Targets, select email verification, enter the expected sender and save.
    Open **Dashboard → Bug bounty → Check forwarding** and select that target.
    Click **Check forwarding** to open a ten-minute setup window. Add the displayed
@@ -165,8 +168,8 @@ main domain already receives email elsewhere.
 **AgentMail receiver:** no DNS domain is required. Use an existing dedicated inbox
 and a key restricted to reading its messages. Save the key in Cloudflare Secrets
 Store, bind it to the app Worker as `AGENTMAIL_API_KEY`, and set
-`PENTCLOUD_AGENTMAIL_INBOX` to the inbox address. The optional installer config can
-retain these nonsecret references. Choose AgentMail on the target and follow
+`PENTCLOUD_AGENTMAIL_INBOX` to the inbox address. Preserve these bindings in the
+installation's deployment configuration. Choose AgentMail on the target and follow
 steps 3–4 above. **Check AgentMail connection** verifies message-read access; an
 empty inbox is valid. Check forwarding separately to confirm delivery.
 Email setup is optional and does not block programs that do not need email login.
@@ -196,46 +199,20 @@ Cloudflare’s [Email Worker handler](https://developers.cloudflare.com/email-se
 and [subaddressing instructions](https://developers.cloudflare.com/email-service/configuration/email-routing-addresses/)
 describe the native routing configuration.
 
-### Retain optional email setup across upgrades
+### Retain optional email setup across deployments
 
-Add either or both receiver references to your private installer JSON. These
-values are resource names, not credentials; enter the AgentMail key through
-Cloudflare’s secret prompt before installation. Replace the example IDs with
-the store and zone owned by your selected account:
-
-```json
-"email": {
-  "cloudflare": {
-    "zoneId": "YOUR_ZONE_ID",
-    "address": "verification@auth.example.com"
-  },
-  "agentmail": {
-    "inbox": "YOUR_INBOX@agentmail.to",
-    "storeId": "YOUR_SECRETS_STORE_ID",
-    "secretName": "your-agentmail-api-key"
-  }
-}
-```
-
-Run the normal `plan`, then `upgrade --apply` using the same private state
-directory. Account, instance and Access policy remain fixed. The installer
-checks zone/store ownership and the secret’s `workers` scope, renders native
-Wrangler `addresses` and Secrets Store bindings, and retains this configuration
-in its private manifest. Email-specific zone permissions are limited to that
-zone in the temporary deployment lease. Binding an existing Secrets Store secret requires Secrets Store Edit during setup,
-without returning the secret value. The native account email-rules read permission
-is also needed for Wrangler’s route planner. Route conflicts stop for reconciliation;
-the installer never silently takes over an existing address. Removing optional
-settings disables receiving in the app; remove obsolete native routes separately
-after reviewing Cloudflare’s plan. Existing mail DNS and provider messages are
-preserved.
+Preserve the native Email Routing address, receiver variables and Secrets Store
+bindings in the installation's Cloudflare deployment configuration. Configure
+secrets through Cloudflare's private entry controls. Review domain/store
+ownership and route conflicts before changing them; preserve existing MX records
+and mailbox services. Optional email configuration remains in these native Cloudflare settings.
 
 ## Confirm setup
 
 Open the protected app and configure models for the desired roles. Catalog
 refresh does not make a model request. **Test selected models** can consume
 credits or subscription allowance; review the selected route and cost first.
-A successful install or doctor check does not establish inference readiness.
+A successful deployment does not establish inference readiness.
 
 See [requirements](requirements.md), [deployment](deployment.md),
 [authentication](operations/authentication.md) and [troubleshooting](operations/debugging.md).

@@ -3,7 +3,9 @@ import worker from "../../src/native/worker";
 
 // Test only: the real router and signed auth see a narrow lifecycle RPC fixture.
 export default {fetch(request:Request,env:RuntimeFixtureEnv){
+  if(request.headers.has("X-Fixture-Unconfigured"))return worker.fetch(request,{...env,ACCESS_TEAM_DOMAIN:"",ACCESS_AUD:""} as unknown as Parameters<typeof worker.fetch>[1]);
   const coordinator=env.COORDINATOR.getByName("global");
+  if(request.headers.get("X-Fixture-Tool-Backend")==="tool-packs")return worker.fetch(request,{...env,TOOL_PACKS:{}} as unknown as Parameters<typeof worker.fetch>[1]);
   return worker.fetch(request,{...env,TOOLBOX:{
     async status(){await coordinator.noteRemote("toolboxStatus","[]");return {state:"stopped",inactivityTimeoutMs:1800000};},
     async ready(generation?:string){await coordinator.noteRemote("toolboxReady",JSON.stringify([generation??null]));return generation?{error:"generation_lost"}:{state:"booting",generation:"fixture-generation"};},
@@ -182,7 +184,7 @@ export class RouterControl extends DurableObject<RuntimeFixtureEnv> {
   }
   async reconcile(repoName: string, ref: string, commit: string) {
     this.record("reconcile", repoName, ref, commit);
-    return { accepted: true };
+    return repoName==="run-fixture"&&ref==="refs/heads/attempts/job-1"?{ accepted: true }:{ ignored: true };
   }
   override async fetch(request: Request) {
     this.record("fetch", request.url, request.headers.get("Upgrade"));

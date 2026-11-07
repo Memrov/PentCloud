@@ -16,7 +16,7 @@
     "test:workers": "bash scripts/test-native-worker-runtime.sh",
     "test:watch": "npm exec --workspace @pentagi-artifacts/control-plane -- vitest watch",
     "test:workers:watch": "npm exec --workspace @pentagi-artifacts/control-plane -- vitest watch --config vitest.runtime.config.ts",
-    "test:browser": "PENTCLOUD_MATERIALS_BROWSER=1 npm exec --workspace @pentagi-artifacts/control-plane -- vitest run test/materials-browser.test.ts",
+    "test:browser": "PENTCLOUD_MATERIALS_BROWSER=1 PENTCLOUD_SETUP_BROWSER=1 npm exec --workspace @pentagi-artifacts/control-plane -- vitest run test/materials-browser.test.ts test/setup-browser.test.ts",
     "qa:ui": "node scripts/browser-run-qa.mjs",
     "qa:ui:interactive": "node scripts/browser-run-interactive-qa.mjs",
     "test:gateway": "npm test --workspace @pentagi-artifacts/aws-toolbox-control",
@@ -24,8 +24,9 @@
     "check": "bash scripts/native-cloudflare-verify.sh --check",
     "verify:gateway": "bash scripts/native-cloudflare-verify.sh --worker gateway",
     "verify:full": "bash scripts/native-cloudflare-verify.sh --full --worker all",
-    "pentcloud": "node scripts/pentcloud.mjs",
-    "test:installer": "node --test scripts/test-private-install.mjs scripts/test-private-email.mjs scripts/test-native-auth.mjs"
+    "build": "node scripts/build-customer.mjs",
+    "deploy": "node scripts/deploy-native-app.mjs --config wrangler.jsonc",
+    "test:customer": "npm exec --workspace @pentagi-artifacts/control-plane -- vitest run --config vitest.customer.config.ts"
   },
   "engines": {
     "node": ">=26.12.1"

@@ -52,7 +52,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('continuous nativ
    return json({ok:true});
   });
   try{
-   await page.goto(`${origin}?run=${run.id}&job=${id}`);
+   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}?run=${run.id}&job=${id}`);
    await browserExpect(page.getByRole('heading',{name:'Primary',exact:true})).toBeVisible();
    expect(await page.title()).toBe('PentCloud Control Room');
    const composer=page.getByRole('textbox',{name:'Message Primary',exact:true});

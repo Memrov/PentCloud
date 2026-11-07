@@ -358,6 +358,7 @@ export class ProbeAttempt extends NativeAttempt {
       id,
       runId: "local-run",
       role:
+        kind.startsWith("package-only")?"coder":
         kind==="finding-contract"?"reporter":
         kind.startsWith("native-discovery")?"pentester":
         kind.startsWith("evidence")?"coder":
@@ -382,7 +383,7 @@ export class ProbeAttempt extends NativeAttempt {
       remote: "https://example.invalid/repo.git",
       settingsRevision: "a".repeat(64),
       settings: {
-        ...(kind.startsWith("sdk-managed-specialist") ? { promptFormat: "markdown" as const } : {}),
+        ...(kind.startsWith("sdk-managed-specialist")||kind==="package-only" ? { promptFormat: "markdown" as const } : {}),
         promptTemplate: "Probe",
         upstreamPromptDigest: "b".repeat(64),
         model: "opencode-go:deepseek-v4-pro",
@@ -478,6 +479,7 @@ export class ProbeAttempt extends NativeAttempt {
     });
     type Internals = {
       initialize(input:AttemptInput):Promise<unknown>;
+      preflightToolbox(state:object):Promise<void>;
       packCall(input:import("../../../../shared/tool-packs").ToolPackRequest,id:string):Promise<unknown>;
       safe(value:unknown):unknown;
       apiRequest(input:unknown,id:string):Promise<unknown>;
@@ -491,7 +493,25 @@ export class ProbeAttempt extends NativeAttempt {
       checkpointEvidence():Promise<import("../../src/native/evidence").EvidenceCheckpoint|undefined>;
     };
     const internal = this as unknown as Internals;
-    if(kind==="finding-contract"){
+    if(kind.startsWith("package-only")){
+      const checks:Record<string,unknown>={};
+      delete this.env.TOOLBOX;
+      let runs=0,stops=0;
+      this.env.TOOL_PACKS={ready:async()=>({}),run:async()=>{runs++;return {exitCode:0,stdout:"owned package result",stderr:""};},stop:async()=>{stops++;return {stopped:true};}};
+      await this.ctx.storage.delete("attempt");await internal.initialize(input);
+      const state=(await this.ctx.storage.get<Record<string,unknown>>("attempt"))!;
+      await this.ctx.storage.put("attempt",{...state,prepared:true});
+      await internal.preflightToolbox(state);
+      checks.prompt=state.prompt;checks.skill=(state.toolSkill as {content:string}|undefined)?.content??"";
+      checks.tools=(await internal.cloudflareTools()).map(tool=>tool.name);
+      const request={pack:"http" as const,request:{tool:"curl",target:"https://owned.example/"}};
+      checks.result=await internal.packCall(request,"once");await internal.packCall(request,"once");
+      checks.shell=await internal.terminal({input:"echo owned",cwd:this.directory});
+      await this.cancel();checks.execution=await this.execution();checks.runs=runs;checks.stops=stops;
+      checks.readies=(await this.ctx.storage.get("fixture:readies"))??0;
+      checks.initializes=(await this.ctx.storage.get("fixture:initializes"))??0;
+      return checks;
+    }else if(kind==="finding-contract"){
       const emptyState=await this.ctx.storage.get<Record<string,unknown>>("attempt");
       await this.ctx.storage.put("attempt",{...emptyState,status:"settled"});
       const emptyWork=JSON.parse((await this.recordedWork(input.runId)).text);

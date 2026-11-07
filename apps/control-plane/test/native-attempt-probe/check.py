@@ -20,6 +20,17 @@ def probe(kind):
 _, echoed = probe('header-redaction')
 assert 'private-header-marker' not in json.dumps(echoed), echoed
 assert '[REDACTED]' in json.dumps(echoed).upper(), echoed
+_, packages = probe('package-only')
+assert 'pentcloud_tool' in packages['tools'] and not any(name.startswith('pentcloud_kali_') for name in packages['tools']), packages
+assert packages['runs'] == packages['stops'] == 1, packages
+assert packages['readies'] == packages['initializes'] == 0, packages
+assert packages['execution']['drained'] and not packages['execution']['sessionCleanupPending'], packages
+assert 'bounded profiles' in packages['prompt'] and 'pentcloud_tool' in packages['skill'], packages
+assert 'Kali tools are unavailable' in packages['skill'], packages
+assert 'pentcloud_tool' in packages['shell']['capability'], packages
+_, package_template = probe('package-only-template')
+assert 'bounded profiles' in package_template['prompt'] and 'Kali tools are unavailable' in package_template['prompt'], package_template
+assert package_template['readies'] == package_template['initializes'] == 0 and package_template['execution']['drained'], package_template
 # Exercise different DOs concurrently: unique Git directories must prevent global
 # isomorphic-git locks from crossing DO-owned SQLite I/O contexts.
 with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:

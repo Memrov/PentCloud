@@ -46,6 +46,7 @@ async function fixture(existing: boolean, viewport = {width: 1440, height: 1000}
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     calls.push({path, body: request.postData(), bytes: request.postDataBuffer(), headers: request.headers()});
     const json = (value: unknown) => route.fulfill({status: 200, contentType: "application/json", body: JSON.stringify(value)});
+    if(path==='/v1/ui/setup')return json({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true});
     if (path.includes("/uploads/")) {
       const id = path.split("/").at(-1)!, runId = path.split("/")[4]!;
       return json(ready(id, runId, url.searchParams.get("name")!, request.postDataBuffer()!));

@@ -125,6 +125,15 @@ describe("production router in actual Workers runtime", () => {
     expect((await authorized("/v1/toolbox/start",{method:"POST"})).status).toBe(202);
     expect(await recordedCalls()).toEqual([{method:"toolboxStatus",args:[]},{method:"toolboxReady",args:["lost"]},{method:"toolboxReady",args:[null]}]);
   });
+  it("reports an uninstalled toolbox without crashing or starting Kali in a package-only install",async()=>{
+    for(const [path,method] of [["/v1/toolbox/status","GET"],["/v1/ui/toolbox/start","POST"]] as const){
+      const response=await authorized(path,{method,headers:{"X-Fixture-Tool-Backend":"tool-packs"}});
+      expect(response.status).toBe(404);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(await response.json()).toEqual({state:"not-installed",runtime:"Cloudflare tool packs"});
+    }
+    expect(await recordedCalls()).toEqual([]);
+  });
   it("rejects old operator bearers, expired identity and cross-origin mutations before RPC", async()=>{
     expect((await app.default.fetch("https://operator.test/v1/runs",{headers:{Authorization:`Bearer ${bindings.CONTROL_TOKEN}`}})).status).toBe(401);
     expect((await app.default.fetch("https://operator.test/v1/runs",{headers:{"Cf-Access-Jwt-Assertion":await accessToken(undefined,undefined,undefined,1)}})).status).toBe(403);
@@ -437,6 +446,7 @@ describe("production router in actual Workers runtime", () => {
     await bindings.RESULTS.create({
       id,
       params: {
+        type: "cf.artifacts.repo.pushed",
         source: {
           type: "artifacts.repo",
           namespace: "fixture-artifacts",
@@ -457,11 +467,45 @@ describe("production router in actual Workers runtime", () => {
     ]);
   });
 
+  it("routes native Artifacts push events without source.type through validation while leaving unknown jobs ignored",async()=>{
+    const id=`result-native-${crypto.randomUUID()}`;
+    await using instance=await introspectWorkflowInstance(bindings.RESULTS,id);
+    await bindings.RESULTS.create({id,params:{
+      id:"synthetic-native-event",
+      type:"cf.artifacts.repo.pushed",
+      source:{namespace:"fixture-artifacts",repoName:"ci-installation-proof"},
+      payload:{ref:"refs/heads/attempts/ci-unknown-job",before:"0".repeat(40),after:"b".repeat(40),commits:[]},
+    }});
+    await instance.waitForStatus("complete");
+    // This is event wiring, not candidate acceptance: the Coordinator still owns authorization.
+    expect(await instance.getOutput()).toEqual({result:'{"ignored":true}'});
+    expect(await instance.waitForStepResult({name:"validate committed result"})).toEqual({result:'{"ignored":true}'});
+    expect(await recordedCalls()).toEqual([{method:"reconcile",args:["ci-installation-proof","refs/heads/attempts/ci-unknown-job","b".repeat(40)]}]);
+  });
+
   it("ignores malformed or unrelated Artifacts Workflow payloads without calling Coordinator", async () => {
     for (const payload of [
       null,
       {},
       {
+        type: "cf.artifacts.repo.deleted",
+        source: {
+          type: "artifacts.repo",
+          namespace: "fixture-artifacts",
+          repoName: "run-fixture",
+        },
+        payload: { ref: "refs/heads/attempts/job-1", after: "a".repeat(40) },
+      },
+      {
+        source: {
+          type: "artifacts.repo",
+          namespace: "fixture-artifacts",
+          repoName: "run-fixture",
+        },
+        payload: { ref: "refs/heads/attempts/job-1", after: "a".repeat(40) },
+      },
+      {
+        type: "cf.artifacts.repo.pushed",
         source: {
           type: "other",
           namespace: "fixture-artifacts",
@@ -470,14 +514,15 @@ describe("production router in actual Workers runtime", () => {
         payload: { ref: "refs/heads/attempts/job-1", after: "a".repeat(40) },
       },
       {
+        type: "cf.artifacts.repo.pushed",
         source: {
-          type: "artifacts.repo",
           namespace: "other-namespace",
           repoName: "run-fixture",
         },
         payload: { ref: "refs/heads/attempts/job-1", after: "a".repeat(40) },
       },
       {
+        type: "cf.artifacts.repo.pushed",
         source: {
           type: "artifacts.repo",
           namespace: "fixture-artifacts",
@@ -486,6 +531,7 @@ describe("production router in actual Workers runtime", () => {
         payload: { ref: 1, after: "a".repeat(40) },
       },
       {
+        type: "cf.artifacts.repo.pushed",
         source: {
           type: "artifacts.repo",
           namespace: "fixture-artifacts",
@@ -494,6 +540,7 @@ describe("production router in actual Workers runtime", () => {
         payload: { ref: "refs/heads/main", after: "a".repeat(40) },
       },
       {
+        type: "cf.artifacts.repo.pushed",
         source: {
           type: "artifacts.repo",
           namespace: "fixture-artifacts",

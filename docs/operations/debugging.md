@@ -1,15 +1,9 @@
 # Troubleshooting
 
-Start with the selected installation's configuration and `--state` directory.
-Its `manifest.json` records owned resources, completed installation steps and
-image preparation. Keep state for recovery; do not copy another installation's
-identifiers or credentials.
+Start with the selected Cloudflare account, deployed Worker version and native
+Builds configuration. The previous CLI installer and its doctor command have
+been removed; use the in-app setup wizard at `/setup` for first-run configuration.
 
-```sh
-node scripts/pentcloud.mjs doctor --config ../my-pentcloud.json --state ../my-pentcloud-state
-```
-
-Doctor checks bindings and authenticated access without a model request or scan.
 For platform failures, check current [Cloudflare documentation](https://developers.cloudflare.com/),
 [service status](https://www.cloudflarestatus.com/),
 [changelog](https://developers.cloudflare.com/changelog/) and your pinned
@@ -17,10 +11,10 @@ CLI/package versions. `cf` and Wrangler have separate sign-in sessions.
 
 | Symptom | Where to look first |
 | --- | --- |
-| CLI authorization or permission failure | `cf auth whoami`, granted scopes, selected account and [deployment permissions](../deployment.md). `cf` and Wrangler logins are separate; the installer needs its process API token. Distinguish API permission denial from missing product entitlement. |
-| Install pauses, image preparation or resource creation fails | Installation `manifest.json`, image status, CLI error code and native Container image-preparation state; [installation guide](../deployment.md) and [`private-install.mjs`](../../scripts/lib/private-install.mjs). Retain the same state for recovery. |
+| CLI authorization or permission failure | `cf auth whoami`, granted scopes, selected account and [deployment permissions](../deployment.md). `cf` and Wrangler logins are separate; the deployment needs authorized account access. Distinguish API permission denial from missing product entitlement. |
+| Setup, image preparation or resource creation fails | Native Builds deployment status, Container image-preparation state and [deployment guidance](../deployment.md). Inspect the selected account before retrying a mutation. |
 | Worker deploy rejects startup (10021) | Native deployment log and `wrangler check startup` against the verified prebuilt bundle. Use a current Cloudflare CLI whose profiler supports the configured compatibility date; local profile time is not the production measurement. Embedded OpenCode engine loading is deferred to authorized session creation. Preserve package versions and behavior when reducing global initialization. |
-| Build or deployment fails | Native Builds logs for the exact source commit; selected installation's generated app/gateway Wrangler configs, lockfile and tool versions. Check the deployed Worker version and source maps before attributing an error to current source. |
+| Build or deployment fails | Native Builds logs for the exact source commit; selected installation's app/gateway Wrangler configs, lockfile and tool versions. Check the deployed Worker version and source maps before attributing an error to current source. |
 | App sign-in, blank page or loading failure | Browser console/Network, Access application domain/audience/email policy, app Worker Logs and Issues. Separate Cloudflare sign-in, application access, model access and target API authentication; [Worker routes](../../apps/control-plane/src/native/worker.ts). |
 | Target verification, model/API tests or analysis gate fails | [Onboarding behavior](onboarding.md), [`target-check.ts`](../../apps/control-plane/src/native/target-check.ts), [`onboarding.ts`](../../apps/control-plane/src/native/onboarding.ts), [`opencode-models.ts`](../../apps/control-plane/src/native/opencode-models.ts). Check target/setup revisions and proof/key versions. Model tests may consume credits; request them deliberately. |
 | Scope import, required headers or login fails | [Target access](onboarding.md#bounty-scope-and-target-login), catalog refresh/checksum, concrete origin/base path and applicable exclusions. Check `PENTCLOUD_TARGET_*` app bindings without reading values; verify login field selectors and same-target URLs. Native Browser Run guardrails and [`browser-interception.ts`](../../apps/control-plane/src/native/browser-interception.ts) cover different layers; Playwright route handlers alone skip redirect hops. |
@@ -38,10 +32,9 @@ preparation record. Keep credentials, private targets and response bodies out
 of public support requests. A successful Build does not establish that an
 already-active Durable Object has finished its configured deferred code update.
 
-Preserve installation manifests, Worker identities, secrets, migration tags and
-unresolved operation receipts. Deleting state, removing `operation.lock`,
-recreating resources or blindly repeating an uncertain mutation can lose
-ownership information or repeat a scan. Reconcile the recorded operation first.
+Preserve Worker identities, secrets, migration tags and unresolved runtime
+operation receipts. Recreating resources or blindly repeating an uncertain
+mutation can lose data or repeat a scan. Reconcile the recorded operation first.
 Never print credential files, token responses or secret values.
 
 Runtime status and `GET /v1/runtime-diagnostics` expose recorded state without

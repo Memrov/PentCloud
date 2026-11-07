@@ -29,7 +29,7 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("optional source
       return json({});
     });
     try{
-      await page.goto(origin);await page.getByRole("button",{name:/Owned project.*owned.example/}).click();
+      await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(origin);await page.getByRole("button",{name:/Owned project.*owned.example/}).click();
       await page.getByRole("button",{name:/Source context \(optional\)/}).click();
       await page.getByRole("button",{name:"Load existing repositories",exact:true}).click();
       await page.getByRole("combobox",{name:"Artifacts repository"}).click();await page.getByRole("option",{name:"context",exact:true}).click();

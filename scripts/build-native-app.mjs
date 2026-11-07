@@ -15,20 +15,20 @@ import {
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(root, 'apps/control-plane');
 const args = process.argv.slice(2);
-assert(args.length === 0 || (args.length === 4 && args[0] === '--config' && args[2] === '--output'),
-  'Usage: build-native-app.mjs [--config FILE --output DIRECTORY]');
+assert(args.length === 0 || ((args.length === 2 || args.length === 4) && args[0] === '--config' && (args.length === 2 || args[2] === '--output')),
+  'Usage: build-native-app.mjs [--config FILE [--output DIRECTORY]]');
 const config = args.length ? resolve(args[1]) : join(app, 'wrangler.jsonc');
-const output = args.length ? resolve(args[3]) : join(app, 'dist/worker');
-if (args.length) {
+const output = args.length === 4 ? resolve(args[3]) : join(app, 'dist/worker');
+if (args.length === 4) {
   assert(output !== dirname(output) && output !== root && !output.startsWith(root + '/') && !root.startsWith(output + '/'),
     'Custom build output must be outside the checkout and its ancestors');
   assert(config !== output && !config.startsWith(output + '/'), 'Build output must not contain its configuration');
 }
-const manifest = args.length ? `${output}.worker-build.json` : join(app, 'dist/worker-build.json');
+const manifest = args.length === 4 ? `${output}.worker-build.json` : join(app, 'dist/worker-build.json');
 const wrangler = join(root, 'node_modules/wrangler/bin/wrangler.js');
 const scratch = await mkdtemp(join(tmpdir(), 'pentcloud-worker-map-'));
 function dryRun(args) {
-  const child = spawnSync(process.execPath, [wrangler, 'deploy', '--config', config, '--dry-run', '--upload-source-maps', ...args], {
+  const child = spawnSync(process.execPath, [wrangler, 'deploy', '--config', config, '--dry-run', '--containers-rollout=none', '--upload-source-maps', ...args], {
     cwd: app, stdio: 'inherit', env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },
   });
   assert.equal(child.status, 0, `Wrangler dry-run failed: ${child.error ?? child.signal ?? child.status}`);

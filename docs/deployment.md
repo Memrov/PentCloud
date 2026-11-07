@@ -1,88 +1,125 @@
 # Install and deployment
 
-Start with [requirements and costs](requirements.md), then the
-[Cloudflare account/key guide](cloudflare-setup.md). Each installation runs in
-its own Cloudflare account, protected by Access, for one owner or trusted team.
-No creator account, remote repository, credentials, runs or evidence are seeded.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Memrov/PentCloud)
 
-## Guided CLI
+## Customer installation
 
-Use macOS/Linux x64/arm64, Node 26.12.1 or later 26.x, Go 1.26.5, Git, Bash,
-npm, the official cf CLI and cloudflared; Python 3.11+ is needed for full tests.
-The pinned Wrangler is installed by root npm ci. Use the current official Cloudflare documentation and CLI help. cf and Wrangler have separate login sessions.
+Before starting, enable Workers Paid, Containers and a workers.dev subdomain in
+your Cloudflare account. Complete native Zero Trust setup; its free Access plan
+is sufficient within its limits. Keep your OpenCode key ready. Review
+[requirements and costs](requirements.md).
 
-```sh
-npm ci
-cf auth login
-cf auth whoami
-cp templates/private-install/pentcloud.example.json ../my-pentcloud.json
-```
+1. **Deploy to Cloudflare:** choose your account, repository name and Worker name.
+   Use the repository root and accept the detected `npm run build` and
+   `npm run deploy` commands. Turn **Enable Preview builds** off and leave
+   **Protect with Cloudflare Access** off; the wizard creates the compatible
+   hostname policy. Cloudflare copies the public repository into your
+   GitHub/GitLab account and runs Workers Builds. No local CLI or Docker install
+   is needed. The first build prepares all eleven smaller tool images.
+2. **Cloudflare:** open the deployed URL. In the wizard, enter your owner email
+   and create the scoped first-setup token using its Cloudflare link. Account ID
+   and Worker name are prefilled when supplied by Builds; otherwise copy them
+   from your Cloudflare account. Optionally enter the OpenCode key and Go/Console
+   route here to save everything with the same temporary token. Click **Protect
+   this installation**, then **Sign in to continue**.
+3. **Workspace:** click **Prepare workspace**. The native Artifacts binding
+   creates one connection-check repository only when the namespace is empty,
+   revokes unused setup Git tokens, and preserves existing repositories.
+4. **Models:** a key supplied in step 2 is already configured. Otherwise save one
+   using a temporary Workers Scripts Edit token, or add it in Cloudflare and
+   click **Check again**. Revoke setup tokens when finished. Click **Open PentCloud**.
 
-Fill your account ID, unique instance name, Access team domain and allowed emails
-in that JSON. Keep the config/state outside Git. Review billed resources and
-Cloudflare service access before continuing:
+A configured key does not prove billing or inference access. Use the existing
+explicit model test when creating the first project. Setup runs no model or
+assessment. Existing configured installations open the application directly;
+`/setup` remains available.
 
-```sh
-node scripts/pentcloud.mjs plan --config ../my-pentcloud.json
-node scripts/pentcloud.mjs install --config ../my-pentcloud.json --state ../my-pentcloud-state --apply
-```
+## What Cloudflare manages
 
-The installer verifies the selected account/team, prepares a private Artifacts
-namespace and stock Kali image in that account, then deploys a private gateway
-and Access-protected app with installation-specific configs. The initial image
-transfer/preparation may take tens of minutes. Keep state and resume install;
-do not replace a pending image or rerun uncertain creates under new identities.
+The root `wrangler.jsonc` is the new-customer deployment. It deploys **one Worker**
+containing the app, a private tool gateway through native
+[loopback bindings](https://developers.cloudflare.com/workers/runtime-apis/context/#exports),
+Durable Objects, Artifacts, a Workflow, Browser Run, Workers AI, Worker Loader and
+all eleven smaller tool Containers. New installs do not use Kali. Existing
+separate-Worker and legacy installations retain their private configurations.
 
-Add your OpenCode workspace key directly through a Cloudflare Worker Secret;
-see [key setup](cloudflare-setup.md). Finish native Access sign-in, run doctor,
-and deliberately test chosen models only after considering allowance/cost:
+[Deploy buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
+do not deploy multiple Workers together, and subdirectory templates cannot import
+files outside that subdirectory. Deploying the whole repository as one Worker
+avoids both restrictions. Worker names selected by Builds determine the Artifacts
+namespace and Workflow name, keeping separate installations isolated.
+Native [Artifacts push triggers](https://developers.cloudflare.com/artifacts/guides/build-and-deploy-on-push/)
+connect that namespace to the results Workflow; the wizard needs no event-subscription code.
 
-```sh
-cloudflared access login --quiet https://YOUR-APP-HOST
-node scripts/pentcloud.mjs doctor --config ../my-pentcloud.json --state ../my-pentcloud-state
-```
+The build fetches a checksum-pinned revision of
+[PentCloud-tools](https://github.com/Memrov/PentCloud-tools) and uses its existing
+verified image preparation scripts in a pinned Docker build stage. Build-only
+Go/Python/bsdtar tooling is excluded from the final images. Native Wrangler and
+[Workers Builds](https://developers.cloudflare.com/containers/guides/deploy/#deploy-with-workers-builds)
+build and publish the images into the customer's Cloudflare account. There is no
+custom image registry, installer state machine or setup agent. Node and Go are
+pinned; no account credentials or account logs are sent to GitHub Actions.
 
-Plan/doctor do not start a model or scanner. Never paste credentials in chat,
-config, command arguments or application forms. No direct model-vendor key is
-needed for OpenCode Go; optional BYOK credentials stay in OpenCode.
+## Access and credentials
 
-## Safe defaults and ongoing delivery
+The first-setup token needs **Workers Scripts Edit**, **Access Apps and Policies
+Edit**, and **Access Organizations Read**, scoped to the customer's account.
+Before making any change, the Worker verifies that its exact current version
+belongs to the selected account/script. It creates an owner-email-only
+**hostname-based** Access app and atomically saves the issuer, audience and any
+supplied model key using the native
+[bulk-secret API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/bulk_update/).
+The token is never persisted. Setup closes as soon as either Access setting exists.
+Existing unrelated Access policies are never overwritten.
 
-The checked-in app/gateway Wrangler examples support local compilation only.
-They have no trusted Access issuer/audience, model key, account ID or prepared
-image; the gateway example deliberately omits a Container image. Use the
-installer-generated production configurations in your private state directory.
-Never deploy the examples unchanged or copy another installation's identity.
+Hostname Access is deliberate: Cloudflare currently documents that
+[worker-level Access does not support WebSockets](https://developers.cloudflare.com/workers/configuration/cloudflare-access/#protect-one-worker).
+Keep protection on the hostname users will visit. Adding a custom domain later
+also requires protecting that hostname in the same Access application. Keep the
+existing `workers.dev` hostname protected there too. For multi-hostname apps,
+Cloudflare’s native [Eager redirect cookie setting](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/)
+can be turned off under Access application > Advanced settings > Cookie settings.
+Access then sets cookies when each hostname is visited, so an unresolved new
+custom domain does not interrupt sign-in through the existing hostname. Custom
+Domains provision DNS and certificates natively; no DNS polling or repair code is
+needed in the wizard.
 
-For CI, choose one native Workers Builds source per Worker, with your own
-private source/credentials and preserved generated config. This public repo has
-no deployment credentials, creator-account bindings or automatic deployment
-workflow. Installation uses the guided CLI; no one-click deploy button is available.
+Runtime services use native bindings, without a separate API token per service.
+Model keys use Worker Secrets. See [authentication](operations/authentication.md),
+[Artifacts capabilities](https://developers.cloudflare.com/artifacts/api/workers-binding/)
+and [account-token template links](https://developers.cloudflare.com/fundamentals/api/how-to/account-owned-token-template/).
 
-For development, create a separately named installation with its own Access
-application/audience, app and gateway Workers, Durable Objects, Artifacts
-namespace, result Workflow/event filter and Kali runtime secret. A separate
-hostname alone does not isolate data. Worker Preview service bindings can still
-reach a peer Worker's production deployment, so a Preview alone is insufficient
-for this full chain. Keep generated dev configuration and ownership state outside
-Git. Promote only reviewed, tested source through your release process.
+## Validation and updates
 
-## Lifecycle
+Source checks: `npm ci`, `npm run verify:full`, and `npm run test:browser`, using
+Node 26.12.1 and Go 1.26.5. Checks cover the complete customer Worker, native
+loopback gateway, authenticated/public bootstrap boundaries, secret handling,
+installation name isolation, desktop/mobile UI and verified source maps.
+Source-only dry runs skip Container rollout; the actual deploy builds/publishes
+images through Wrangler. A dry run alone does not prove image provisioning.
 
-The CLI also supports upgrade, export, import-targets and uninstall; consult
-`node scripts/pentcloud.mjs --help`. Mutations require --apply; uninstall also
-requires --data retain|delete and --confirm INSTANCE. Keep ownership state for
-safe reconciliation. Git-bundle export excludes native DO/session state,
-workspaces and secrets; it is not a complete installation backup.
+The real deployment button was exercised against the PR branch in the separate
+Cloudflare Test Account, using a private disposable customer repository and
+`button.heflare.app`. Native Workers Builds completed the build and deployment.
+The hosted wizard created an owner-email Access policy, saved native Secrets,
+prepared Artifacts storage and reached the fresh Coordinator SQLite database.
+All eleven tool images passed hosted startup, SDK/image-pin validation and
+shutdown checks. Desktop and mobile hosted captures showed all three setup checks
+complete with a dummy model key. Native Artifacts push events started the results
+Workflow and completed its Coordinator validation step for a synthetic unknown
+attempt, which was correctly ignored. A second Workers Build preserved the saved
+settings. Owner sign-in through Cloudflare SSO, all three wizard steps and
+**Open PentCloud** were exercised in Chrome through the existing `workers.dev`
+hostname, reaching the empty **Your targets** screen.
 
-## Limitations
+A real model key, paid inference and a complete assessment are separate checks.
+The dummy key, setup tokens, temporary native Access service auth and runtime
+probes were removed after validation. Owner-only Access remains. A real OpenCode
+key is required before running models on the retained test installation.
+Production remains separate and this PR is not merged.
 
-This is a self-hosted preview. Product entitlements, image preparation, human
-sign-in and model/scanner connectivity must be checked in your own account.
-Local tests do not establish an end-to-end assessment on a fresh account.
-Image preparation can be slow; retain state and resume the same installation.
-
-There is no one-click deploy button, hard spending cap, complete system
-backup/restore, hosted tenant isolation or dedicated scanning egress.
-Use only authorized targets and review [security](../SECURITY.md),
-[requirements and costs](requirements.md) and [operations](operations.md).
+Use the copied repository's Workers Builds connection for updates. Preserve its
+configuration and secrets. Existing installations keep using their original
+build/deploy commands and private configuration; do not replace them with the new
+customer template. See [Cloudflare setup](cloudflare-setup.md) and
+[operations](operations.md).

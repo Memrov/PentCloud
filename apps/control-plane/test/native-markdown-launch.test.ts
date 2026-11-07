@@ -28,4 +28,10 @@ describe("native specialist Markdown launch", () => {
     await expect(renderMarkdownLaunch("coder", {}, "")).rejects.toThrow("empty");
     await expect(renderMarkdownLaunch("coder", [] as unknown as Record<string, unknown>, "x")).rejects.toThrow("object");
   });
+  it("advertises installed package execution instead of promising a Kali backend",async()=>{
+    const launch=await renderMarkdownLaunch("coder",{},"Retain evidence.",{toolBackend:"tool-packs"});
+    expect(launch.prompt).toContain("pentcloud_tool");
+    expect(launch.prompt).toContain("bounded profiles");
+    expect(launch.prompt).not.toContain("existing private stock Kali MCP");
+  });
 });

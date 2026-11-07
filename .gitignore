@@ -28,3 +28,6 @@ __pycache__/
 AGENTS.md
 CLAUDE.md
 docs/superpowers/
+
+# Pinned source and prepared images for native customer deployment
+.pentcloud-tools/

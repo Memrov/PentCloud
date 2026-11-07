@@ -1,6 +1,6 @@
 # Native tool packs
 
-This optional private Worker connects the PentCloud scanner roles to the bounded `@memrov2/pentcloud-*` SDKs. Browser Run and Computer retain their existing roles. An installation without `TOOL_PACKS` continues to use its existing Kali gateway.
+This private Worker connects the PentCloud scanner roles to the bounded `@memrov2/pentcloud-*` SDKs. Browser Run and Computer retain their existing roles. New installations use `TOOL_PACKS` without a Kali gateway. Existing legacy installations retain their backend.
 
 Build the pinned pack images with [PentCloud-tools](https://github.com/Memrov/PentCloud-tools), then provide their immutable image references in a private deployment configuration. The checked-in Wrangler file intentionally contains no account, registry or image references. Exported SDK classes own native Cloudflare Container lifecycle; the gateway uses service-binding RPC and has no public execution endpoint.
 

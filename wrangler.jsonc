@@ -1,0 +1,348 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pentcloud",
+  "main": "apps/control-plane/src/customer/worker.ts",
+  "minify": true,
+  "upload_source_maps": false,
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "enable_ctx_exports"
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "head_sampling_rate": 0.1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    },
+    "issues": {
+      "enabled": true
+    }
+  },
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "apps/control-plane/dist/client",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/*"
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COORDINATOR",
+        "class_name": "Coordinator"
+      },
+      {
+        "name": "ATTEMPTS",
+        "class_name": "NativeAttempt"
+      },
+      {
+        "name": "MODEL_TESTS",
+        "class_name": "OpenCodeConnectionTest"
+      },
+      {
+        "name": "RECON",
+        "class_name": "ReconRunner"
+      },
+      {
+        "name": "HTTP",
+        "class_name": "HttpRunner"
+      },
+      {
+        "name": "NUCLEI",
+        "class_name": "NucleiRunner"
+      },
+      {
+        "name": "SQLMAP",
+        "class_name": "SqlmapRunner"
+      },
+      {
+        "name": "SERVICE",
+        "class_name": "ServiceRunner"
+      },
+      {
+        "name": "WEB_CONTEXT",
+        "class_name": "WebContextRunner"
+      },
+      {
+        "name": "PCAP",
+        "class_name": "PcapRunner"
+      },
+      {
+        "name": "FILE_ANALYSIS",
+        "class_name": "FileRunner"
+      },
+      {
+        "name": "PASSWORD",
+        "class_name": "PasswordRunner"
+      },
+      {
+        "name": "REFERENCE",
+        "class_name": "ReferenceRunner"
+      },
+      {
+        "name": "METASPLOIT",
+        "class_name": "MetasploitRunner"
+      }
+    ],
+    "code_update_strategy": {
+      "mode": "deferred",
+      "max_delay": 300
+    }
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "ProofQueue",
+        "ProofAttempt"
+      ]
+    },
+    {
+      "tag": "v2-pentcloud-native",
+      "new_sqlite_classes": [
+        "Coordinator",
+        "NativeAttempt"
+      ]
+    },
+    {
+      "tag": "v3-native-model-tests",
+      "new_sqlite_classes": [
+        "OpenCodeConnectionTest"
+      ]
+    },
+    {
+      "tag": "v4-tool-packs",
+      "new_sqlite_classes": [
+        "ReconRunner",
+        "HttpRunner",
+        "NucleiRunner",
+        "SqlmapRunner",
+        "ServiceRunner",
+        "WebContextRunner",
+        "PcapRunner",
+        "FileRunner",
+        "PasswordRunner",
+        "ReferenceRunner",
+        "MetasploitRunner"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "binding": "ARTIFACTS",
+      "namespace": "pentcloud"
+    }
+  ],
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ],
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "workflows": [
+    {
+      "binding": "RESULTS",
+      "name": "pentcloud",
+      "class_name": "ResultValidation"
+    }
+  ],
+  "triggers": {
+    "events": [
+      {
+        "type": "cf.artifacts.repo.pushed",
+        "filter": { "namespace": "pentcloud" },
+        "targets": [{ "type": "workflow", "workflow_name": "pentcloud" }]
+      }
+    ]
+  },
+  "vars": {},
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.tmpl",
+        "**/*.tmpl?raw",
+        "**/*.md?raw",
+        "**/*.md"
+      ],
+      "fallthrough": true
+    }
+  ],
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
+  "dependencies_instrumentation": {
+    "enabled": false
+  },
+  "containers": [
+    {
+      "class_name": "ReconRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "recon": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "recon",
+            "RUNTIME_IMAGE": "alpine:3.22.2@sha256:85f2b723e106c34644cd5851d7e81ee87da98ac54672b29947c052a45d31dc2f"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "HttpRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "http": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "http",
+            "RUNTIME_IMAGE": "docker.io/alpine/curl@sha256:96a0479d24c465a7d8d29ebf5ebe92b82536e8443a870d2654e66d3ac235441f"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "NucleiRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "nuclei": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "nuclei",
+            "RUNTIME_IMAGE": "docker.io/library/alpine@sha256:85f2b723e106c34644cd5851d7e81ee87da98ac54672b29947c052a45d31dc2f"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "SqlmapRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "sqlmap": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "sqlmap",
+            "RUNTIME_IMAGE": "docker.io/library/python@sha256:bdd0cc97663b9b920570d0f1b4601ee18ed895221a0594ca1d9b5e2f26adba83"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "ServiceRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "service": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "service",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "WebContextRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "web-context": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "web-context",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "PcapRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "pcap": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "pcap",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "FileRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "file-analysis": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "file-analysis",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "PasswordRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "password": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "password",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "ReferenceRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "reference": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "reference",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
+        }
+      }
+    },
+    {
+      "class_name": "MetasploitRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "metasploit": {
+          "dockerfile": "infra/tool-packs/Dockerfile",
+          "build_context": ".pentcloud-tools",
+          "build_vars": {
+            "PACK": "metasploit",
+            "RUNTIME_IMAGE": "docker.io/metasploitframework/metasploit-framework@sha256:8096709486bce8b5f35980f2aea42dc7cd83e34ebbeb4d56eab3339847de258d"
+          }
+        }
+      }
+    }
+  ]
+}

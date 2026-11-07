@@ -1356,8 +1356,10 @@ export class Coordinator extends DurableObject<NativeEnv> {
       this.put(`purge:${id}`,{runId:id,repo:run.repo,jobIds:jobs.map(job=>job.id)} satisfies PurgeIntent);
     });
     await this.publish();
-    const cleared=await this.env.TOOLBOX.clear();
-    if(!("state" in cleared) || cleared.state!=="stopped")throw new Error("503: scanner scratch cleanup is pending; retry deletion");
+    if(this.env.TOOLBOX){
+      const cleared=await this.env.TOOLBOX.clear();
+      if(!("state" in cleared) || cleared.state!=="stopped")throw new Error("503: scanner scratch cleanup is pending; retry deletion");
+    }else if(!this.env.TOOL_PACKS)throw new Error("503: scanner backend is unavailable; retry deletion after restoring its binding");
     for(const job of jobs){await this.queue.cancel(job.id);await this.attempt(job.id).purge(id);}
     this.browserAuth.clear(id);
     this.loginChallenges.clear(id);

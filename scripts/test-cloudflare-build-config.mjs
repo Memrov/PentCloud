@@ -29,3 +29,10 @@ for (const [kind, path] of [['app', '../apps/control-plane/wrangler.jsonc'], ['g
     if (kind === 'app') assert.deepEqual(result.assets, template.assets);
   });
 }
+
+test('app: first-run Builds accept smaller tool packages without requiring a model key', async()=>{
+  const template=JSON.parse(await readFile(new URL('../apps/control-plane/wrangler.jsonc',import.meta.url),'utf8'));
+  const config={...template,services:[{binding:'TOOL_PACKS',service:'example-tools',entrypoint:'ToolPackGateway'}],secrets:{required:['OPENCODE_GO_API_KEY']}};
+  const result=validateBuildConfig('app',JSON.stringify(config),template,config.name);
+  assert.equal(result.secrets,undefined);assert.equal(result.services[0].binding,'TOOL_PACKS');
+});

@@ -28,11 +28,13 @@ export function validateBuildConfig(kind, value, template, expectedName, install
     if (!sourcePath(config.assets?.directory, template.assets.directory, 'dist/client')) throw new Error('Preserve the source assets directory.');
     config.assets.directory = template.assets.directory;
   }
-  const contract = [template, installationTemplate].filter(Boolean).find(candidate => ['migrations', 'secrets'].every(key => JSON.stringify(config[key]) === JSON.stringify(candidate[key])));
+  const contract = [template, installationTemplate].filter(Boolean).find(candidate => JSON.stringify(config.migrations) === JSON.stringify(candidate.migrations));
+  const secretDeclarations = [template.secrets, installationTemplate?.secrets, ...(kind === 'app' ? [{ required: ['OPENCODE_GO_API_KEY'] }, { required: [] }] : [])];
+  if (!secretDeclarations.some(value => JSON.stringify(value) === JSON.stringify(config.secrets))) throw new Error('Preserve source secret declarations; enter values as native Worker secrets.');
   if (!contract) throw new Error('Preserve migration and secret declarations shipped with this source.');
-  // Older installer configs predate required secret-name declarations. These
-  // names keep generated Env types correct; no secret values are transferred.
-  config.secrets = template.secrets;
+  // Model secrets are optional during first-run setup. Native deploys preserve
+  // existing secret bindings; no secret values are transferred here.
+  if (template.secrets) config.secrets = template.secrets; else delete config.secrets;
   for (const key of ['main', 'compatibility_date', 'compatibility_flags', 'durable_objects', 'migrations', 'secrets', 'version_metadata', ...(kind === 'app' ? ['assets', 'rules', 'worker_loaders'] : [])]) {
     const expected = key === 'migrations' ? contract[key] : template[key];
     if (JSON.stringify(config[key]) !== JSON.stringify(expected)) throw new Error(`Preserve the source configuration's ${key}.`);
@@ -44,7 +46,8 @@ export function validateBuildConfig(kind, value, template, expectedName, install
   } else throw new Error('Configuration variables must be an object.');
   if (template.vars) config.vars = { ...template.vars, ...config.vars };
   if (kind === 'app') {
-    for (const [key, binding, fixed] of [['artifacts', 'ARTIFACTS', {}], ['services', 'TOOLBOX', { entrypoint: 'ToolboxGateway' }], ['workflows', 'RESULTS', { class_name: 'ResultValidation' }]]) {
+    const toolBinding = config.services?.[0]?.binding === 'TOOL_PACKS' ? ['TOOL_PACKS', { entrypoint: 'ToolPackGateway' }] : ['TOOLBOX', { entrypoint: 'ToolboxGateway' }];
+    for (const [key, binding, fixed] of [['artifacts', 'ARTIFACTS', {}], ['services', ...toolBinding], ['workflows', 'RESULTS', { class_name: 'ResultValidation' }]]) {
       const entries = config[key];
       if (!Array.isArray(entries) || entries.length !== 1 || entries[0].binding !== binding || Object.entries(fixed).some(([k, v]) => entries[0][k] !== v)) throw new Error(`Preserve the ${key} binding contract.`);
       const resource = entries[0][key === 'artifacts' ? 'namespace' : key === 'services' ? 'service' : 'name'];

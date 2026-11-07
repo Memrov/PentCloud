@@ -47,7 +47,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER !== "1")("run lifecycle 
       return json({error: "Unknown fixture route"}, 404);
     });
     try {
-      await page.goto(`${origin}?run=${original.id}&job=${job.id}`);
+      await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}?run=${original.id}&job=${job.id}`);
       if(viewport.width<760)await page.getByRole("button",{name:"Open navigation",exact:true}).click();
       await browserExpect(page.getByRole("link",{name:"Dashboard",exact:true})).toBeVisible();
       if(viewport.width<760)await page.getByRole("button",{name:"Close navigation",exact:true}).click();
@@ -61,7 +61,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER !== "1")("run lifecycle 
         return;
       }
       if("recent" in viewport && viewport.recent){
-        await page.goto(`${origin}dashboard`);
+        await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}dashboard`);
         await page.getByRole("button",{name:`Delete run ${original.id}`,exact:true}).click();
         const dialog=page.getByRole("dialog"), remove=dialog.getByRole("button",{name:"Permanently delete run",exact:true});
         await dialog.getByRole("textbox").fill("wrong-run");await browserExpect(remove).toBeDisabled();
@@ -81,9 +81,9 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER !== "1")("run lifecycle 
         expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
         return;
       }
-      const manage=async()=>{await page.goto(`${origin}dashboard/runs/${original.id}`);await page.getByRole("button",{name:"Run details",exact:true}).click();};
+      const manage=async()=>{await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}dashboard/runs/${original.id}`);await page.getByRole("button",{name:"Run details",exact:true}).click();};
       await manage();await page.getByRole("button",{name:"Archive run",exact:true}).click();
-      await page.goto(`${origin}?run=${original.id}&job=${job.id}`);
+      await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}?run=${original.id}&job=${job.id}`);
       await browserExpect(page.getByRole("textbox",{name:/^Message /})).toHaveCount(0);
       await browserExpect(page.getByRole("button",{name:"Attach files"})).toHaveCount(0);
       await browserExpect(page.getByText("Preserved investigation",{exact:true})).toBeVisible();
@@ -96,7 +96,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER !== "1")("run lifecycle 
       await page.getByRole("dialog").getByRole("textbox").fill(original.id);
       await page.getByRole("dialog").getByRole("button",{name:"Permanently delete run",exact:true}).click();
       await browserExpect(page.getByRole("dialog")).toContainText("Remote scanner outcomes");
-      await page.goto(`${origin}?run=${original.id}&job=${job.id}`);
+      await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}?run=${original.id}&job=${job.id}`);
       await browserExpect(page.getByText("Preserved investigation",{exact:true})).toBeVisible();
       await manage();
       await page.getByRole("button",{name:"Delete run",exact:true}).click();

@@ -30,7 +30,7 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first se
       return json({});
     });
     try{
-      await page.goto(origin+'?run='+run.id+'&job='+job.id);
+      await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(origin+'?run='+run.id+'&job='+job.id);
       const management=page;
       await browserExpect(page.getByRole('heading',{name:'OpenCode models',exact:true})).toBeVisible();
       await management.getByRole('button',{name:'Stop run',exact:true}).click();
@@ -77,7 +77,7 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first se
       return json({});
     });
     try{
-      await page.goto(origin);
+      await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(origin);
       expect(new URL(page.url()).origin).toBe(new URL(origin).origin);expect(await page.title()).toContain("PentCloud");
       await browserExpect(page.locator("vite-error-overlay")).toHaveCount(0);
       await page.getByLabel("Name",{exact:true}).fill("My project");await page.getByLabel("Website address").fill("owned.example");
