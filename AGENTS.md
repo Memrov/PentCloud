@@ -1,3 +1,17 @@
+## Development rules
+
+Before implementing or changing a page, feature, fix or tooling behavior:
+
+1. **Search documentation first.** Read the relevant official docs, repository guidance and installed API/CLI documentation. Check package versions and match the guidance to the pinned runtime.
+2. **Inspect an open-source example.** Prefer an implementation or test from the owning upstream repository. Cite the actual file/commit permalink and explain its fit; a search result or repository homepage is insufficient.
+3. **State the smallest complete change.** Give a short research note with docs, the inspected example, the proposed patch boundary and checks, then continue without an extra confirmation step.
+
+Prefer existing native APIs, Kumo components, SDK capabilities, fixtures and tasks. Keep the patch scoped; add dependencies, wrappers, abstractions or adjacent refactors only when the requested behavior needs them. Preserve precise types, error handling, accessibility and the existing security/recovery/provenance contracts.
+
+Prove the affected behavior and run the required gate from `docs/operations/testing.md`. Preserve unique assertions when removing redundant tests. Do not weaken checks, disable isolation, raise warning limits or hide failures to get a passing result. Inspect desktop/mobile evidence for UI changes.
+
+The versioned [PentCloud development skill](skills/pentcloud-development/SKILL.md) provides native-tool routing. Use the local `$pentcloud-development` skill when installed; the repository copy works without a local installation.
+
 <!--VITE PLUS START-->
 
 # Using Vite+, the Unified Toolchain for the Web
