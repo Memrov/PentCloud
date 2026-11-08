@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect } from "vite-plus/test";
 import { performTargetFetch } from "../src/native/target-fetch";
 const target = {
   url: "https://example.com/",

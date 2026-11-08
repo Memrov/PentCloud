@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { parseRun, runHasFinished, type UIJob } from "../src/ui/api";
 import { runDate, runLabel } from "../src/ui/run-label";
 import {

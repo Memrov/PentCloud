@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { expect, it, vi } from "vite-plus/test";
 import { OnboardingStore } from "../src/native/onboarding";
 import {
   SourceLibrary,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { OnboardingStore } from "../src/native/onboarding";
 import { normalizeTargetURL, checkAddress } from "../src/native/target-check";
 import { normalizeCatalog } from "../src/native/opencode-models";

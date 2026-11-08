@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { openCodeTool } from "../src/native/cloudflare-tools";
 

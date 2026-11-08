@@ -1,5 +1,5 @@
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
-import { vi } from "vitest";
+import { vi } from "vite-plus/test";
 const key = generateKeyPair("ES256");
 export function accessKeys() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {

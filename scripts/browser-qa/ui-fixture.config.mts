@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import type { ServerResponse } from "node:http";
-import { defineConfig, mergeConfig, type PreviewServer } from "vite";
+import { defineConfig, mergeConfig, type PreviewServer } from "vite-plus";
 import appConfig from "../../apps/control-plane/vite.config.ts";
 import { hostedUIResponse } from "../../apps/control-plane/src/native/ui-response.ts";
 

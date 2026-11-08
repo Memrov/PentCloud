@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect } from "vite-plus/test";
 import { RunBrowserAuth } from "../src/native/run-browser-auth";
 const target = {
   id: "site",

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { parseFindings } from "../../../shared/findings";
 import { findingsPath, readFindings } from "../src/native/findings";
 const item = (id = "f-1") => ({

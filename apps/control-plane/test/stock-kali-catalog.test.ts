@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import baseline from "./fixtures/stock-kali-catalog.json";
 import { stockKaliCatalogReady } from "../src/native/stock-kali-catalog";
 

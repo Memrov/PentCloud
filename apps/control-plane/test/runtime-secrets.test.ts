@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { knownRuntimeSecrets } from "../../../shared/runtime-secrets";
 import { SEARCH_PROVIDERS } from "../../../shared/search-providers";
 it("redacts legacy fixture values without reading a Store or making them authentication", () => {

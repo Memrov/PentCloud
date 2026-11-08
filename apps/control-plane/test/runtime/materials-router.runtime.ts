@@ -1,6 +1,13 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 import { env, exports } from "cloudflare:workers";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi
+} from "vite-plus/test";
 import { accessKeys, accessHeaders } from "./access-fixture";
 import type { RuntimeFixtureEnv } from "./router-fixture";
 

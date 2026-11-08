@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { renderLaunch } from "../src/native/prompts";
 import { renderMarkdownLaunch } from "../src/native/markdown-launch";
 import { specialistSources } from "../src/native/specialist-sources";

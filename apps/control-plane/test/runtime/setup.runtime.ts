@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 import { exports } from "cloudflare:workers";
-import { beforeEach, afterEach, it, expect, vi } from "vitest";
+import { beforeEach, afterEach, it, expect, vi } from "vite-plus/test";
 import { saveSetupKey } from "../../src/native/setup";
 import { accessKeys, accessHeaders } from "./access-fixture";
 const app = exports as unknown as { default: Fetcher };

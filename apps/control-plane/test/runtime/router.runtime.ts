@@ -1,7 +1,14 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 import { env, exports } from "cloudflare:workers";
 import { evictDurableObject } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi
+} from "vite-plus/test";
 import { accessKeys, accessToken, accessHeaders } from "./access-fixture";
 import type { RecordedCall, RuntimeFixtureEnv } from "./router-fixture";
 

@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 import { exports } from "cloudflare:workers";
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import type {
   ToolPackService,
   ToolPackScope

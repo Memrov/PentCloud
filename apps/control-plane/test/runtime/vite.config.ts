@@ -1,10 +1,11 @@
 import path from "node:path";
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite-plus";
 
 const dir = import.meta.dirname;
 
 export default defineConfig({
+  root: path.resolve(dir, "../.."),
   plugins: [
     cloudflareTest({
       main: path.join(dir, "router-fixture.ts"),

@@ -1,12 +1,13 @@
 import path from "node:path";
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite-plus";
 import { scriptedModel } from "./scripted-model";
 import { emptyOpenCodeModelsSnapshot } from "../opencode-models-snapshot";
 
 const dir = import.meta.dirname;
 
 export default defineConfig({
+  root: path.resolve(dir, "../.."),
   plugins: [
     emptyOpenCodeModelsSnapshot,
     cloudflareTest({

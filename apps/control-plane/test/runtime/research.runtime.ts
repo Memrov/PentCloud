@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { managedBrowser } from "../../src/native/managed-retrieval";
 
 describe("managed browser link extraction in Workers", () => {

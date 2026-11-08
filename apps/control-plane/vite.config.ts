@@ -1,9 +1,11 @@
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
-import { defineConfig } from "vite";
+import { defineConfig } from "vite-plus";
 
 export default defineConfig(({ mode }) => ({
+  root: import.meta.dirname,
+  test: { name: "unit", include: ["test/**/*.test.ts"] },
   plugins:
     mode === "test"
       ? []

@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { threadAttempts, threadTree } from "../src/ui/attempts";
 import type { UIJob } from "../src/ui/api";
 const jobs: UIJob[] = [

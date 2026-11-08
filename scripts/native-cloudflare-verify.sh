@@ -23,9 +23,8 @@ node --input-type=module -e 'const [major,minor,patch]=process.versions.node.spl
   exit 65
 }
 export WRANGLER_SEND_METRICS=false
-# Formatting and type-aware lint cover the whole repository, so run them once.
-npm run format:check
-npm run lint
+# Formatting, type-aware lint and type checks share the root Vite+ policy.
+npm exec -- vp run check:static
 # Generated runtime types are committed; regenerate with `npm run types` in the
 # Worker's workspace after changing its Wrangler config or compatibility date.
 types_check() { env -u WRANGLER_CI_OVERRIDE_NAME -u WRANGLER_CI_MATCH_TAG npm run types:check --workspace "$1"; }

@@ -78,7 +78,7 @@ async function main() {
     "--workspace",
     "@pentagi-artifacts/control-plane",
     "--",
-    "vite",
+    "vp",
     "build",
     "--mode",
     "customer"

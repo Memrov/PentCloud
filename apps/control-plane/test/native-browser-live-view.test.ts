@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { readonlyBrowserLiveView } from "../src/native/browser-live-view";
 import { createBrowserLiveView } from "../src/ui/api";
 import { BrowserLiveViewControl } from "../src/ui/components/browser-live-view";

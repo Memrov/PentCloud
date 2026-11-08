@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { LoginChallenges } from "../src/native/login-challenge";
 function fixture() {
   let time = 100000;
