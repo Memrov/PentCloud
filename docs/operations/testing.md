@@ -60,6 +60,13 @@ run `wrangler types --check`. After changing a Worker's Wrangler config,
 compatibility date or flags, or upgrading Wrangler, regenerate with
 `npm run types --workspace <workspace>` and commit the result.
 
+Unit tests use a thread pool with file isolation retained, selected with
+`vp test doctor --project unit`. For edits, use
+`vp test related apps/control-plane/src/ui/components/session-controls.tsx --project unit`,
+`vp test --project unit --changed`, `vp test --project unit --lastFailed`, or
+`vp test watch --project unit`. Keep the full gate for dynamic imports,
+filesystem fixtures and external contracts.
+
 A focused test can be selected with, for example,
 `vp test --project unit test/materials-ui.test.ts`.
 Workers tests use separate `router`, `question-recovery` and `attempt` projects;

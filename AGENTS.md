@@ -35,7 +35,7 @@ release. Add a tool name to select part of the graph. For example, run
 Run commands from the repository root. Use `vp install --frozen-lockfile` for a clean checkout. The global CLI selects Node from `.node-version` and npm from `packageManager`; without it, use `npm ci` and `npm exec -- vp ...`.
 
 - `vp check`: static checks only (format, lint, TypeScript). Root `vite.config.ts` owns lint severities and formatter exclusions.
-- `vp test`: all unit and Workers projects. `vp test --project unit` selects unit tests; `vp test --project attempt` selects the native attempt runtime project.
+- `vp test`: all unit and Workers projects. Units use threads with file isolation retained. `vp test --project unit` selects unit tests; `vp test --project attempt` selects the native attempt runtime project.
 - `vp run test:customer` and `vp run test:browser`: customer Worker and Playwright fixtures. Install Chromium with `vp exec playwright install chromium` when needed.
 - `vp run check`: the existing fast app verification gate, including generated Worker type freshness and runtime/customer tests.
 - `vp run verify:full`: the complete app/gateway/integration/build gate. Requires Python 3.11+ and Go 1.26.5; set `GO_BIN` to that Go binary if necessary.
@@ -44,3 +44,5 @@ Run commands from the repository root. Use `vp install --frozen-lockfile` for a 
 Scripts are uncached by default; only `vp run check:static` opts into caching. Never pass `--cache` to runtime, integration, browser, deployment, or full-verification commands: recovery evidence must come from a fresh execution. Preserve Cloudflare's isolated projects and the OpenCode snapshot transform. Do not weaken assertions or skip scenarios to resolve migration failures.
 
 See [development and testing](docs/operations/testing.md) for the complete gates and build-target contracts. Verification uses local fixtures; production deployment is a separate action.
+
+For focused development use `vp test related <source-file> --project unit`, `vp test --project unit --changed`, `vp test --project unit --lastFailed`, or `vp test watch --project unit`. Use `vp test doctor --project unit` to measure runner settings. Affected-test selection does not replace the full gate for dynamic imports, fixtures, or external contracts.
