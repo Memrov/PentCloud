@@ -19,9 +19,9 @@ import {
 
 import { useCoordinatorRuns } from "../native-stream";
 import { getRunJobs, listRuns, runMatchesView, type UIJob, type UIRun } from "../api";
-import { chatPath, dashboardPath,dashboardHomePath, layoutRunGraph, parseDashboardLocation, type DashboardLocation } from "./model";
+import { chatPath, dashboardPath,dashboardHomePath, parseDashboardLocation, type DashboardLocation } from "./model";
 import { settingsPath } from "../settings/model";
-import { RunMap } from "./run-map";
+import { RunSteps } from "./run-steps";
 import { ThemeControl } from "../components/theme-control";
 import { WorkflowTimeline } from "./workflow-timeline";
 import { AgentLogPanel } from "./agent-log-panel";
@@ -94,7 +94,6 @@ function RunDashboard({ route }: { route: Exclude<DashboardLocation, { kind: "ho
     return () => { live = false; };
   }, [route.runId, addRunSnapshot]);
   const selectedJob = route.kind === "job" ? jobs.find((job) => job.id === route.jobId) : undefined;
-  const layout = useMemo(() => layoutRunGraph(jobs), [jobs]);
   const active = jobs.filter((job) => ["created", "provisioning", "running"].includes(job.status)).length;
   return (
     <div className="dashboard-shell">
@@ -106,7 +105,7 @@ function RunDashboard({ route }: { route: Exclude<DashboardLocation, { kind: "ho
           <header className="dashboard-run-heading">
             <div>
               <Link variant="plain" className="flex w-fit items-center gap-2" href={dashboardPath()}><ArrowLeftIcon size={14} /> All runs</Link>
-              <span className="dashboard-kicker">Run map</span>
+              <span className="dashboard-kicker">Run steps</span>
               <h1>{run?runName(run):"Assessment"}</h1>
               <p>{jobs.length} specialists · {active} active · {run?.status ?? "loading"}</p>
             </div>
@@ -120,7 +119,7 @@ function RunDashboard({ route }: { route: Exclude<DashboardLocation, { kind: "ho
             : jobs.length === 0 ? <DashboardNotice title="No specialists found" />
             : (
               <div className={`dashboard-workspace-grid ${selectedJob ? "has-inspector" : ""}`}>
-                <div className="dashboard-map-card"><RunMap layout={layout} {...(selectedJob ? { selectedJobId: selectedJob.id } : {})} /></div>
+                <div className="dashboard-map-card"><RunSteps jobs={jobs} {...(selectedJob ? { selectedJobId: selectedJob.id } : {})} /></div>
                 {route.kind === "job" && !selectedJob ? <DashboardNotice title="Specialist unavailable" detail="It may have been removed from this run." />
                   : selectedJob ? <div className="dashboard-inspector-stack"><AgentLogPanel key={selectedJob.id} job={selectedJob} /><WorkflowTimeline job={selectedJob} /></div>
                   : <DashboardInspectorEmpty runId={route.runId} jobs={jobs} />}

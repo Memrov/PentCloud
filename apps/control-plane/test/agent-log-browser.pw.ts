@@ -1,12 +1,12 @@
 import {test, expect} from 'playwright/test';
 
 // Isolated local API fixtures: no production requests, model calls or scanners.
-test.describe('run map live output',()=>{
- for(const viewport of [{width:1440,height:1000},{width:390,height:844}])test(`opens a specialist's live log from the run map at ${viewport.width} px`,async({context,page,baseURL},testInfo)=>{
+test.describe('run steps live output',()=>{
+ for(const viewport of [{width:1440,height:1000},{width:390,height:844}])test(`opens a specialist's live log from the run steps at ${viewport.width} px`,async({context,page,baseURL},testInfo)=>{
   await page.setViewportSize(viewport);
   const run={id:'run-log',status:'running',baselineRepo:'repo',inputCommit:'a'.repeat(40),maxDepth:4,maxJobs:32};
   const make=(id:string,role:string,patch={})=>({id,runId:run.id,role,task:`${role} task`,status:'running',revision:1,nativeSession:true,depth:0,...patch});
-  const jobs=[make('primary','primary',{status:'waiting'}),make('scanner','searcher',{parentJobId:'primary',depth:1}),make('coder','coder',{parentJobId:'primary',depth:1,status:'completed'})];
+  const jobs=[make('primary','primary',{status:'waiting',conversationOrder:1}),make('scanner','searcher',{parentJobId:'primary',depth:1,conversationOrder:2}),make('scanner-2','searcher',{parentJobId:'primary',depth:1,status:'completed',conversationOrder:3}),make('coder','coder',{parentJobId:'primary',depth:1,status:'completed',conversationOrder:4}),make('reporter','reporter',{parentJobId:'primary',depth:1,status:'created',conversationOrder:5})];
   await context.routeWebSocket('**/agents/coordinator/global*',socket=>{socket.send(JSON.stringify({type:'cf_agent_identity',name:'global',agent:'coordinator',stateFollows:true}));socket.send(JSON.stringify({type:'cf_agent_state',state:{revision:1,runs:[run],jobs}}));});
   const streams:string[]=[];
   await page.route('**/v1/ui/**',route=>{
@@ -36,7 +36,7 @@ test.describe('run map live output',()=>{
 
   await page.goto(`/dashboard/runs/${run.id}`);
   await expect(page.getByText('Select a specialist',{exact:true})).toBeVisible();
-  await page.locator('.dashboard-job-node',{hasText:'searcher'}).click();
+  await page.locator('.run-step-node',{hasText:'Searcher 1'}).click();
   await expect(page).toHaveURL(new RegExp(`/dashboard/runs/${run.id}/jobs/scanner$`));
   const log=page.getByRole('log',{name:'Live output'});
   await expect(log).toBeVisible();
@@ -51,7 +51,7 @@ test.describe('run map live output',()=>{
   await page.getByRole('button',{name:'Clear log',exact:true}).click();
   await expect(log.getByText('Waiting for this specialist to start working…',{exact:true})).toBeVisible();
 
-  await page.locator('.dashboard-job-node',{hasText:'coder'}).click();
+  await page.locator('.run-step-node',{hasText:'Coder'}).click();
   await expect(log.getByText('Output only for coder: SSH exposed on 22/tcp.',{exact:true})).toBeVisible();
   await expect(log.getByText('Output only for scanner',{exact:false})).toHaveCount(0);
   expect(streams).toContain('coder');

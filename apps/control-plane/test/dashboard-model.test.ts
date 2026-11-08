@@ -4,7 +4,6 @@ import {
   chatPath,
   dashboardPath,
   jobActivityLabel,
-  layoutRunGraph,
   parseChatSelection,
   parseDashboardLocation,
   reduceWorkflowEvents,
@@ -34,21 +33,6 @@ describe("dashboard model", () => {
     expect(parseChatSelection("?run=run-1&job=job-2")).toEqual({ runId: "run-1", jobId: "job-2" });
     expect(parseChatSelection("?run=%2F&job=job-2")).toEqual({});
     expect(parseChatSelection("?job=job-2")).toEqual({});
-  });
-
-  it("lays out every specialist and only connects known parent-child relationships", () => {
-    const layout = layoutRunGraph([
-      job("root", { role: "primary", depth: 0 }),
-      job("search", { role: "searcher", parentJobId: "root", depth: 1 }),
-      job("code", { role: "coder", parentJobId: "root", depth: 1 }),
-      job("orphan", { role: "adviser", parentJobId: "missing", depth: 3 }),
-    ]);
-
-    expect(layout.nodes.map((node) => node.job.id).sort()).toEqual(["code", "orphan", "root", "search"]);
-    expect(layout.edges.map((edge) => `${edge.source}->${edge.target}`).sort()).toEqual(["root->code", "root->search"]);
-    expect(new Set(layout.nodes.map((node) => `${node.x}:${node.y}`)).size).toBe(4);
-    expect(layout.width).toBeGreaterThan(0);
-    expect(layout.height).toBeGreaterThan(0);
   });
 
   it("derives concise activity labels from durable job, archive, and cleanup state", () => {

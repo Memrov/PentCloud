@@ -7,10 +7,6 @@ export type DashboardLocation =
   | { kind: "job"; runId: string; jobId: string }
   | { kind: "not-found" };
 
-export interface RunGraphNode { job: UIJob; x: number; y: number }
-export interface RunGraphEdge { id: string; source: string; target: string }
-export interface RunGraphLayout { nodes: RunGraphNode[]; edges: RunGraphEdge[]; width: number; height: number }
-
 export type WorkflowTimelineStatus = "queued" | "running" | "waiting" | "completed" | "failed" | "terminated" | "retrying";
 
 export interface WorkflowTimelineRow {
@@ -68,30 +64,6 @@ export function parseChatSelection(search: string): { runId?: string; jobId?: st
   if (!runId || !new RegExp(`^${identifier}$`).test(runId)) return {};
   if (jobId && !new RegExp(`^${identifier}$`).test(jobId)) return {};
   return { runId, ...(jobId ? { jobId } : {}) };
-}
-
-export function layoutRunGraph(jobs: UIJob[]): RunGraphLayout {
-  const nodeWidth = 230;
-  const columnGap = 70;
-  const rowGap = 122;
-  const padding = 42;
-  const sorted = [...jobs].sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0) || left.id.localeCompare(right.id));
-  const levels = [...new Set(sorted.map((job) => Math.max(0, job.depth ?? 0)))].sort((left, right) => left - right);
-  const rows = levels.map((depth) => sorted.filter((job) => Math.max(0, job.depth ?? 0) === depth));
-  const largest = Math.max(1, ...rows.map((row) => row.length));
-  const stride = nodeWidth + columnGap;
-  const width = padding * 2 + largest * nodeWidth + Math.max(0, largest - 1) * columnGap;
-  const nodes = rows.flatMap((row, rowIndex) => {
-    const rowWidth = row.length * nodeWidth + Math.max(0, row.length - 1) * columnGap;
-    const start = (width - rowWidth) / 2 + nodeWidth / 2;
-    return row.map((job, index) => ({ job, x: start + index * stride, y: padding + nodeWidth / 4 + rowIndex * rowGap }));
-  });
-  const known = new Set(jobs.map((job) => job.id));
-  const edges = sorted
-    .filter((job) => job.parentJobId && known.has(job.parentJobId))
-    .map((job) => ({ id: `${job.parentJobId}:${job.id}`, source: job.parentJobId!, target: job.id }));
-  const height = padding * 2 + Math.max(1, rows.length - 1) * rowGap + 90;
-  return { nodes, edges, width, height };
 }
 
 export function jobActivityLabel(job: UIJob): string {
