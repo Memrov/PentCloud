@@ -10,11 +10,18 @@ export function mergeRunHubJobs(current: UIJob[], state: RunHubState): UIJob[] {
     live.delete(job.id);
     return mergeSummary(job, summary);
   });
-  for (const summary of live.values()) merged.push(mergeSummary(undefined, summary));
-  return merged.sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0) || left.id.localeCompare(right.id));
+  for (const summary of live.values())
+    merged.push(mergeSummary(undefined, summary));
+  return merged.sort(
+    (left, right) =>
+      (left.depth ?? 0) - (right.depth ?? 0) || left.id.localeCompare(right.id)
+  );
 }
 
-function mergeSummary(current: UIJob | undefined, summary: RunHubState["jobs"][number]): UIJob {
+function mergeSummary(
+  current: UIJob | undefined,
+  summary: RunHubState["jobs"][number]
+): UIJob {
   if (current && current.revision > summary.revision) return current;
   if (summary.nativeSession === true) {
     const { recovery: _previousRecovery, ...retained } = current ?? {};

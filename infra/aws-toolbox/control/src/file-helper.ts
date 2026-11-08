@@ -1,6 +1,6 @@
 /** Fixed native exec helper. All path traversal uses directory FDs with NOFOLLOW.
  * argv is data, never shell source. Output bodies are bounded and never logged. */
-export const FILE_HELPER=String.raw`
+export const FILE_HELPER = String.raw`
 import os,sys,json,stat,hashlib,secrets
 q=json.loads(sys.argv[1]); limit=2097152
 

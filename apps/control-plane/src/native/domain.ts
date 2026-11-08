@@ -17,8 +17,8 @@ export async function digest(value: unknown): Promise<string> {
   const sum = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(
-      typeof value === "string" ? value : canonical(value),
-    ),
+      typeof value === "string" ? value : canonical(value)
+    )
   );
   return [...new Uint8Array(sum)]
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -27,7 +27,7 @@ export async function digest(value: unknown): Promise<string> {
 export function assertAdmission(
   jobs: AttemptRecord[],
   id: string,
-  fingerprint: string,
+  fingerprint: string
 ): boolean {
   const prior = jobs.find((j) => j.id === id);
   if (prior) {
@@ -42,7 +42,7 @@ export function assertAdmission(
 export function assertCompletion(
   job: AttemptRecord,
   result: AttemptResult,
-  run: RunRecord,
+  run: RunRecord
 ): void {
   if (job.status !== "running" || run.phase === "cancelled")
     throw new Error("409: attempt is no longer active");
@@ -55,7 +55,9 @@ export function assertCompletion(
     throw new Error("409: completion does not match the accepted input");
   if (
     job.settingsRevision !== result.settingsRevision ||
-    (job.execution?.kind === "discovery" ? result.model !== null || result.executionKind !== "discovery" : job.settings.model !== result.model)
+    (job.execution?.kind === "discovery"
+      ? result.model !== null || result.executionKind !== "discovery"
+      : job.settings.model !== result.model)
   )
     throw new Error("409: completion changed immutable configuration");
   if (
@@ -75,9 +77,13 @@ export function identifier(value: unknown, label = "id"): string {
 }
 export function publicJob(j: AttemptRecord) {
   return {
-    ...((!j.inputError || j.conversation) && !j.execution ? {nativeSession: true} : {}),
-    ...(j.conversation && j.status==="created" ? {preparingConversation:true} : {}),
-    ...(j.execution ? {executionKind: j.execution.kind} : {}),
+    ...((!j.inputError || j.conversation) && !j.execution
+      ? { nativeSession: true }
+      : {}),
+    ...(j.conversation && j.status === "created"
+      ? { preparingConversation: true }
+      : {}),
+    ...(j.execution ? { executionKind: j.execution.kind } : {}),
     id: j.id,
     runId: j.runId,
     role: j.role,
@@ -96,11 +102,13 @@ export function publicJob(j: AttemptRecord) {
     ...(j.parentJobId ? { parentJobId: j.parentJobId } : {}),
     ...(j.revisionOf ? { revisionOf: j.revisionOf } : {}),
     ...(j.outputCommit ? { outputCommit: j.outputCommit } : {}),
-    ...(j.evidence ? {evidenceCommit:j.evidence.commit} : {}),
-    ...(j.inputError ? {inputError: j.inputError, failureClass: "material_input"} : {}),
+    ...(j.evidence ? { evidenceCommit: j.evidence.commit } : {}),
+    ...(j.inputError
+      ? { inputError: j.inputError, failureClass: "material_input" }
+      : {}),
     ...(j.terminal?.error ? { failureClass: j.status } : {}),
     ...(j.terminal?.runtime ? { runtime: j.terminal.runtime } : {}),
-    ...(j.recovery ? { recovery: j.recovery } : {}),
+    ...(j.recovery ? { recovery: j.recovery } : {})
   };
 }
 export function publicRun(r: RunRecord) {
@@ -108,11 +116,42 @@ export function publicRun(r: RunRecord) {
     id: r.id,
     createdAt: r.createdAt,
     phase: r.phase,
-    ...(r.discoveryDrained ? {discoveryDrained:true} : {}),
-    ...(r.discoveryAcknowledged ? {discoveryAcknowledged:true} : {}),
-    ...(r.target ? {target: {id:r.target.id,name:r.target.name,url:r.target.url,kind:r.target.kind,revision:r.target.revision,
-      ...(r.target.access?{access:{managed:true,loginConfigured:!!r.target.access.login,apiConfigured:!!r.target.access.api,program:r.target.access.program?.name}}:{}),
-      ...(r.target.sources?.length?{sources:r.target.sources.map(({id,repo,branch,commit,origin})=>({id,repo,branch,commit,...(origin?{origin}:{})}))}:{})}} : {}),
+    ...(r.discoveryDrained ? { discoveryDrained: true } : {}),
+    ...(r.discoveryAcknowledged ? { discoveryAcknowledged: true } : {}),
+    ...(r.target
+      ? {
+          target: {
+            id: r.target.id,
+            name: r.target.name,
+            url: r.target.url,
+            kind: r.target.kind,
+            revision: r.target.revision,
+            ...(r.target.access
+              ? {
+                  access: {
+                    managed: true,
+                    loginConfigured: !!r.target.access.login,
+                    apiConfigured: !!r.target.access.api,
+                    program: r.target.access.program?.name
+                  }
+                }
+              : {}),
+            ...(r.target.sources?.length
+              ? {
+                  sources: r.target.sources.map(
+                    ({ id, repo, branch, commit, origin }) => ({
+                      id,
+                      repo,
+                      branch,
+                      commit,
+                      ...(origin ? { origin } : {})
+                    })
+                  )
+                }
+              : {})
+          }
+        }
+      : {}),
     status: r.status,
     baselineRepo: r.repo,
     inputCommit: r.inputCommit,
@@ -120,6 +159,6 @@ export function publicRun(r: RunRecord) {
     maxJobs: r.maxJobs,
     settingsRevision: r.settingsRevision,
     lifecycle: r.lifecycle ?? "active",
-    lifecycleRevision: r.lifecycleRevision ?? 0,
+    lifecycleRevision: r.lifecycleRevision ?? 0
   };
 }

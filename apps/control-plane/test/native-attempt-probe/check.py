@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Real workerd invariants. Run local wrangler with this directory's config first."""
+"""Remaining workerd invariants, driven by scripts/test-native-attempt-runtime.mjs.
+
+Header redaction, prompt compatibility and model probes run under test:workers
+(see attempt.runtime.ts); keep their assertions there rather than duplicating them.
+"""
 import concurrent.futures
 import json
 import sys
@@ -17,9 +21,6 @@ def probe(kind):
     assert 'error' not in result, (kind, result.get('error'))
     return kind, result
 
-_, echoed = probe('header-redaction')
-assert 'private-header-marker' not in json.dumps(echoed), echoed
-assert '[REDACTED]' in json.dumps(echoed).upper(), echoed
 _, packages = probe('package-only')
 assert 'pentcloud_tool' in packages['tools'] and not any(name.startswith('pentcloud_kali_') for name in packages['tools']), packages
 assert packages['runs'] == packages['stops'] == 1, packages
@@ -28,17 +29,10 @@ assert packages['execution']['drained'] and not packages['execution']['sessionCl
 assert 'bounded profiles' in packages['prompt'] and 'pentcloud_tool' in packages['skill'], packages
 assert 'Kali tools are unavailable' in packages['skill'], packages
 assert packages['shell']['exitCode'] == 0 and packages['shell']['stdout'] == 'owned\n', packages
-_, compatibility = probe('prompt-compatibility')
-for case in compatibility['results']:
-    assert case['saved'] == case['replayed'], case
-    assert 'template execution is retired' in case['error'] and 'Markdown' in case['error'], case
-    assert not case['created'], case
-assert compatibility['modelRequests'] == 0, compatibility
 # Exercise different DOs concurrently: unique Git directories must prevent global
 # isomorphic-git locks from crossing DO-owned SQLite I/O contexts.
 with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:
     results = dict(pool.map(probe, ['computer', 'computer-coder', 'shell', 'javascript', 'publish', 'cancel', 'replay', 'drain', 'known-running', 'memory', 'research-policy', 'mcp-schema', 'session-stateless', 'session-cleanup-failure', 'metasploit-owned', 'metasploit-unknown', 'metasploit-control-race', 'metasploit-inspect-race', 'metasploit-stale-inventory']))
-results['header-secret-redaction'] = {'passed': True}
 for kind in ['native-discovery', 'native-discovery-failed', 'native-discovery-empty', 'native-discovery-legacy']:
     _, result = probe(kind)
     assert result['modelRequests'] == 0 and not result['modelKeyConfigured'], result
@@ -49,12 +43,6 @@ for kind in ['native-discovery', 'native-discovery-failed', 'native-discovery-em
     if kind.endswith('empty'):
         assert result['result']['arguments']['scanStatus'] == 'no-http-response', result
     results[kind] = {'passed': True}
-_, model_probe = probe('native-model-probe')
-assert model_probe['requests'] == [{'native': True, 'authenticated': True, 'model': 'fixture-console', 'tools': 0}], model_probe
-assert model_probe['empty'], model_probe
-_, pinned_model = probe('native-pinned-model')
-assert pinned_model['model'] == 'opencode:fixture-console' and pinned_model['modelRequests'] == 1, pinned_model
-results['native-model-connection'] = {'passed': True}
 _, finding_contract = probe('finding-contract')
 assert finding_contract['proposalAfterMissing'] is False
 assert finding_contract['version'] == 1 and finding_contract['modelRequests'] == 0

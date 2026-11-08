@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "trailingComma": "none",
+  "ignorePatterns": [
+    "**/*.md",
+    "**/*.json",
+    "**/*.jsonc",
+    "**/*.yml",
+    "**/*.yaml",
+    "**/*.html",
+    "**/worker-configuration.d.ts",
+    "**/dist/**",
+    "**/dist-customer/**",
+    ".pentcloud-tools/**",
+    "apps/control-plane/test/fixtures/**",
+    "contracts/**",
+    "docs/**",
+    "internal/**",
+    "media/**",
+    "templates/**",
+    "upstream/**"
+  ]
+}

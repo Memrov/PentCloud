@@ -1,12 +1,12 @@
 import { createParser } from "eventsource-parser";
 import {
   CallToolResultSchema,
-  JSONRPCMessageSchema,
+  JSONRPCMessageSchema
 } from "@modelcontextprotocol/sdk/types.js";
 import { NativeAttempt } from "../../src/native/attempt";
 import { remoteResultObject } from "../../src/native/tool-policy";
 import type { AttemptInput, NativeEnv } from "../../src/native/types";
-import type {ToolboxService} from "../../../../shared/toolbox-rpc";
+import type { ToolboxService } from "../../../../shared/toolbox-rpc";
 
 interface CanaryEnv {
   ATTEMPTS: DurableObjectNamespace<RemoteCanaryAttempt>;
@@ -19,14 +19,14 @@ interface Internals {
   executeRemoteTool(
     name: string,
     args: Record<string, unknown>,
-    id: string,
+    id: string
   ): Promise<unknown>;
 }
 const scanArguments = {
   target: "127.0.0.1",
   ports: "8081",
   timing: 4,
-  timeout: 30,
+  timeout: 30
 };
 interface WireRecord {
   method: string;
@@ -41,8 +41,8 @@ interface WireRecord {
 async function sha(value: string) {
   return [
     ...new Uint8Array(
-      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
-    ),
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
+    )
   ]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
@@ -54,7 +54,7 @@ function assert(condition: unknown, message: string): asserts condition {
 /** Fixture-only observation of a completed HTTP response; stock MCP framing uses its standard parser and SDK schemas. */
 async function observedReply(
   response: Response,
-  requestId: unknown,
+  requestId: unknown
 ): Promise<{ raw: string; result: Record<string, unknown> }> {
   let result: Record<string, unknown> | undefined;
   const observe = (frame: unknown) => {
@@ -70,7 +70,7 @@ async function observedReply(
   }
   assert(response.body, "Stock scan reply has no body");
   const parser = createParser({
-    onEvent: (event) => observe(JSON.parse(event.data)),
+    onEvent: (event) => observe(JSON.parse(event.data))
   });
   const reader = response.body.getReader(),
     decoder = new TextDecoder();
@@ -83,7 +83,7 @@ async function observedReply(
       parser.feed(text);
       assert(
         raw.length < 4 * 1024 * 1024,
-        "Fixture stock scan response exceeds bound",
+        "Fixture stock scan response exceeds bound"
       );
       if (done) break;
     }
@@ -128,10 +128,10 @@ export class RemoteCanaryAttempt extends NativeAttempt {
           ...(request.headers.get("mcp-session-id")
             ? {
                 requestSessionDigest: await sha(
-                  request.headers.get("mcp-session-id")!,
-                ),
+                  request.headers.get("mcp-session-id")!
+                )
               }
-            : {}),
+            : {})
         };
         await ctx.storage.put(wireKey, record);
         const mutation =
@@ -141,31 +141,31 @@ export class RemoteCanaryAttempt extends NativeAttempt {
           await ctx.storage.put(
             "fixture:mutationRequests",
             ((await ctx.storage.get<number>("fixture:mutationRequests")) ?? 0) +
-              1,
+              1
           );
         const response = await bindings.TOOLBOX.fetch(request);
         record.responseStatus = response.status;
         if (response.headers.get("mcp-session-id"))
           record.responseSessionDigest = await sha(
-            response.headers.get("mcp-session-id")!,
+            response.headers.get("mcp-session-id")!
           );
         await ctx.storage.put(wireKey, record);
         if (mutation && (await ctx.storage.get<boolean>("fixture:dropReply"))) {
           await ctx.storage.put("fixture:dropReply", false);
           assert(
             response.ok,
-            "Stock scan HTTP response failed before fault injection",
+            "Stock scan HTTP response failed before fault injection"
           );
           const { raw, result: completed } = await observedReply(
             response,
-            payload?.id,
+            payload?.id
           );
           assert(
             completed.status === "completed" &&
               completed.target === "127.0.0.1" &&
               completed.scan_type === "port" &&
               typeof completed.scan_id === "string",
-            "Stock loopback scan did not complete",
+            "Stock loopback scan did not complete"
           );
           const responseDigest = await sha(raw);
           await ctx.storage.put("fixture:observed", {
@@ -174,14 +174,14 @@ export class RemoteCanaryAttempt extends NativeAttempt {
             status: completed.status,
             target: completed.target,
             scanType: completed.scan_type,
-            responseBytes: new TextEncoder().encode(raw).byteLength,
+            responseBytes: new TextEncoder().encode(raw).byteLength
           });
           throw new Error(
-            "Injected loss after actual stock scan completed, before official client received its HTTP response",
+            "Injected loss after actual stock scan completed, before official client received its HTTP response"
           );
         }
         return response;
-      },
+      }
     };
     super(ctx, {
       TOOLBOX: toolbox,
@@ -190,16 +190,16 @@ export class RemoteCanaryAttempt extends NativeAttempt {
       COORDINATOR: {
         getByName: () => ({
           assertActive: async () => {},
-          getContext: async () => ({}),
-        }),
-      },
+          getContext: async () => ({})
+        })
+      }
     } as unknown as NativeEnv);
     this.harness.abort = async () => true;
   }
   async setup() {
     assert(
       !(await this.ctx.storage.get("attempt")),
-      "Canary identity is already initialized",
+      "Canary identity is already initialized"
     );
     const id = "native-remote-canary";
     const input: AttemptInput = {
@@ -217,13 +217,13 @@ export class RemoteCanaryAttempt extends NativeAttempt {
         promptTemplate: "No model calls",
         upstreamPromptDigest: "c".repeat(64),
         model: "opencode-go:deepseek-v4-pro",
-        reasoningEffort: "default",
+        reasoningEffort: "default"
       },
       depth: 0,
       attempt: 1,
       logicalThreadId: id,
       context: {},
-      createdAt: Date.now(),
+      createdAt: Date.now()
     };
     await this.ctx.storage.put("attempt", {
       input,
@@ -232,7 +232,7 @@ export class RemoteCanaryAttempt extends NativeAttempt {
       promptDigest: "d".repeat(64),
       status: "running",
       prepared: true,
-      startedAt: Date.now(),
+      startedAt: Date.now()
     });
     const native = this as unknown as Internals;
     const tools = await native.remoteTools(await native.remote());
@@ -250,7 +250,7 @@ export class RemoteCanaryAttempt extends NativeAttempt {
     }
     assert(
       lost.includes("Injected loss"),
-      "Expected injection was not observed by NativeAttempt",
+      "Expected injection was not observed by NativeAttempt"
     );
     try {
       await native.executeRemoteTool("nmap_port_scan", scanArguments, "lost-2");
@@ -259,12 +259,12 @@ export class RemoteCanaryAttempt extends NativeAttempt {
     }
     assert(
       fenced.includes("unresolved"),
-      "New call identity bypassed unresolved mutation fence",
+      "New call identity bypassed unresolved mutation fence"
     );
     const state = await this.status();
     assert(
       state.mutationRequests === 1 && state.execution.drained === false,
-      "Lost remote response released execution or repeated mutation",
+      "Lost remote response released execution or repeated mutation"
     );
     return { ...state, lostReplyRejected: true, newCallIdFenced: true };
   }
@@ -273,7 +273,7 @@ export class RemoteCanaryAttempt extends NativeAttempt {
     const state = await this.status();
     assert(
       !state.execution.drained && state.execution.state === "cancelled",
-      "Cancellation released unresolved remote operation",
+      "Cancellation released unresolved remote operation"
     );
     return state;
   }
@@ -293,13 +293,13 @@ export class RemoteCanaryAttempt extends NativeAttempt {
       wire: [
         ...(
           await this.ctx.storage.list<WireRecord>({ prefix: "fixture:wire:" })
-        ).values(),
-      ].sort((a, b) => a.time - b.time),
+        ).values()
+      ].sort((a, b) => a.time - b.time)
     };
   }
   async lookup(scanId: string) {
     return remoteResultObject(
-      await this.inspectRemote("nmap_get_scan_results", { scan_id: scanId }),
+      await this.inspectRemote("nmap_get_scan_results", { scan_id: scanId })
     );
   }
   async reconcileProof() {
@@ -312,78 +312,78 @@ export class RemoteCanaryAttempt extends NativeAttempt {
     try {
       await this.reconcileRemote("lost-1", {
         inspectionTool: "masscan_get_scan_results",
-        scanId: observed.scanId,
+        scanId: observed.scanId
       });
     } catch (error) {
       mismatched = String(error);
     }
     assert(
       !!mismatched && !(await this.execution()).drained,
-      "Mismatched backend reconciliation released hold",
+      "Mismatched backend reconciliation released hold"
     );
     const inspection = remoteResultObject(
       await this.inspectRemote("nmap_get_scan_results", {
-        scan_id: observed.scanId,
-      }),
+        scan_id: observed.scanId
+      })
     );
     assert(
       inspection.scan_id === observed.scanId &&
         inspection.target === "127.0.0.1" &&
         inspection.status === "completed",
-      "Live inspector did not return matching terminal scan",
+      "Live inspector did not return matching terminal scan"
     );
     let unattested = "";
     try {
       await this.reconcileRemote("lost-1", {
         inspectionTool: "nmap_get_scan_results",
-        scanId: observed.scanId,
+        scanId: observed.scanId
       });
     } catch (error) {
       unattested = String(error);
     }
     assert(
       !!unattested && !(await this.execution()).drained,
-      "Unknown-ID reconciliation omitted exact-operation attestation",
+      "Unknown-ID reconciliation omitted exact-operation attestation"
     );
     const identityEvidence = {
       source: "captured-response" as const,
       reference: `Exact lost-1 response sha256:${observed.responseDigest}; stock scan_id:${observed.scanId}`,
-      confirmedExactOperation: true as const,
+      confirmedExactOperation: true as const
     };
     const reconciliation = await this.reconcileRemote("lost-1", {
       inspectionTool: "nmap_get_scan_results",
       scanId: observed.scanId,
-      identityEvidence,
+      identityEvidence
     });
     const replay = await this.reconcileRemote("lost-1", {
       inspectionTool: "nmap_get_scan_results",
-      scanId: observed.scanId,
+      scanId: observed.scanId
     });
     const state = await this.status();
     assert(
       state.execution.drained && state.mutationRequests === 1,
-      "Positive terminal reconciliation failed to release hold",
+      "Positive terminal reconciliation failed to release hold"
     );
     const initialize = state.wire.filter((entry) => entry.rpc === "initialize");
     assert(
       initialize.length === 1 && initialize[0]?.responseSessionDigest,
-      "Eviction created another MCP session instead of resuming",
+      "Eviction created another MCP session instead of resuming"
     );
     assert(
       state.wire
         .filter((entry) => entry.requestSessionDigest)
         .every(
           (entry) =>
-            entry.requestSessionDigest === initialize[0]!.responseSessionDigest,
+            entry.requestSessionDigest === initialize[0]!.responseSessionDigest
         ),
-      "MCP session identity changed after eviction",
+      "MCP session identity changed after eviction"
     );
     const requestIds = state.wire.flatMap((entry) =>
-      entry.requestIdDigest ? [entry.requestIdDigest] : [],
+      entry.requestIdDigest ? [entry.requestIdDigest] : []
     );
     assert(
       new Set(requestIds).size === requestIds.length,
-      "Eviction reused an MCP request ID",
+      "Eviction reused an MCP request ID"
     );
     return {
       ...state,
@@ -396,10 +396,10 @@ export class RemoteCanaryAttempt extends NativeAttempt {
         scanId: inspection.scan_id,
         target: inspection.target,
         status: inspection.status,
-        scanType: inspection.scan_type,
+        scanType: inspection.scan_type
       },
       reconciliation,
-      replay,
+      replay
     };
   }
   async clean() {
@@ -413,11 +413,11 @@ export class RemoteCanaryAttempt extends NativeAttempt {
     }
     const wire = (await this.status()).wire;
     const established = wire.some(
-      (entry) => entry.rpc === "initialize" && entry.responseSessionDigest,
+      (entry) => entry.rpc === "initialize" && entry.responseSessionDigest
     );
     const teardown = wire.filter((entry) => entry.method === "DELETE");
     const terminated = teardown.some(
-      (entry) => entry.responseStatus >= 200 && entry.responseStatus < 300,
+      (entry) => entry.responseStatus >= 200 && entry.responseStatus < 300
     );
     await this.ctx.storage.deleteAll();
     return {
@@ -425,7 +425,7 @@ export class RemoteCanaryAttempt extends NativeAttempt {
       temporaryMcpSessionEstablished: established,
       temporaryMcpSessionTerminated: established ? terminated : null,
       teardown,
-      ...(cleanupError ? { cleanupError } : {}),
+      ...(cleanupError ? { cleanupError } : {})
     };
   }
 }
@@ -451,8 +451,8 @@ export default {
       if (action === "/lookup")
         return Response.json(
           await attempt.lookup(
-            new URL(request.url).searchParams.get("scan_id") ?? "",
-          ),
+            new URL(request.url).searchParams.get("scan_id") ?? ""
+          )
         );
       if (action === "/reconcile")
         return Response.json(await attempt.reconcileProof());
@@ -461,5 +461,5 @@ export default {
     } catch (error) {
       return Response.json({ error: String(error) }, { status: 500 });
     }
-  },
+  }
 } satisfies ExportedHandler<CanaryEnv>;

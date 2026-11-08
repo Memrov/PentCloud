@@ -12,8 +12,12 @@ Native Markdown is loaded directly, without a Go prompt build or runtime rendere
 
 | Command | Purpose |
 | --- | --- |
-| `npm run check` | App types, native Markdown policy and unit/native API checks |
+| `npm run check` | Formatting, lint, app types, native Markdown policy and unit/native API checks |
+| `npm run format` | Format code with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) (80 columns, Cloudflare's style) |
+| `npm run format:check` | Fail if any code is not formatted |
+| `npm run lint` | Type-aware [oxlint](https://oxc.rs/docs/guide/usage/linter), including `no-floating-promises` |
 | `npm run test:watch` | Watch unit tests |
+| `npm run test:workers` | Workers runtime tests: router/API, question recovery and migrated attempt probes |
 | `npm run test:workers:watch` | Watch native Worker tests |
 | `npm run verify` | App checks, Vite production build, compiled stack/map checks and Wrangler dry run |
 | `npm run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
@@ -21,8 +25,31 @@ Native Markdown is loaded directly, without a Go prompt build or runtime rendere
 | `npm run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
 | `npm run test:browser` | Playwright UI fixtures; install Chromium with `npm exec -- playwright install chromium` |
 
+Every verify gate runs `format:check` and `lint` first. Formatting covers
+TypeScript, JavaScript and CSS only; Markdown (including specialist prompts),
+JSON, YAML and generated Worker types are never reformatted. If
+`format:check` still fails right after `npm run format`, run `format` once
+more: oxfmt 0.74 settles a few files on its second pass. Lint rules listed
+as backlog in `.oxlintrc.json` warn instead of failing until they are fixed.
+
+Each Worker's `worker-configuration.d.ts` holds its bindings and the
+Workers runtime types for its compatibility date and flags, as
+[Cloudflare recommends](https://developers.cloudflare.com/workers/languages/typescript/)
+instead of `@cloudflare/workers-types`. The files are committed and the gates
+run `wrangler types --check`. After changing a Worker's Wrangler config,
+compatibility date or flags, or upgrading Wrangler, regenerate with
+`npm run types --workspace <workspace>` and commit the result.
+
 A focused test can be selected with, for example,
 `npm run test:unit -- test/materials-ui.test.ts`.
+Workers tests use separate `router`, `question-recovery` and `attempt` projects;
+select one with `npm run test:workers -- --project attempt`.
+The attempt project covers header redaction, legacy prompt compatibility,
+native model connection and successful execution with the pinned model.
+The remaining attempt scenarios still run through
+`node scripts/test-native-attempt-runtime.mjs` and `check.py`. Both runners use
+the same scripted HTTP services in `test/native-attempt-probe/fixture-services.ts`;
+when migrating a scenario, move its assertions rather than maintaining two copies.
 The unit gate does not run the separate Playwright browser suite. A passing
 local gate does not establish live human login, browser appearance, paid inference
 or scanner acceptance in a Cloudflare account.

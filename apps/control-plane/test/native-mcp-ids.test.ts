@@ -11,7 +11,7 @@ function fixture() {
     close: async () => {},
     send: async (message) => {
       sent.push(message);
-    },
+    }
   };
   return { base, sent, client: uniqueClientIds(base) };
 }
@@ -23,13 +23,13 @@ describe("MCP client request identity across session resume", () => {
       jsonrpc: "2.0",
       id: 0,
       method: "tools/call",
-      params: { name: "mutation", arguments: { target: "127.0.0.1" } },
+      params: { name: "mutation", arguments: { target: "127.0.0.1" } }
     });
     await resumed.client.send({
       jsonrpc: "2.0",
       id: 0,
       method: "tools/call",
-      params: { name: "inspect", arguments: { scan_id: "scan" } },
+      params: { name: "inspect", arguments: { scan_id: "scan" } }
     });
     const oldId = "id" in old.sent[0]! ? old.sent[0].id : undefined;
     const newId = "id" in resumed.sent[0]! ? resumed.sent[0].id : undefined;
@@ -37,11 +37,11 @@ describe("MCP client request identity across session resume", () => {
     await resumed.client.send({
       jsonrpc: "2.0",
       method: "notifications/cancelled",
-      params: { requestId: 0 },
+      params: { requestId: 0 }
     });
     expect(resumed.sent[1]).toMatchObject({ params: { requestId: newId } });
     expect(old.sent[0]).toMatchObject({
-      params: { arguments: { target: "127.0.0.1" } },
+      params: { arguments: { target: "127.0.0.1" } }
     });
   });
   it("forgets cancelled correlations and ignores late responses and progress", async () => {
@@ -55,7 +55,7 @@ describe("MCP client request identity across session resume", () => {
         jsonrpc: "2.0",
         id,
         method: "tools/call",
-        params: { name: "inspect", _meta: { progressToken: id } },
+        params: { name: "inspect", _meta: { progressToken: id } }
       });
       const request = sent.at(-1)!;
       if (!("id" in request) || !("method" in request))
@@ -65,24 +65,24 @@ describe("MCP client request identity across session resume", () => {
       await client.send({
         jsonrpc: "2.0",
         method: "notifications/cancelled",
-        params: { requestId: id },
+        params: { requestId: id }
       });
       const count = sent.length;
       await client.send({
         jsonrpc: "2.0",
         method: "notifications/cancelled",
-        params: { requestId: id },
+        params: { requestId: id }
       });
       expect(sent).toHaveLength(count);
       base.onmessage?.({
         jsonrpc: "2.0",
         id: request.id,
-        result: { late: true },
+        result: { late: true }
       });
       base.onmessage?.({
         jsonrpc: "2.0",
         method: "notifications/progress",
-        params: { progressToken: token, progress: 1 },
+        params: { progressToken: token, progress: 1 }
       });
     }
     expect(received).toEqual([]);
@@ -97,7 +97,7 @@ describe("MCP client request identity across session resume", () => {
       jsonrpc: "2.0",
       id: 7,
       method: "tools/call",
-      params: { name: "inspect", _meta: { progressToken: 7 } },
+      params: { name: "inspect", _meta: { progressToken: 7 } }
     });
     const request = sent[0]!;
     if (!("id" in request) || !("method" in request))
@@ -107,12 +107,12 @@ describe("MCP client request identity across session resume", () => {
     base.onmessage?.({
       jsonrpc: "2.0",
       method: "notifications/progress",
-      params: { progressToken: token, progress: 1 },
+      params: { progressToken: token, progress: 1 }
     });
     base.onmessage?.({
       jsonrpc: "2.0",
       id: "old-client:7",
-      result: { unexpected: true },
+      result: { unexpected: true }
     });
     base.onmessage?.({ jsonrpc: "2.0", id: request.id, result: { ok: true } });
     base.onmessage?.({ jsonrpc: "2.0", id: "server-owned", method: "ping" });
@@ -121,10 +121,10 @@ describe("MCP client request identity across session resume", () => {
       {
         jsonrpc: "2.0",
         method: "notifications/progress",
-        params: { progressToken: 7, progress: 1 },
+        params: { progressToken: 7, progress: 1 }
       },
       { jsonrpc: "2.0", id: 7, result: { ok: true } },
-      { jsonrpc: "2.0", id: "server-owned", method: "ping" },
+      { jsonrpc: "2.0", id: "server-owned", method: "ping" }
     ]);
     expect(sent[1]).toMatchObject({ id: "server-owned" });
   });

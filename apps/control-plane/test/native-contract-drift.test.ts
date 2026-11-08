@@ -27,23 +27,43 @@ function candidate(name: string, change: (document: any) => void) {
 // Only the integration setup below generates installed Node/Effect declarations.
 // Mutation tests exercise the pure comparison functions with published fixtures.
 function compare(kind: "config" | "api", baseline: string, path: string) {
-  return spawnSync("python3", ["-c", `
+  return spawnSync(
+    "python3",
+    [
+      "-c",
+      `
 import runpy, sys
 checker = runpy.run_path(sys.argv[1])
 old, new = checker["load"](sys.argv[3]), checker["load"](sys.argv[4])
 sys.exit(checker["compare_" + sys.argv[2]](old, new))
-`, script, kind, baseline, path], { encoding: "utf8" });
+`,
+      script,
+      kind,
+      baseline,
+      path
+    ],
+    { encoding: "utf8" }
+  );
 }
 
-afterEach(() => temporary.splice(0).forEach((path) => rmSync(path, { recursive: true })));
+afterEach(() =>
+  temporary.splice(0).forEach((path) => rmSync(path, { recursive: true }))
+);
 
 describe("adopted upstream contract drift", () => {
   let installed: ReturnType<typeof spawnSync>;
   beforeAll(() => {
-    installed = spawnSync("python3", [script,
-      "--api", resolve(evidence, "openapi.json"),
-      "--config", resolve(evidence, "config-schema.json"),
-    ], { encoding: "utf8" });
+    installed = spawnSync(
+      "python3",
+      [
+        script,
+        "--api",
+        resolve(evidence, "openapi.json"),
+        "--config",
+        resolve(evidence, "config-schema.json")
+      ],
+      { encoding: "utf8" }
+    );
   });
 
   it("compares installed pinned declarations once and identifies only the published legacy skills drift", () => {
@@ -55,10 +75,16 @@ describe("adopted upstream contract drift", () => {
 
   it("retains schema properties named like documentation keywords", () => {
     const baseline = candidate("config-schema.json", (document) => {
-      document.properties.agents = { type: "object", properties: { title: { type: "string" } } };
+      document.properties.agents = {
+        type: "object",
+        properties: { title: { type: "string" } }
+      };
     });
     const path = candidate("config-schema.json", (document) => {
-      document.properties.agents = { type: "object", properties: { title: { type: "number" } } };
+      document.properties.agents = {
+        type: "object",
+        properties: { title: { type: "number" } }
+      };
     });
     const result = compare("config", baseline, path);
     expect(result.status, result.stderr).toBe(1);
@@ -71,7 +97,11 @@ describe("adopted upstream contract drift", () => {
       document.properties.default_agent.description = "Reworded documentation";
       document.properties.providers.title = "Providers";
     });
-    const result = compare("config", candidate("config-schema.json", () => {}), path);
+    const result = compare(
+      "config",
+      candidate("config-schema.json", () => {}),
+      path
+    );
     expect(result.status, result.stderr).toBe(0);
   });
 
@@ -82,7 +112,11 @@ describe("adopted upstream contract drift", () => {
       // A constraint reached through an adopted field's $ref must count too.
       document.$defs["Permission.Effect"].enum.push("new-effect");
     });
-    const result = compare("config", candidate("config-schema.json", () => {}), path);
+    const result = compare(
+      "config",
+      candidate("config-schema.json", () => {}),
+      path
+    );
     expect(result.status, result.stderr).toBe(1);
     expect(result.stdout).toContain("config.skills: missing");
     expect(result.stdout).toContain("config.default_agent: changed");
@@ -92,10 +126,15 @@ describe("adopted upstream contract drift", () => {
   it("detects removed operations and changed native error or reply schemas", () => {
     const path = candidate("openapi.json", (document) => {
       delete document.paths["/api/experimental/session/stats"].get;
-      const reply = document.paths["/api/session/{sessionID}/form/{formID}/reply"].post;
+      const reply =
+        document.paths["/api/session/{sessionID}/form/{formID}/reply"].post;
       delete reply.responses["409"];
-      const permission = document.paths["/api/session/{sessionID}/permission/{requestID}/reply"].post;
-      permission.requestBody.content["application/json"].schema.required.push("newRequired");
+      const permission =
+        document.paths["/api/session/{sessionID}/permission/{requestID}/reply"]
+          .post;
+      permission.requestBody.content["application/json"].schema.required.push(
+        "newRequired"
+      );
     });
     const result = compare("api", resolve(evidence, "openapi.json"), path);
     expect(result.status, result.stderr).toBe(1);
@@ -116,8 +155,15 @@ describe("adopted upstream contract drift", () => {
     });
     const result = compare("api", resolve(evidence, "openapi.json"), path);
     expect(result.status, result.stderr).toBe(1);
-    for (const id of ["websearch.query", "websearch.providers", "skill.list",
-      "experimental.session.skill", "session.form.create", "session.form.get", "session.form.cancel"]) {
+    for (const id of [
+      "websearch.query",
+      "websearch.providers",
+      "skill.list",
+      "experimental.session.skill",
+      "session.form.create",
+      "session.form.get",
+      "session.form.cancel"
+    ]) {
       expect(result.stdout).toContain(`api.${id}: missing`);
     }
   });
@@ -126,7 +172,11 @@ describe("adopted upstream contract drift", () => {
     const path = candidate("config-schema.json", (document) => {
       document.properties.skills = { $ref: "#/$defs/DoesNotExist" };
     });
-    const result = compare("config", candidate("config-schema.json", () => {}), path);
+    const result = compare(
+      "config",
+      candidate("config-schema.json", () => {}),
+      path
+    );
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("KeyError: 'DoesNotExist'");
   });

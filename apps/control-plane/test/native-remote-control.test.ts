@@ -4,7 +4,7 @@ import {
   authorizeMetasploitControl,
   metasploitOutcome,
   metasploitOwnershipState,
-  type MetasploitOwnership,
+  type MetasploitOwnership
 } from "../src/native/remote-control";
 
 // Shapes taken from unchanged MetasploitMCP.py _execute_module_rpc,
@@ -23,25 +23,24 @@ const started = (extra: Record<string, unknown> = {}) =>
       options: { ExitOnSession: false },
       payload_name: "test-payload",
       payload_options: {},
-      ...extra,
-    },
+      ...extra
+    }
   )!;
 const jobs = (
   handlers: Record<string, object> = {},
-  other_jobs: Record<string, object> = {},
+  other_jobs: Record<string, object> = {}
 ) => ({
   status: "success",
   handlers,
   other_jobs,
   handler_count: Object.keys(handlers).length,
   other_job_count: Object.keys(other_jobs).length,
-  total_job_count:
-    Object.keys(handlers).length + Object.keys(other_jobs).length,
+  total_job_count: Object.keys(handlers).length + Object.keys(other_jobs).length
 });
 const sessions = (entries: Record<string, object> = {}) => ({
   status: "success",
   sessions: entries,
-  count: Object.keys(entries).length,
+  count: Object.keys(entries).length
 });
 
 describe("stock Metasploit resource ownership", () => {
@@ -53,12 +52,12 @@ describe("stock Metasploit resource ownership", () => {
       sessionIds: [],
       executionUuid: "execution-a",
       uncertain: false,
-      needsSessionInspection: true,
+      needsSessionInspection: true
     });
     expect(
       authorizeMetasploitControl("metasploit_stop_job", { job_id: 0 }, [
-        { id: "listener", owned: outcome.owned },
-      ]),
+        { id: "listener", owned: outcome.owned }
+      ])
     ).toEqual({ receiptIds: ["listener"], kind: "job", resourceId: "0" });
   });
 
@@ -67,7 +66,7 @@ describe("stock Metasploit resource ownership", () => {
     const stoppedJob = applyMetasploitInspection(
       original,
       "metasploit_list_listeners",
-      jobs(),
+      jobs()
     );
     expect(stoppedJob.jobIds).toEqual([]);
     expect(stoppedJob.sessionIds).toEqual(["7"]);
@@ -75,13 +74,13 @@ describe("stock Metasploit resource ownership", () => {
     const active = applyMetasploitInspection(
       stoppedJob,
       "metasploit_list_active_sessions",
-      sessions({ "7": { exploit_uuid: "execution-a" } }),
+      sessions({ "7": { exploit_uuid: "execution-a" } })
     );
     expect(metasploitOwnershipState(active)).toBe("running");
     const ended = applyMetasploitInspection(
       active,
       "metasploit_list_active_sessions",
-      sessions(),
+      sessions()
     );
     expect(metasploitOwnershipState(ended)).toBe("completed");
     expect(original.jobIds).toEqual(["0"]);
@@ -92,12 +91,12 @@ describe("stock Metasploit resource ownership", () => {
     const beforeStop = applyMetasploitInspection(
       started().owned,
       "metasploit_list_active_sessions",
-      sessions(),
+      sessions()
     );
     const stopped = applyMetasploitInspection(
       beforeStop,
       "metasploit_list_listeners",
-      jobs(),
+      jobs()
     );
     expect(metasploitOwnershipState(stopped)).toBe("running");
     const discovered = applyMetasploitInspection(
@@ -105,8 +104,8 @@ describe("stock Metasploit resource ownership", () => {
       "metasploit_list_active_sessions",
       sessions({
         "3": { exploit_uuid: "execution-a" },
-        "4": { exploit_uuid: "someone-else" },
-      }),
+        "4": { exploit_uuid: "someone-else" }
+      })
     );
     expect(discovered.sessionIds).toEqual(["3"]);
     expect(discovered.needsSessionInspection).toBe(false);
@@ -114,15 +113,15 @@ describe("stock Metasploit resource ownership", () => {
       authorizeMetasploitControl(
         "metasploit_terminate_session",
         { session_id: 3 },
-        [{ id: "listener", owned: discovered }],
-      ).receiptIds,
+        [{ id: "listener", owned: discovered }]
+      ).receiptIds
     ).toEqual(["listener"]);
     expect(() =>
       authorizeMetasploitControl(
         "metasploit_terminate_session",
         { session_id: 4 },
-        [{ id: "listener", owned: discovered }],
-      ),
+        [{ id: "listener", owned: discovered }]
+      )
     ).toThrow("not owned");
   });
 
@@ -134,8 +133,8 @@ describe("stock Metasploit resource ownership", () => {
         status: "success",
         session_id_detected: "8",
         module_output: "session opened",
-        module: "exploit/test",
-      },
+        module: "exploit/test"
+      }
     )!;
     expect(result.state).toBe("running");
     expect(result.owned.sessionIds).toEqual(["8"]);
@@ -145,9 +144,9 @@ describe("stock Metasploit resource ownership", () => {
         applyMetasploitInspection(
           result.owned,
           "metasploit_list_active_sessions",
-          sessions(),
-        ),
-      ),
+          sessions()
+        )
+      )
     ).toBe("completed");
   });
 
@@ -159,31 +158,31 @@ describe("stock Metasploit resource ownership", () => {
         status: "unknown",
         message: "Exploit executed, but no job ID returned.",
         result: { uuid: "execution-a" },
-        module: "exploit/multi/handler",
-      },
+        module: "exploit/multi/handler"
+      }
     )!;
     expect(unknown.state).toBe("unknown");
     const after = applyMetasploitInspection(
       applyMetasploitInspection(
         unknown.owned,
         "metasploit_list_listeners",
-        jobs(),
+        jobs()
       ),
       "metasploit_list_active_sessions",
-      sessions(),
+      sessions()
     );
     expect(metasploitOwnershipState(after)).toBe("unknown");
     expect(() =>
       authorizeMetasploitControl("metasploit_stop_job", { job_id: 0 }, [
-        { id: "unknown", owned: after },
-      ]),
+        { id: "unknown", owned: after }
+      ])
     ).toThrow("not owned");
     const noUuid = started({ uuid: null });
     expect(noUuid.state).toBe("unknown");
     expect(
       authorizeMetasploitControl("metasploit_stop_job", { job_id: 0 }, [
-        { id: "unknown-with-known-job", owned: noUuid.owned },
-      ]).resourceId,
+        { id: "unknown-with-known-job", owned: noUuid.owned }
+      ]).resourceId
     ).toBe("0");
   });
 
@@ -193,27 +192,27 @@ describe("stock Metasploit resource ownership", () => {
       expect(
         applyMetasploitInspection(owned, "metasploit_list_listeners", {
           ...jobs(),
-          status,
-        }),
+          status
+        })
       ).toEqual(owned);
       expect(
         applyMetasploitInspection(owned, "metasploit_list_active_sessions", {
           ...sessions(),
-          status,
-        }),
+          status
+        })
       ).toEqual(owned);
     }
     expect(() =>
       applyMetasploitInspection(owned, "metasploit_list_active_sessions", {
         status: "success",
         sessions: {},
-        count: 1,
-      }),
+        count: 1
+      })
     ).toThrow("Incomplete");
     expect(() =>
       applyMetasploitInspection(owned, "metasploit_list_listeners", {
-        status: "success",
-      }),
+        status: "success"
+      })
     ).toThrow("Malformed");
   });
 
@@ -223,50 +222,46 @@ describe("stock Metasploit resource ownership", () => {
       sessionIds: ["7"],
       executionUuid: "execution-a",
       uncertain: false,
-      needsSessionInspection: true,
+      needsSessionInspection: true
     };
     const receipts = [{ id: "owned", owned }];
     expect(() =>
       authorizeMetasploitControl(
         "metasploit_send_session_command",
         { session_id: 7, command: "anything" },
-        receipts,
-      ),
+        receipts
+      )
     ).toThrow("Only owned");
     expect(() =>
       authorizeMetasploitControl(
         "metasploit_run_post_module",
         { session_id: 7 },
-        receipts,
-      ),
+        receipts
+      )
     ).toThrow("Only owned");
     expect(() =>
-      authorizeMetasploitControl(
-        "metasploit_stop_job",
-        { job_id: 7 },
-        receipts,
-      ),
+      authorizeMetasploitControl("metasploit_stop_job", { job_id: 7 }, receipts)
     ).toThrow("not owned");
     expect(() =>
       authorizeMetasploitControl(
         "metasploit_terminate_session",
         { session_id: 0 },
-        receipts,
-      ),
+        receipts
+      )
     ).toThrow("not owned");
     expect(() =>
       authorizeMetasploitControl(
         "metasploit_stop_job",
         { job_id: "0" },
-        receipts,
-      ),
+        receipts
+      )
     ).toThrow("integer");
     expect(() =>
       authorizeMetasploitControl(
         "metasploit_stop_job",
         { job_id: 0, session_id: 7 },
-        receipts,
-      ),
+        receipts
+      )
     ).toThrow("only");
   });
 
@@ -275,28 +270,28 @@ describe("stock Metasploit resource ownership", () => {
       metasploitOutcome(
         "metasploit_run_auxiliary_module",
         {},
-        { status: "aborted", message: "Module not run." },
-      )?.state,
+        { status: "aborted", message: "Module not run." }
+      )?.state
     ).toBe("completed");
     expect(
       metasploitOutcome(
         "metasploit_start_listener",
         {},
-        { status: "error", message: "Unexpected server error running module." },
-      )?.state,
+        { status: "error", message: "Unexpected server error running module." }
+      )?.state
     ).toBe("unknown");
     expect(
       metasploitOutcome(
         "metasploit_run_exploit",
         {},
-        { status: "success", session_id_detected: "invalid-session" },
-      )?.state,
+        { status: "success", session_id_detected: "invalid-session" }
+      )?.state
     ).toBe("unknown");
     expect(
-      metasploitOutcome("nmap_port_scan", {}, { status: "completed" }),
+      metasploitOutcome("nmap_port_scan", {}, { status: "completed" })
     ).toBeUndefined();
     expect(
-      metasploitOutcome("metasploit_list_active_sessions", {}, sessions()),
+      metasploitOutcome("metasploit_list_active_sessions", {}, sessions())
     ).toBeUndefined();
   });
 });

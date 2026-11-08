@@ -21,7 +21,7 @@ const terminalStatuses = new Set([
   "failed",
   "invalid_result",
   "integration_failed",
-  "interrupted",
+  "interrupted"
 ]);
 const record = (value: unknown): value is RecordValue =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -44,7 +44,7 @@ export class LegacyHistory {
     if (this.commit !== undefined && !commitPattern.test(this.commit))
       throw new Error("503: Invalid historical snapshot configuration");
     this.secrets = [env.CONTROL_TOKEN, env.OPENCODE_GO_API_KEY].filter(
-      (value): value is string => !!value,
+      (value): value is string => !!value
     );
   }
 
@@ -53,17 +53,17 @@ export class LegacyHistory {
     using repository = await this.open();
     const runs = await this.readDirectory(repository, "runs");
     const jobs = (await this.readDirectory(repository, "jobs")).map((value) =>
-      this.job(value),
+      this.job(value)
     );
     return {
       runs: runs
         .map((value) =>
           this.run(
             value,
-            jobs.filter((job) => job.runId === value.id),
-          ),
+            jobs.filter((job) => job.runId === value.id)
+          )
         )
-        .sort((a, b) => a.id.localeCompare(b.id)),
+        .sort((a, b) => a.id.localeCompare(b.id))
     };
   }
 
@@ -78,8 +78,8 @@ export class LegacyHistory {
     return {
       run: this.run(stored, jobs),
       jobs: jobs.sort(
-        (a, b) => (a.depth ?? 0) - (b.depth ?? 0) || a.id.localeCompare(b.id),
-      ),
+        (a, b) => (a.depth ?? 0) - (b.depth ?? 0) || a.id.localeCompare(b.id)
+      )
     };
   }
 
@@ -111,11 +111,11 @@ export class LegacyHistory {
               type: "data-status",
               data: {
                 status: "archive_unavailable",
-                error: "Historical transcript was not archived.",
-              },
-            },
-          ],
-        },
+                error: "Historical transcript was not archived."
+              }
+            }
+          ]
+        }
       ];
     }
     const snapshot = { messages, busy: false, pending: [], cursor: 0, job };
@@ -125,9 +125,9 @@ export class LegacyHistory {
         headers: {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
-          "X-Legacy-State-Commit": this.commit!,
-        },
-      },
+          "X-Legacy-State-Commit": this.commit!
+        }
+      }
     );
   }
 
@@ -152,7 +152,7 @@ export class LegacyHistory {
 
   private async readDirectory(
     repository: HistoryRepository,
-    directory: "runs" | "jobs",
+    directory: "runs" | "jobs"
   ): Promise<RecordValue[]> {
     const commit = await repository.readCommit(this.commit!);
     if (!commit || commit.hash !== this.commit)
@@ -160,7 +160,7 @@ export class LegacyHistory {
     const root = await repository.readTree(commit.treeHash);
     if (!root) throw new Error("503: Historical root tree is unavailable");
     const tree = root.find(
-      (entry) => entry.name === directory && entry.type === "tree",
+      (entry) => entry.name === directory && entry.type === "tree"
     );
     if (!tree) return [];
     const entries = await repository.readTree(tree.hash);
@@ -185,12 +185,12 @@ export class LegacyHistory {
   private async read(
     repository: HistoryRepository,
     directory: "runs" | "jobs" | "transcripts",
-    id: string,
+    id: string
   ): Promise<RecordValue | null> {
     identifier(id);
     const file = await repository.readFile({
       ref: this.commit!,
-      path: `${directory}/${id}.json`,
+      path: `${directory}/${id}.json`
     });
     if (!file) return null;
     if (file.size > 3 * 1024 * 1024)
@@ -227,8 +227,8 @@ export class LegacyHistory {
         ? this.status(value.status)
         : jobs.some((job) =>
               ["failed", "invalid_result", "integration_failed"].includes(
-                job.status,
-              ),
+                job.status
+              )
             )
           ? "failed"
           : jobs.some((job) => job.status === "interrupted")
@@ -247,7 +247,7 @@ export class LegacyHistory {
       maxJobs: integer(value.max_jobs),
       ...(typeof value.settings_revision === "string"
         ? { settingsRevision: this.text(value.settings_revision) }
-        : {}),
+        : {})
     };
   }
 
@@ -264,18 +264,18 @@ export class LegacyHistory {
   private job(value: RecordValue): UIJob {
     if (!terminalStatuses.has(String(value.status)))
       throw new Error(
-        "503: Active jobs cannot be served as historical snapshots",
+        "503: Active jobs cannot be served as historical snapshots"
       );
     const job: UIJob = {
       id: identifier(value.id),
       runId: identifier(value.run_id),
       status: this.status(value.status),
-      revision: integer(value.revision),
+      revision: integer(value.revision)
     };
     for (const [source, target] of [
       ["parent_job_id", "parentJobId"],
       ["logical_thread_id", "logicalThreadId"],
-      ["revision_of", "revisionOf"],
+      ["revision_of", "revisionOf"]
     ] as const)
       if (value[source] !== undefined) job[target] = identifier(value[source]);
     for (const [source, target] of [
@@ -284,13 +284,13 @@ export class LegacyHistory {
       ["model", "model"],
       ["settings_revision", "settingsRevision"],
       ["reasoning_effort", "reasoningEffort"],
-      ["failure_class", "failureClass"],
+      ["failure_class", "failureClass"]
     ] as const)
       if (typeof value[source] === "string")
         job[target] = this.text(value[source]);
     for (const [source, target] of [
       ["input_commit", "inputCommit"],
-      ["output_commit", "outputCommit"],
+      ["output_commit", "outputCommit"]
     ] as const) {
       if (value[source] !== undefined) {
         if (
@@ -305,7 +305,7 @@ export class LegacyHistory {
     if (value.attempt !== undefined) job.attempt = integer(value.attempt);
     if (
       ["complete", "compacted", "failed"].includes(
-        String(value.transcript_archive_status),
+        String(value.transcript_archive_status)
       )
     )
       job.archiveStatus = value.transcript_archive_status as NonNullable<
@@ -319,7 +319,7 @@ export class LegacyHistory {
       const task = [
         value.arguments.task,
         value.arguments.question,
-        value.arguments.message,
+        value.arguments.message
       ].find((text) => typeof text === "string");
       if (typeof task === "string") job.task = this.text(task);
     }
@@ -336,7 +336,7 @@ export class LegacyHistory {
       .replace(/\b(?:sk-|dop_v1_)[A-Za-z0-9_-]{12,}/g, "[REDACTED]")
       .replace(
         /((?:api[_-]?key|(?:access[_-]?)?token|secret|password|authorization)["']?\s*[=:]\s*["']?)[^\s,"';}\]]+/gi,
-        "$1[REDACTED]",
+        "$1[REDACTED]"
       )
       .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[REDACTED]@")
       .slice(0, 256 * 1024);
@@ -354,11 +354,11 @@ export class LegacyHistory {
           .map(([key, entry]) => [
             this.text(key),
             /(?:secret|password|token|authorization|cookie|credential|api[_-]?key)/i.test(
-              key,
+              key
             )
               ? "[REDACTED]"
-              : this.safe(entry, depth + 1),
-          ]),
+              : this.safe(entry, depth + 1)
+          ])
       );
     return value;
   }
@@ -384,7 +384,7 @@ export class LegacyHistory {
         typeof part.toolCallId === "string" &&
         typeof part.toolName === "string" &&
         ["input-available", "output-available", "output-error"].includes(
-          String(part.state),
+          String(part.state)
         )
       )
         return {
@@ -401,7 +401,7 @@ export class LegacyHistory {
             : {}),
           ...(typeof part.errorText === "string"
             ? { errorText: this.text(part.errorText) }
-            : {}),
+            : {})
         };
       if (
         part.type === "data-status" &&
@@ -414,15 +414,15 @@ export class LegacyHistory {
             status: this.text(part.data.status),
             ...(typeof part.data.error === "string"
               ? { error: this.text(part.data.error) }
-              : {}),
-          },
+              : {})
+          }
         };
       throw new Error("503: Invalid historical message part");
     });
     return {
       id: this.text(value.id),
       role: value.role as ChatMessage["role"],
-      parts,
+      parts
     };
   }
 }

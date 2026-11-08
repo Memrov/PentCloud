@@ -1,7 +1,7 @@
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type {
   JSONRPCMessage,
-  RequestId,
+  RequestId
 } from "@modelcontextprotocol/sdk/types.js";
 
 /** Client IDs are isolate-local; stock stdio correlation is shared by the resumed session. */
@@ -39,8 +39,8 @@ export function uniqueClientIds(base: Transport): Transport {
             id,
             params: {
               ...message.params,
-              _meta: { ...meta, progressToken: wireToken },
-            },
+              _meta: { ...meta, progressToken: wireToken }
+            }
           };
         } else wire = { ...message, id };
       } else if (
@@ -63,7 +63,7 @@ export function uniqueClientIds(base: Transport): Transport {
         if (token !== undefined) progress.delete(token);
         requestProgress.delete(cancelled);
       }
-    },
+    }
   };
   // Public Transport property, kept dynamic as initialize assigns the server SID.
   Object.defineProperty(transport, "sessionId", { get: () => base.sessionId });
@@ -94,9 +94,9 @@ export function uniqueClientIds(base: Transport): Transport {
         transport.onmessage?.(
           {
             ...message,
-            params: { ...message.params, progressToken: original },
+            params: { ...message.params, progressToken: original }
           },
-          extra,
+          extra
         );
     } else transport.onmessage?.(message, extra); // Server-owned requests/IDs are unchanged.
   };
