@@ -14,7 +14,29 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Select the pinned npm version
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+      - name: Verify the reviewed Vite+ alias
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const alias = require('./package-lock.json').packages['node_modules/vite'];
+          assert.equal(alias.name, '@voidzero-dev/vite-plus-core');
+          assert.equal(alias.version, '1.5.0');
+          assert.equal(alias.resolved, 'https://registry.npmjs.org/@voidzero-dev/vite-plus-core/-/vite-plus-core-1.5.0.tgz');
+          NODE
+      - name: Audit resolved npm package identities
+        run: npm audit --package-lock-only --audit-level=high
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           comment-summary-in-pr: never
+          # GitHub reads the verified alias above as old vite@1.5.0. This core
+          # bundles Vite 8.3.5, outside these advisories' affected ranges.
+          # The mandatory npm audit above still checks these advisories against
+          # real package identities, including any actual vite/launch-editor.
+          # Re-review the alias guard and this list when upgrading Vite+.
+          allow-ghsas: GHSA-mv48-hcvh-8jj8, GHSA-353f-5xf4-qw67, GHSA-587h-7wmj-h5pm, GHSA-c27g-q93r-2cwf

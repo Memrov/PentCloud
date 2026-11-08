@@ -95,11 +95,21 @@ requests and `main`, without Cloudflare or model credentials. Repository policy
 allows only Memrov/GitHub actions, so CI retains `actions/setup-node` and
 selects npm from `packageManager`, runs `npm ci`, then invokes the pinned local
 CLI with `npm exec -- vp ...`. The
-official CodeQL workflow scans GitHub Actions, Go, JavaScript/TypeScript and Python on pull
-requests (including Dependabot), on `main` pushes and weekly, using the
+official CodeQL workflow scans GitHub Actions, Go, JavaScript/TypeScript and
+Python on pull requests (including Dependabot), on `main` pushes and weekly, using the
 security-extended query suite. Dependency review checks new dependencies, and
-Dependabot proposes updates for review. Keep
-production deployment in Cloudflare's native Git integration; do not give public
+Dependabot proposes updates for review. The dependency gate also runs
+`npm audit --package-lock-only --audit-level=high`, which understands npm alias
+identities. GitHub currently misidentifies the required Vite+ core alias as
+upstream `vite@1.5.0`. Four advisory exceptions in the workflow apply alongside
+an exact alias-identity/version guard and the mandatory npm audit; the installed
+core bundles Vite 8.3.5, outside their affected ranges. Re-review that guard and
+the advisory list when upgrading Vite+:
+[GHSA-mv48-hcvh-8jj8](https://github.com/advisories/GHSA-mv48-hcvh-8jj8),
+[GHSA-353f-5xf4-qw67](https://github.com/advisories/GHSA-353f-5xf4-qw67),
+[GHSA-587h-7wmj-h5pm](https://github.com/advisories/GHSA-587h-7wmj-h5pm),
+[GHSA-c27g-q93r-2cwf](https://github.com/advisories/GHSA-c27g-q93r-2cwf).
+Keep production deployment in Cloudflare's native Git integration; do not give public
 pull requests deployment authorization or enable production branch previews.
 
 Configure one source per Worker in your own account. Native Builds installs from
