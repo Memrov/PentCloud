@@ -240,7 +240,7 @@ try{
  expect(calls.some(call=>call.path.endsWith('/revisions')&&JSON.parse(call.body).instructions==='Review the result once more'&&typeof JSON.parse(call.body).request_id==='string')).toBe(true);
  run.status='completed';jobs.forEach(job=>{job.status='completed';job.revision+=1;});
  await page.goto(origin+'/dashboard/runs/run-1/jobs/job-coder');
- await expect(page.getByLabel('Specialist run map')).toBeVisible();
+ await expect(page.getByLabel('Run steps')).toBeVisible();
  await expect(page.getByText('Primary review',{exact:true})).toBeVisible();
  await expect(page.getByText('History complete',{exact:true})).toBeVisible();
  await assertHealthy('dashboard');
@@ -371,7 +371,7 @@ try{
  const mobile=join(screenshotDir, 'chat-mobile.png');await page.screenshot({path:mobile});shots.push(mobile);
  run.status='completed';jobs.forEach(job=>{job.status='completed';job.revision+=1;});
  await page.goto(origin+'/dashboard/runs/run-1/jobs/job-coder');
- await expect(page.getByLabel('Specialist run map')).toBeVisible();
+ await expect(page.getByLabel('Run steps')).toBeVisible();
  await expect(page.getByText('History complete',{exact:true})).toBeVisible();
  const dashboardBounds=await page.locator('.dashboard-shell,.dashboard-topbar,.dashboard-workspace-grid,.dashboard-map-card,.workflow-panel').evaluateAll(nodes=>nodes.map(node=>{const box=node.getBoundingClientRect();return {left:box.left,right:box.right};}));
  for(const box of dashboardBounds){expect(box.left).toBeGreaterThanOrEqual(0);expect(box.right).toBeLessThanOrEqual(390);}
