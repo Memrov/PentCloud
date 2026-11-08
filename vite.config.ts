@@ -15,7 +15,7 @@ export default defineConfig({
     cache: { scripts: false, tasks: true },
     tasks: {
       "check:static": {
-        command: ["vp fmt --check .", "vp lint --max-warnings=313"]
+        command: ["vp fmt --check .", "vp lint --max-warnings=311"]
       },
       ...verificationTasks
     }

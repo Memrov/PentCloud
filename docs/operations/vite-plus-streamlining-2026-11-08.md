@@ -25,7 +25,7 @@ tests a real platform boundary. No dependencies or storage schemas changed.
   after a deliberate type error was rejected in all three workspace roots.
 - Native Vitest lint rules reject focused tests, duplicate titles and invalid
   assertions. Throw-message and complexity rules expose further backlog.
-  `check:static` enforces a ceiling of 313 warnings; lower it as findings are
+  `check:static` enforces a ceiling of 311 warnings; lower it as findings are
   fixed. This is a ratchet, not a claim that the backlog is resolved.
 - Router handlers, onboarding actions, attempt state/history transport,
   conversation sections/actions/scrolling and session projection responsibilities
@@ -71,9 +71,13 @@ focused/duplicate tests and type errors in each workspace. Mutations were
 restored before final verification. Exact evidence provenance and the purge
 failure's HTTP 500 status remain asserted.
 
-The final full gate and customer build/dry run are recorded with this branch's
-delivery. Local fixtures do not establish production login or paid service
-acceptance. See [testing commands](testing.md) for the current CLI workflow.
+The final `vp run verify:full` passed all 23 tasks, including 622 tests across
+82 files, two separate customer runtime tests, Node and Go checks, HTTP/WS smoke
+tests, generated types, app/gateway/tool-pack builds and the app dry run.
+`vp run build` and `vp run deploy --dry-run --containers-rollout=none` also passed
+for the separate customer output. Local fixtures do not establish production
+login or paid service acceptance. See [testing commands](testing.md) for the
+current CLI workflow.
 
 ## Decisions and remaining boundaries
 
