@@ -1,4 +1,8 @@
-import { test, expect, expect as browserExpect } from "playwright/test";
+import {
+  test,
+  expect,
+  expect as browserExpect
+} from "../../../scripts/browser-qa/fixtures.mts";
 import { SETTINGS_ROLES } from "../src/ui/settings/model";
 
 // Isolated local API fixtures: no production requests, model calls or scanners.

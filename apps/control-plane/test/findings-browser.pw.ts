@@ -1,5 +1,9 @@
 import { tmpdir } from "node:os";
-import { test, expect, expect as check } from "playwright/test";
+import {
+  test,
+  expect,
+  expect as check
+} from "../../../scripts/browser-qa/fixtures.mts";
 test.describe("target findings dashboard", () => {
   for (const width of [1440, 390])
     test(`separates targets, retains archived assessments and handles thirty findings at ${width} px`, async ({

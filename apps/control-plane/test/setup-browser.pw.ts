@@ -1,4 +1,8 @@
-import { test, expect, expect as check } from "playwright/test";
+import {
+  test,
+  expect,
+  expect as check
+} from "../../../scripts/browser-qa/fixtures.mts";
 test.describe("small setup wizard in a real browser", () => {
   for (const width of [1440, 390])
     test(

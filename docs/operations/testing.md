@@ -106,6 +106,39 @@ The unit gate does not run the separate Playwright browser suite. A passing
 local gate does not establish live human login, browser appearance, paid inference
 or scanner acceptance in a Cloudflare account.
 
+Browser tests use Cloudflare's documented
+[Playwright Test fixture](https://developers.cloudflare.com/workers/testing/test-harness/integrations/#playwright)
+with `createTestHarness()`. The global setup compiles the actual frontend and a
+small test-only Worker. Each of two Playwright workers owns its own harness;
+after each test, the harness resets the Worker, storage and stream state. The
+next test resolves the fresh server URL, which may use a different port. Failure
+paths print native Worker diagnostics and always close the owned server.
+Prebuilt Worker output avoids bundling it again on every reset.
+
+Import browser fixtures from `scripts/browser-qa/fixtures.mts`. API and Agent
+WebSocket substitutes remain synthetic; the actual UI assets use the production
+security policy. Real EventSource frames are controlled by a test-only Durable
+Object, which owns I/O across requests and supports abrupt disconnect/reconnect.
+The fixture has no Browser Run, model or scanner binding and deploys nothing.
+This checks the compiled frontend and transport behavior, not the complete
+production backend or Cloudflare account configuration.
+
+Use `vp run test:browser --grep "native questions"`,
+`vp run test:browser --last-failed`, or `vp run test:browser --ui`.
+Native screenshots and traces are retained on failure. Open the HTML report with
+`vp exec playwright show-report node_modules/.cache/pentcloud-browser-report`,
+or a trace with `vp exec playwright show-trace <trace.zip>`.
+UI mode can watch test edits; restart it after application source edits to
+rebuild the compiled UI. These local artifacts contain synthetic fixture data;
+deployed private QA retains its separate authentication and trace sanitization.
+
+An explicit `PENTCLOUD_UI_BASE_URL` still selects an existing localhost server
+for the native UI smoke. Its startup, state reset and cleanup belong to the
+caller. The complete isolation regression should use the default owned harness.
+Regenerate the browser fixture bindings with
+`vp exec wrangler types scripts/browser-qa/worker-configuration.d.ts --config scripts/browser-qa/ui-fixture.wrangler.jsonc --env-interface BrowserFixtureEnv --include-runtime=false`;
+the shared type-freshness gate checks them.
+
 ## Choosing checks
 
 Run the full gate for admission, SQLite, Git publication, cancellation, scanner

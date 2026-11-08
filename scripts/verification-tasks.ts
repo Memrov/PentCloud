@@ -15,7 +15,8 @@ export const verificationTasks = {
   "gate:app:types": fresh(
     [
       "env -u WRANGLER_CI_OVERRIDE_NAME -u WRANGLER_CI_MATCH_TAG npm run types:check --workspace @pentagi-artifacts/control-plane",
-      "env -u WRANGLER_CI_OVERRIDE_NAME -u WRANGLER_CI_MATCH_TAG npm run types:check --workspace @pentcloud/tool-packs"
+      "env -u WRANGLER_CI_OVERRIDE_NAME -u WRANGLER_CI_MATCH_TAG npm run types:check --workspace @pentcloud/tool-packs",
+      "env -u WRANGLER_CI_OVERRIDE_NAME -u WRANGLER_CI_MATCH_TAG vp exec wrangler types scripts/browser-qa/worker-configuration.d.ts --config scripts/browser-qa/ui-fixture.wrangler.jsonc --env-interface BrowserFixtureEnv --include-runtime=false --check"
     ],
     ["gate:static"]
   ),
