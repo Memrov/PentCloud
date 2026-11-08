@@ -2,8 +2,8 @@ import {
   Badge,
   Banner,
   Button,
+  LayerCard,
   LinkButton,
-  Surface,
   Text,
   Tooltip
 } from "@cloudflare/kumo";
@@ -313,7 +313,7 @@ export function RunFilesPanel({
         Files{snapshot ? ` (${snapshot.files.length})` : ""}
       </Button>
       {open && (
-        <Surface className="run-files-content grid min-w-0 gap-3 rounded-lg px-4 py-3 ring ring-kumo-line">
+        <LayerCard className="overflow-visible run-files-content grid min-w-0 gap-3 rounded-lg px-4 py-3 ring ring-kumo-line">
           <div className="material-panel-heading flex flex-wrap items-center justify-between gap-2">
             <strong>Files pinned to this attempt</strong>
             <Button
@@ -420,7 +420,7 @@ export function RunFilesPanel({
               <MaterialPreview {...preview} />
             </>
           )}
-        </Surface>
+        </LayerCard>
       )}
     </section>
   );

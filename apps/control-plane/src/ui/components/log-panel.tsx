@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { TrashIcon } from "@phosphor-icons/react";
-import { Button, Surface } from "@cloudflare/kumo";
+import { Button, LayerCard } from "@cloudflare/kumo";
 
 import type { AgentLogDirection, AgentLogEntry } from "../dashboard/agent-log";
 
@@ -32,7 +32,7 @@ export function LogPanel({
     if (element && following.current) element.scrollTop = element.scrollHeight;
   }, [logs]);
   return (
-    <Surface className="log-panel overflow-hidden rounded-lg ring ring-kumo-line">
+    <LayerCard className="log-panel overflow-hidden rounded-lg ring ring-kumo-line">
       <div className="flex items-center justify-between gap-2 border-b border-kumo-line px-3 py-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-kumo-subtle">
           {title}
@@ -95,7 +95,7 @@ export function LogPanel({
           ))
         )}
       </div>
-    </Surface>
+    </LayerCard>
   );
 }
 

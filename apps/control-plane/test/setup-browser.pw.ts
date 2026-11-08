@@ -135,7 +135,6 @@ test.describe("small setup wizard in a real browser", () => {
       }
     );
   test("blocks later steps until the owner and base bindings are configured", async ({
-    context,
     page,
     baseURL
   }) => {
@@ -163,7 +162,6 @@ test.describe("small setup wizard in a real browser", () => {
     ).toBeDisabled();
   });
   test("bootstraps hostname Access with one temporary credential and clears it before sign-in", async ({
-    context,
     page,
     baseURL
   }) => {

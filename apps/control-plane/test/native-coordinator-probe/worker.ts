@@ -9,7 +9,6 @@ import {
   OnboardingStore,
   type OnboardingIO
 } from "../../src/native/onboarding";
-import { canonical } from "../../src/native/domain";
 import { materialSelection } from "../../src/native/materials";
 import { recordedWorkPage } from "../../src/native/recorded-work";
 import { assertPreparationPromotion } from "../../src/native/preparation";
@@ -2656,7 +2655,7 @@ export class ProbeCoordinator extends Coordinator {
         .map((row) => ({ key: row.key, value: JSON.parse(row.value) }))
     };
   }
-  async repeatDelivery(id: string) {
+  async repeatDelivery(_id: string) {
     await (this as unknown as { wake(): Promise<unknown> }).wake();
     await this.lifecycle.alarm();
     return { fired: true };

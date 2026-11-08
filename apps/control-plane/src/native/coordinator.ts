@@ -56,15 +56,13 @@ import { knownRuntimeSecrets } from "../../../../shared/runtime-secrets";
 import { TargetDefinitions, type TargetDefinition } from "./target-definitions";
 import {
   OnboardingStore,
-  assertAudience,
   type SetupDraft,
   type SavedTarget
 } from "./onboarding";
 import { ScopeCatalog } from "./scope-catalog";
 import {
   targetAccessBrief,
-  readTargetSecret,
-  type ScopedTarget
+  readTargetSecret
 } from "../../../../shared/target-access";
 import { LoginChallenges, type VerificationDelivery } from "./login-challenge";
 import { agentMailAddress, readAgentMail } from "./agentmail-verification";
@@ -2531,7 +2529,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     };
   }
   async prepareUninstall(deleteOnboarding = false) {
-    const status = this.ctx.storage.transactionSync(() => {
+    this.ctx.storage.transactionSync(() => {
       const current = this.lifecycleSnapshot();
       if (
         !current.safeToUninstall &&

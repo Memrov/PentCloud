@@ -375,7 +375,6 @@ test.describe("agent conversations and report reader", () => {
     { width: 390, height: 844 }
   ])
     test(`uses native settings controls at ${viewport.width} px`, async ({
-      context,
       page,
       baseURL
     }) => {

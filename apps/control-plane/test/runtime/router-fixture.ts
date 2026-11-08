@@ -130,7 +130,7 @@ export class RouterControl extends DurableObject<RuntimeFixtureEnv> {
     this.record("listRuns");
     return { runs: [run] };
   }
-  async assertJobAvailable(id: string, mutable = false) {
+  async assertJobAvailable(id: string, _mutable = false) {
     if (id === "purged") throw new Error("409: attempt was permanently purged");
     return {
       runId: run.id,

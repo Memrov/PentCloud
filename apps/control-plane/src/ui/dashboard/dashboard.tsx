@@ -5,10 +5,10 @@ import {
   Empty,
   Grid,
   GridItem,
+  LayerCard,
   Link,
   LinkButton,
   Select,
-  Surface,
   Tabs,
   Text
 } from "@cloudflare/kumo";
@@ -29,7 +29,6 @@ import {
   CheckCircleIcon,
   ClockIcon,
   PulseIcon,
-  GearSixIcon,
   WarningCircleIcon
 } from "@phosphor-icons/react";
 
@@ -48,7 +47,6 @@ import {
   parseDashboardLocation,
   type DashboardLocation
 } from "./model";
-import { settingsPath } from "../settings/model";
 import { RunSteps } from "./run-steps";
 import { ThemeControl } from "../components/theme-control";
 import { WorkflowTimeline } from "./workflow-timeline";
@@ -178,19 +176,16 @@ function DashboardHome() {
                     label="Active"
                     value={active}
                     icon={<PulseIcon size={18} />}
-                    accent="active"
                   />
                   <StatCard
                     label="Completed"
                     value={completed}
                     icon={<CheckCircleIcon size={18} />}
-                    accent="complete"
                   />
                   <StatCard
                     label="Needs attention"
                     value={failed}
                     icon={<WarningCircleIcon size={18} />}
-                    {...(failed ? { accent: "failed" } : {})}
                   />
                 </Grid>
               </section>
@@ -442,7 +437,7 @@ function DashboardHeader({
 
 function RunCard({ run, onDelete }: { run: UIRun; onDelete: () => void }) {
   return (
-    <Surface className="grid min-w-0 gap-3 rounded-lg px-4 py-3 ring ring-kumo-line">
+    <LayerCard className="overflow-visible grid min-w-0 gap-3 rounded-lg px-4 py-3 ring ring-kumo-line">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <Link className="min-w-0 break-words" href={dashboardPath(run.id)}>
           <Text bold>{runName(run)}</Text>
@@ -474,24 +469,22 @@ function RunCard({ run, onDelete }: { run: UIRun; onDelete: () => void }) {
           <Link href={dashboardPath(run.id)}>Open run map</Link>
         </Collapsible.DefaultPanel>
       </Collapsible>
-    </Surface>
+    </LayerCard>
   );
 }
 
 function StatCard({
   label,
   value,
-  icon,
-  accent
+  icon
 }: {
   label: string;
   value: number;
   icon: React.ReactNode;
-  accent?: string;
 }) {
   return (
     <GridItem>
-      <Surface className="dashboard-stat flex items-center gap-3 rounded-lg px-4 py-3 ring ring-kumo-line">
+      <LayerCard className="overflow-visible dashboard-stat flex items-center gap-3 rounded-lg px-4 py-3 ring ring-kumo-line">
         <span>{icon}</span>
         <div>
           <Text as="span" variant="heading2">
@@ -499,7 +492,7 @@ function StatCard({
           </Text>
           <Text variant="secondary">{label}</Text>
         </div>
-      </Surface>
+      </LayerCard>
     </GridItem>
   );
 }

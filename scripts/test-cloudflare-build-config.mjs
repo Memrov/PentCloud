@@ -269,7 +269,7 @@ test("app: legacy bundler metadata uses Vite map policy without changing install
     artifacts: [{ binding: "ARTIFACTS", namespace: "existing-artifacts" }],
     vars: { ...template.vars, ARTIFACTS_NAMESPACE: "existing-artifacts" }
   };
-  const { minify, rules, ...expected } = config;
+  const { minify: _minify, rules: _rules, ...expected } = config;
   expected.upload_source_maps = true;
   const result = validateBuildConfig(
     "app",

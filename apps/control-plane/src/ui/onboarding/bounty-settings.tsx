@@ -5,9 +5,9 @@ import {
   Button,
   Collapsible,
   InlineCopyText,
+  LayerCard,
   LinkButton,
   Select,
-  Surface,
   Text
 } from "@cloudflare/kumo";
 import {
@@ -170,10 +170,10 @@ function PlatformConnection({
     }
   };
   return (
-    <Surface
+    <LayerCard
       role="region"
       aria-label={platform.name}
-      className="grid content-start gap-4 rounded-lg px-5 py-4 ring ring-kumo-line"
+      className="overflow-visible grid content-start gap-4 rounded-lg px-5 py-4 ring ring-kumo-line"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Text as="h3" variant="heading">
@@ -250,7 +250,7 @@ function PlatformConnection({
           </div>
         </>
       )}
-    </Surface>
+    </LayerCard>
   );
 }
 
@@ -281,7 +281,7 @@ function Receiver({
     }
   };
   return (
-    <Surface className="grid content-start gap-4 rounded-lg px-5 py-4 ring ring-kumo-line">
+    <LayerCard className="overflow-visible grid content-start gap-4 rounded-lg px-5 py-4 ring ring-kumo-line">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Text as="h3" variant="heading">
           {provider === "agentmail" ? "AgentMail" : "Cloudflare Email Routing"}
@@ -359,7 +359,7 @@ function Receiver({
           description={<Text>{result}</Text>}
         />
       )}
-    </Surface>
+    </LayerCard>
   );
 }
 

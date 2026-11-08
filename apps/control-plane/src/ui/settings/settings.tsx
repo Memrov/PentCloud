@@ -121,7 +121,6 @@ export default function Settings({
     const warn = (event: BeforeUnloadEvent) => {
       if (!dirty) return;
       event.preventDefault();
-      event.returnValue = "";
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);

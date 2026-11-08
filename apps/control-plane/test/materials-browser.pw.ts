@@ -793,11 +793,6 @@ test.describe("chat files in the browser", () => {
       await page.getByLabel("Remove remove.txt").click();
       await text.fill("Review corrected selection");
       await send.click();
-      const submissions = calls.filter((call) =>
-        existing
-          ? call.path.endsWith("/revisions")
-          : call.path === "/v1/ui/runs" && !!call.body
-      );
       await browserExpect
         .poll(
           () =>

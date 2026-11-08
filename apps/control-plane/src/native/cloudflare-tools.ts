@@ -47,6 +47,9 @@ export async function openCodeTool(name: string, entry: ToolSet[string]) {
         model.type === "content"
           ? model.value
               .map((part) =>
+                // Reads the discriminant to handle every part kind; this code
+                // never creates the deprecated part types the rule warns about.
+                // oxlint-disable-next-line typescript/no-deprecated
                 part.type === "text"
                   ? part.text
                   : "[Binary file omitted from text model context]"

@@ -8,8 +8,7 @@ test.describe("run steps live output", () => {
   ])
     test(`opens a specialist's live log from the run steps at ${viewport.width} px`, async ({
       context,
-      page,
-      baseURL
+      page
     }, testInfo) => {
       await page.setViewportSize(viewport);
       const run = {

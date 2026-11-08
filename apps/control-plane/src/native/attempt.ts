@@ -72,7 +72,6 @@ import {
   type Browser as PlaywrightBrowser,
   type BrowserContext
 } from "@cloudflare/playwright";
-import { Buffer } from "node:buffer";
 import {
   browserGuardrails,
   readTargetSecret,
@@ -127,7 +126,14 @@ import {
   digest as fingerprint,
   identifier as requireIdentifier
 } from "./domain";
-import { validateClefAuditRequest, validateClefResponse } from "./clef";
+import {
+  MAX_CHUNK_BYTES as CLEF_MAX_CHUNK_BYTES,
+  MAX_CHUNKS as CLEF_MAX_CHUNKS,
+  MAX_FILES as CLEF_MAX_FILES,
+  MAX_TOTAL_BYTES as CLEF_MAX_TOTAL_BYTES,
+  validateClefAuditRequest,
+  validateClefResponse
+} from "./clef";
 import { verifyMaterialInput } from "./material-input";
 import { selectionManifest } from "./materials";
 import { SOURCE_INSTRUCTIONS } from "./source-context";
@@ -4222,7 +4228,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
             }
             await walk(entry.hash, path);
           } else if (entry.type === "blob" || entry.type === "exec") {
-            if (count >= 128) {
+            if (count >= CLEF_MAX_FILES) {
               truncated = true;
               return;
             }
@@ -4237,7 +4243,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
               path,
               reason: entry.type
             });
-          if (count >= 128) {
+          if (count >= CLEF_MAX_FILES) {
             truncated = true;
             return;
           }
@@ -4246,7 +4252,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       if (source.paths) {
         for (const path of source.paths) {
           confinedRelative(path);
-          if (count >= 128) {
+          if (count >= CLEF_MAX_FILES) {
             truncated = true;
             break;
           }
@@ -4257,12 +4263,12 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         }
       } else await walk(metadata.treeHash, "");
       for (const file of files) {
-        if (total >= RESULT_LIMIT || chunks.length >= 64) {
+        if (total >= CLEF_MAX_TOTAL_BYTES || chunks.length >= CLEF_MAX_CHUNKS) {
           truncated = true;
           break;
         }
         const bytes = new Uint8Array(
-          await file.blob.slice(0, RESULT_LIMIT - total).arrayBuffer()
+          await file.blob.slice(0, CLEF_MAX_TOTAL_BYTES - total).arrayBuffer()
         );
         if (bytes.byteLength < file.blob.size) truncated = true;
         if (bytes.subarray(0, 8192).includes(0)) {
@@ -4275,18 +4281,19 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
           continue;
         }
         for (let offset = 0; offset < bytes.length;) {
-          if (chunks.length >= 64) {
+          if (chunks.length >= CLEF_MAX_CHUNKS) {
             truncated = true;
             break;
           }
-          let end = Math.min(offset + 48 * 1024, bytes.length);
+          let end = Math.min(offset + CLEF_MAX_CHUNK_BYTES, bytes.length);
           while (
             end > offset &&
             end < bytes.length &&
             (bytes[end]! & 0xc0) === 0x80
           )
             end--;
-          if (end === offset) end = Math.min(offset + 48 * 1024, bytes.length);
+          if (end === offset)
+            end = Math.min(offset + CLEF_MAX_CHUNK_BYTES, bytes.length);
           let content: string;
           try {
             content = new TextDecoder("utf-8", { fatal: true }).decode(
@@ -4329,7 +4336,11 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
           offset = end;
         }
       }
-      if (count >= 128 || total >= RESULT_LIMIT || chunks.length >= 64) {
+      if (
+        count >= CLEF_MAX_FILES ||
+        total >= CLEF_MAX_TOTAL_BYTES ||
+        chunks.length >= CLEF_MAX_CHUNKS
+      ) {
         truncated = true;
         break;
       }
@@ -4860,32 +4871,6 @@ function publicJob(state: AttemptState) {
         }
       : {})
   };
-}
-async function boundedText(response: Response, maximum: number) {
-  if (!response.body) return "";
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > maximum)
-        throw new Error("Response exceeds native tool body limit");
-      chunks.push(value);
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
-  }
-  const output = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return new TextDecoder().decode(output);
 }
 
 function immutableInput(input: AttemptInput): AttemptInput {

@@ -5,8 +5,8 @@ import {
   Collapsible,
   Input,
   InputArea,
+  LayerCard,
   Select,
-  Surface,
   Text
 } from "@cloudflare/kumo";
 import { useEffect, useState } from "react";
@@ -127,8 +127,8 @@ export function NativeSessionControls({
         />
       ))}
       {controls.permissions.map((permission) => (
-        <Surface
-          className="grid gap-3 rounded-lg px-4 py-3 ring ring-kumo-line"
+        <LayerCard
+          className="overflow-visible grid gap-3 rounded-lg px-4 py-3 ring ring-kumo-line"
           key={permission.id}
         >
           <Text bold>Permission requested: {permission.action}</Text>
@@ -174,7 +174,7 @@ export function NativeSessionControls({
               Reject
             </Button>
           </div>
-        </Surface>
+        </LayerCard>
       ))}
       {error && <Banner variant="error" role="alert" description={error} />}
       <Collapsible className="native-usage">

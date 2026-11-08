@@ -5,8 +5,8 @@ import {
   Badge,
   Banner,
   Collapsible,
+  LayerCard,
   Loader,
-  Surface,
   Text
 } from "@cloudflare/kumo";
 import {
@@ -33,13 +33,13 @@ export function ChatResponse({
   if (turn.role === "user")
     return (
       <article className="message-row message-user flex justify-end">
-        <Surface className="message-body max-w-[85%] rounded-xl px-4 py-3 ring ring-kumo-line">
+        <LayerCard className="overflow-visible message-body max-w-[85%] rounded-xl px-4 py-3 ring ring-kumo-line">
           {turn.messages.flatMap((message) =>
             message.parts.map((part, i) => (
               <PartView key={`${message.id}:${part.id ?? i}`} part={part} />
             ))
           )}
-        </Surface>
+        </LayerCard>
       </article>
     );
   const prose = turn.messages

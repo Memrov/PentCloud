@@ -48,10 +48,11 @@ export interface ClefAuditResult {
 }
 
 const MAX_SOURCES = 32;
-const MAX_FILES = 128;
-const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
-const MAX_CHUNK_BYTES = 48 * 1024;
-const MAX_CHUNKS = 64;
+/** Per-audit limits, enforced while attempt.ts reads and chunks the sources. */
+export const MAX_FILES = 128;
+export const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
+export const MAX_CHUNK_BYTES = 48 * 1024;
+export const MAX_CHUNKS = 64;
 const MAX_QUESTIONS = 64;
 const identifier = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const commitID = /^[a-f0-9]{40}$/;

@@ -10,7 +10,6 @@ import type { BrowserLiveViewResult } from "../native/browser-live-view";
 import {
   SETTINGS_ROLES,
   UI_REASONING_EFFORTS,
-  type SettingsRoleId,
   type SettingsRoles,
   type UIAgentSettings,
   type UIReasoningEffort,
