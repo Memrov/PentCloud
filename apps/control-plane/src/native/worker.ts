@@ -2,17 +2,28 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { NativeEnv } from "./types";
 import type { AgentSettings } from "../settings/catalog";
 import { LegacyHistory } from "./history";
-import {knownRuntimeSecrets} from "../../../../shared/runtime-secrets";
+import { knownRuntimeSecrets } from "../../../../shared/runtime-secrets";
 import { normalizeUploadIds, MATERIAL_FILE_LIMIT } from "./materials";
 import { confinedRelative } from "./tool-policy";
 import { hostedUIResponse } from "./ui-response";
-import {readVerificationEmail} from './verification-email';
-import {configureSetupAccess,prepareSetupStorage,saveSetupKey,setupStatus} from './setup';
+import { readVerificationEmail } from "./verification-email";
+import {
+  configureSetupAccess,
+  prepareSetupStorage,
+  saveSetupKey,
+  setupStatus
+} from "./setup";
 
-import { TOOLBOX_GENERATION_HEADER, toolboxOperatorReply } from "../../../../shared/toolbox-rpc";
+import {
+  TOOLBOX_GENERATION_HEADER,
+  toolboxOperatorReply
+} from "../../../../shared/toolbox-rpc";
 
 const jwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
-const browserViewHeaders = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"};
+const browserViewHeaders = {
+  "Cache-Control": "no-store",
+  "Referrer-Policy": "no-referrer"
+};
 async function actor(request: Request, env: NativeEnv): Promise<string> {
   if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD)
     throw new Error("401: Cloudflare Access configuration is required");
@@ -28,14 +39,17 @@ async function actor(request: Request, env: NativeEnv): Promise<string> {
     const { payload } = await jwtVerify(token, keys, {
       issuer,
       audience: env.ACCESS_AUD,
-      requiredClaims: ["exp"],
+      requiredClaims: ["exp"]
     });
     return typeof payload.email === "string" ? payload.email : "access-service";
   } catch {
     throw new Error("403: Invalid Cloudflare Access identity");
   }
 }
-async function body(request: Request, limit=2300*1024): Promise<Record<string, unknown>> {
+async function body(
+  request: Request,
+  limit = 2300 * 1024
+): Promise<Record<string, unknown>> {
   if (Number(request.headers.get("Content-Length") ?? 0) > limit)
     throw new Error("413: request too large");
   const reader = request.body?.getReader();
@@ -71,27 +85,75 @@ async function body(request: Request, limit=2300*1024): Promise<Record<string, u
 function errorResponse(error: unknown, env: NativeEnv) {
   let message = error instanceof Error ? error.message : String(error);
   const status = Number(
-    message.match(/\b(400|401|403|404|409|410|413|429|503):/)?.[1] ?? 500,
+    message.match(/\b(400|401|403|404|409|410|413|429|503):/)?.[1] ?? 500
   );
   for (const secret of [...knownRuntimeSecrets(env), env.OPENCODE_GO_API_KEY])
     if (secret) message = message.split(secret).join("[redacted]");
   return Response.json({ error: message.slice(0, 1500) }, { status });
 }
 
-
 export default {
-  async email(message:ForwardableEmailMessage,env:NativeEnv){
-    if(!env.PENTCLOUD_VERIFICATION_EMAIL||message.rawSize>256*1024){message.setReject('Verification email is unavailable');return;}
-    const delivery=await readVerificationEmail({to:message.to,headers:message.headers,raw:message.raw});
-    if(delivery)await env.COORDINATOR.getByName('global').receiveVerificationEmail(delivery);
+  async email(message: ForwardableEmailMessage, env: NativeEnv) {
+    if (!env.PENTCLOUD_VERIFICATION_EMAIL || message.rawSize > 256 * 1024) {
+      message.setReject("Verification email is unavailable");
+      return;
+    }
+    const delivery = await readVerificationEmail({
+      to: message.to,
+      headers: message.headers,
+      raw: message.raw
+    });
+    if (delivery)
+      await env.COORDINATOR.getByName("global").receiveVerificationEmail(
+        delivery
+      );
   },
   async fetch(request: Request, env: NativeEnv): Promise<Response> {
     const url = new URL(request.url);
-    if(url.pathname==='/v1/ui/setup/access'&&request.method==='POST'&&!env.ACCESS_TEAM_DOMAIN&&!env.ACCESS_AUD){
-      try{const origin=request.headers.get('Origin');if((origin&&origin!==url.origin)||request.headers.get('Sec-Fetch-Site')==='cross-site')throw Error('403: Use this application’s origin.');await configureSetupAccess(env,await body(request,16384),request.url);return Response.json({configured:true},{headers:browserViewHeaders});}catch(error){return errorResponse(error,env);}
+    if (
+      url.pathname === "/v1/ui/setup/access" &&
+      request.method === "POST" &&
+      !env.ACCESS_TEAM_DOMAIN &&
+      !env.ACCESS_AUD
+    ) {
+      try {
+        const origin = request.headers.get("Origin");
+        if (
+          (origin && origin !== url.origin) ||
+          request.headers.get("Sec-Fetch-Site") === "cross-site"
+        )
+          throw Error("403: Use this application’s origin.");
+        await configureSetupAccess(
+          env,
+          await body(request, 16384),
+          request.url
+        );
+        return Response.json(
+          { configured: true },
+          { headers: browserViewHeaders }
+        );
+      } catch (error) {
+        return errorResponse(error, env);
+      }
     }
-    if(url.pathname==='/v1/ui/setup'&&request.method==='GET'&&(!env.ACCESS_TEAM_DOMAIN||!env.ACCESS_AUD))
-      return Response.json({schemaVersion:1,access:false,accountId:Reflect.get(env,'PENTCLOUD_ACCOUNT_ID'),worker:Reflect.get(env,'PENTCLOUD_WORKER_NAME'),missing:['Cloudflare Access'],storage:false,models:false,ready:false},{headers:browserViewHeaders});
+    if (
+      url.pathname === "/v1/ui/setup" &&
+      request.method === "GET" &&
+      (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD)
+    )
+      return Response.json(
+        {
+          schemaVersion: 1,
+          access: false,
+          accountId: Reflect.get(env, "PENTCLOUD_ACCOUNT_ID"),
+          worker: Reflect.get(env, "PENTCLOUD_WORKER_NAME"),
+          missing: ["Cloudflare Access"],
+          storage: false,
+          models: false,
+          ready: false
+        },
+        { headers: browserViewHeaders }
+      );
     if (url.pathname === "/health")
       return Response.json({
         application: "PentCloud",
@@ -100,7 +162,7 @@ export default {
         maxOutstanding: 3,
         timeoutSeconds: null,
         goConfigured: !!env.OPENCODE_GO_API_KEY,
-        storage: "DO SQLite and Artifacts",
+        storage: "DO SQLite and Artifacts"
       });
     try {
       if (
@@ -113,17 +175,37 @@ export default {
       const identity = await actor(request, env);
       // Access authenticates cookies at the edge. Do not let a foreign page
       // spend that identity on mutations or an authenticated WebSocket.
-      if (!["GET", "HEAD", "OPTIONS"].includes(request.method) || request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
-        const origin=request.headers.get("Origin");
-        if ((origin && origin !== url.origin) || request.headers.get("Sec-Fetch-Site") === "cross-site")
-          throw new Error("403: Use this application's origin for browser actions");
+      if (
+        !["GET", "HEAD", "OPTIONS"].includes(request.method) ||
+        request.headers.get("Upgrade")?.toLowerCase() === "websocket"
+      ) {
+        const origin = request.headers.get("Origin");
+        if (
+          (origin && origin !== url.origin) ||
+          request.headers.get("Sec-Fetch-Site") === "cross-site"
+        )
+          throw new Error(
+            "403: Use this application's origin for browser actions"
+          );
       }
-      if(url.pathname==='/v1/ui/setup'&&request.method==='GET')return Response.json(await setupStatus(env),{headers:browserViewHeaders});
-      if(url.pathname==='/v1/ui/setup/storage'&&request.method==='POST'){
-        await body(request,64);await prepareSetupStorage(env);return Response.json({prepared:true},{headers:browserViewHeaders});
+      if (url.pathname === "/v1/ui/setup" && request.method === "GET")
+        return Response.json(await setupStatus(env), {
+          headers: browserViewHeaders
+        });
+      if (
+        url.pathname === "/v1/ui/setup/storage" &&
+        request.method === "POST"
+      ) {
+        await body(request, 64);
+        await prepareSetupStorage(env);
+        return Response.json(
+          { prepared: true },
+          { headers: browserViewHeaders }
+        );
       }
-      if(url.pathname==='/v1/ui/setup/model'&&request.method==='POST'){
-        await saveSetupKey(env,await body(request,16384));return Response.json({saved:true},{headers:browserViewHeaders});
+      if (url.pathname === "/v1/ui/setup/model" && request.method === "POST") {
+        await saveSetupKey(env, await body(request, 16384));
+        return Response.json({ saved: true }, { headers: browserViewHeaders });
       }
       const coordinator = env.COORDINATOR.getByName("global");
       const history = new LegacyHistory(env);
@@ -133,124 +215,328 @@ export default {
         return await coordinator.fetch(request);
       }
       const path = url.pathname.replace(/^\/v1(?:\/ui)?/, "");
-      if (!url.search && ((path === "/toolbox/status" && ["GET","POST"].includes(request.method)) || (path === "/toolbox/start" && request.method === "POST"))) {
-        if(!env.TOOLBOX)return Response.json({state:"not-installed",...(env.TOOL_PACKS?{runtime:"Cloudflare tool packs"}:{})},{status:404,headers:{"Cache-Control":"no-store"}});
-        const reply=path.endsWith("status")?await env.TOOLBOX.status():await env.TOOLBOX.ready(request.headers.get(TOOLBOX_GENERATION_HEADER)??undefined);
+      if (
+        !url.search &&
+        ((path === "/toolbox/status" &&
+          ["GET", "POST"].includes(request.method)) ||
+          (path === "/toolbox/start" && request.method === "POST"))
+      ) {
+        if (!env.TOOLBOX)
+          return Response.json(
+            {
+              state: "not-installed",
+              ...(env.TOOL_PACKS ? { runtime: "Cloudflare tool packs" } : {})
+            },
+            { status: 404, headers: { "Cache-Control": "no-store" } }
+          );
+        const reply = path.endsWith("status")
+          ? await env.TOOLBOX.status()
+          : await env.TOOLBOX.ready(
+              request.headers.get(TOOLBOX_GENERATION_HEADER) ?? undefined
+            );
         return toolboxOperatorReply(reply);
       }
-      const definition=path.match(/^\/targets\/([A-Za-z0-9._-]+)\/definition$/);
-      if(definition){
-        if(request.method==="GET")return coordinator.targetDefinition(definition[1]!,url.searchParams.has("version")?Number(url.searchParams.get("version")):undefined);
-        if(request.method==="POST"){
-          const name=url.searchParams.get("name")??"",sha256=request.headers.get("X-Content-SHA256")??"",revision=request.headers.get("If-Match")??"0";
-          if(!request.body||!/^[a-f0-9]{64}$/.test(sha256)||!/^\d+$/.test(revision))throw new Error("400: File body, SHA-256 and expected definition version are required");
-          return Response.json(await coordinator.saveTargetDefinition(definition[1]!,Number(revision),{name,sha256,body:request.body,uploadedBy:identity}),{status:201,headers:{"Cache-Control":"no-store"}});
+      const definition = path.match(
+        /^\/targets\/([A-Za-z0-9._-]+)\/definition$/
+      );
+      if (definition) {
+        if (request.method === "GET")
+          return coordinator.targetDefinition(
+            definition[1]!,
+            url.searchParams.has("version")
+              ? Number(url.searchParams.get("version"))
+              : undefined
+          );
+        if (request.method === "POST") {
+          const name = url.searchParams.get("name") ?? "",
+            sha256 = request.headers.get("X-Content-SHA256") ?? "",
+            revision = request.headers.get("If-Match") ?? "0";
+          if (
+            !request.body ||
+            !/^[a-f0-9]{64}$/.test(sha256) ||
+            !/^\d+$/.test(revision)
+          )
+            throw new Error(
+              "400: File body, SHA-256 and expected definition version are required"
+            );
+          return Response.json(
+            await coordinator.saveTargetDefinition(
+              definition[1]!,
+              Number(revision),
+              { name, sha256, body: request.body, uploadedBy: identity }
+            ),
+            { status: 201, headers: { "Cache-Control": "no-store" } }
+          );
         }
       }
-      const pendingCreation=path.match(/^\/onboarding\/pending\/([A-Za-z0-9._-]+)$/);
-      if(pendingCreation&&request.method==="GET")return Response.json(await coordinator.creationSnapshot(pendingCreation[1]!),{headers:{"Cache-Control":"no-store"}});
-      if(path==="/onboarding" && request.method==="GET")return Response.json(await coordinator.onboardingSnapshot(url.searchParams.get("run")??undefined),{headers:{"Cache-Control":"no-store"}});
-      if(path==="/onboarding/export" && request.method==="GET")return Response.json(await coordinator.onboardingExport(),{headers:{"Cache-Control":"no-store"}});
-      const onboardingAction=path.match(/^\/onboarding\/([a-z]+(?:\.[a-z]+){1,2})$/);
-      if(onboardingAction && request.method==="POST"){
-        const input=await body(request,onboardingAction[1]==="metadata.import"?16*1024*1024:2300*1024);
-        if(onboardingAction[1]!.startsWith("credential."))throw new Error("400: Manage credentials through Cloudflare secret bindings");
-        return Response.json(await coordinator.onboardingAction(onboardingAction[1]!,input,identity),{headers:{"Cache-Control":"no-store"}});
+      const pendingCreation = path.match(
+        /^\/onboarding\/pending\/([A-Za-z0-9._-]+)$/
+      );
+      if (pendingCreation && request.method === "GET")
+        return Response.json(
+          await coordinator.creationSnapshot(pendingCreation[1]!),
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      if (path === "/onboarding" && request.method === "GET")
+        return Response.json(
+          await coordinator.onboardingSnapshot(
+            url.searchParams.get("run") ?? undefined
+          ),
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      if (path === "/onboarding/export" && request.method === "GET")
+        return Response.json(await coordinator.onboardingExport(), {
+          headers: { "Cache-Control": "no-store" }
+        });
+      const onboardingAction = path.match(
+        /^\/onboarding\/([a-z]+(?:\.[a-z]+){1,2})$/
+      );
+      if (onboardingAction && request.method === "POST") {
+        const input = await body(
+          request,
+          onboardingAction[1] === "metadata.import"
+            ? 16 * 1024 * 1024
+            : 2300 * 1024
+        );
+        if (onboardingAction[1]!.startsWith("credential."))
+          throw new Error(
+            "400: Manage credentials through Cloudflare secret bindings"
+          );
+        return Response.json(
+          await coordinator.onboardingAction(
+            onboardingAction[1]!,
+            input,
+            identity
+          ),
+          { headers: { "Cache-Control": "no-store" } }
+        );
       }
-      const activation=path.match(/^\/runs\/([A-Za-z0-9._-]+)\/analysis$/);
-      if(activation && request.method==="POST"){
-        const value=await body(request);
-        if(typeof value.revision!=="number" || typeof value.requestId!=="string")throw new Error("400: Setup revision and request ID are required");
-        return Response.json(await coordinator.activateAnalysis(activation[1]!,value.revision,value.requestId,value.acknowledgeFailure===true,typeof value.definitionVersion==="number"?value.definitionVersion:0),{status:202});
+      const activation = path.match(/^\/runs\/([A-Za-z0-9._-]+)\/analysis$/);
+      if (activation && request.method === "POST") {
+        const value = await body(request);
+        if (
+          typeof value.revision !== "number" ||
+          typeof value.requestId !== "string"
+        )
+          throw new Error("400: Setup revision and request ID are required");
+        return Response.json(
+          await coordinator.activateAnalysis(
+            activation[1]!,
+            value.revision,
+            value.requestId,
+            value.acknowledgeFailure === true,
+            typeof value.definitionVersion === "number"
+              ? value.definitionVersion
+              : 0
+          ),
+          { status: 202 }
+        );
       }
-      if(path==="/lifecycle" && request.method==="GET")return Response.json(await coordinator.lifecycleStatus(),{headers:{"Cache-Control":"no-store"}});
-      if(path==="/lifecycle/prepare-uninstall" && request.method==="POST")return Response.json(await coordinator.prepareUninstall(request.body?(await body(request)).deleteOnboarding===true:false));
-      const lifecycleRoute=path.match(/^\/runs\/([A-Za-z0-9._-]+)(?:\/(archive|trash|restore|report|findings))?$/);
-      if(lifecycleRoute){
-        const id=lifecycleRoute[1]!,action=lifecycleRoute[2];
-        if(request.method==="DELETE" && !action){const value=await body(request);return Response.json(await coordinator.purgeRun(id,String(value.confirm ?? "")));}
-        if(request.method==="POST" && action==="archive")return Response.json(await coordinator.archiveRun(id));
-        if(request.method==="POST" && action==="trash")return Response.json(await coordinator.trashRun(id));
-        if(request.method==="POST" && action==="restore")return Response.json(await coordinator.restoreRun(id));
-        if(request.method==="GET" && action==="findings")return Response.json(await coordinator.findings(id,url.searchParams.get("job")??""),{headers:{"Cache-Control":"private, no-store"}});
-        if(request.method==="GET" && action==="report")return coordinator.report(id,url.searchParams.get("job") ?? undefined);
+      if (path === "/lifecycle" && request.method === "GET")
+        return Response.json(await coordinator.lifecycleStatus(), {
+          headers: { "Cache-Control": "no-store" }
+        });
+      if (path === "/lifecycle/prepare-uninstall" && request.method === "POST")
+        return Response.json(
+          await coordinator.prepareUninstall(
+            request.body
+              ? (await body(request)).deleteOnboarding === true
+              : false
+          )
+        );
+      const lifecycleRoute = path.match(
+        /^\/runs\/([A-Za-z0-9._-]+)(?:\/(archive|trash|restore|report|findings))?$/
+      );
+      if (lifecycleRoute) {
+        const id = lifecycleRoute[1]!,
+          action = lifecycleRoute[2];
+        if (request.method === "DELETE" && !action) {
+          const value = await body(request);
+          return Response.json(
+            await coordinator.purgeRun(id, String(value.confirm ?? ""))
+          );
+        }
+        if (request.method === "POST" && action === "archive")
+          return Response.json(await coordinator.archiveRun(id));
+        if (request.method === "POST" && action === "trash")
+          return Response.json(await coordinator.trashRun(id));
+        if (request.method === "POST" && action === "restore")
+          return Response.json(await coordinator.restoreRun(id));
+        if (request.method === "GET" && action === "findings")
+          return Response.json(
+            await coordinator.findings(id, url.searchParams.get("job") ?? ""),
+            { headers: { "Cache-Control": "private, no-store" } }
+          );
+        if (request.method === "GET" && action === "report")
+          return coordinator.report(
+            id,
+            url.searchParams.get("job") ?? undefined
+          );
       }
-      const jobAccess=path.match(/^\/jobs\/([A-Za-z0-9._-]+)\//);
-      if(jobAccess){
+      const jobAccess = path.match(/^\/jobs\/([A-Za-z0-9._-]+)\//);
+      if (jobAccess) {
         // Remote receipt reconciliation remains available in Trash until drain;
         // all execution/content routes reject purged jobs before opening a session.
-        const safety=/\/(?:remote-receipts|remote-control|remote-inspect|api-receipts)(?:\/|$)/.test(path);
-        try{
-          const access=await coordinator.assertJobAvailable(jobAccess[1]!,request.method!=="GET" && !safety && !path.endsWith("/interrupt"));
-          if(access.executionKind==="discovery"&&/\/(events|inspect|steer|revisions|session-controls|browser-live-view|forms|permissions)(?:\/|$)/.test(path))throw new Error("409: Discovery has no model session; use run progress and accepted files");
+        const safety =
+          /\/(?:remote-receipts|remote-control|remote-inspect|api-receipts)(?:\/|$)/.test(
+            path
+          );
+        try {
+          const access = await coordinator.assertJobAvailable(
+            jobAccess[1]!,
+            request.method !== "GET" && !safety && !path.endsWith("/interrupt")
+          );
+          if (
+            access.executionKind === "discovery" &&
+            /\/(events|inspect|steer|revisions|session-controls|browser-live-view|forms|permissions)(?:\/|$)/.test(
+              path
+            )
+          )
+            throw new Error(
+              "409: Discovery has no model session; use run progress and accepted files"
+            );
+        } catch (error) {
+          if (!String(error).includes("404:") || !path.endsWith("/events"))
+            throw error;
         }
-        catch(error){if(!String(error).includes("404:") || !path.endsWith("/events"))throw error;}
       }
-      const upload = path.match(/^\/runs\/([A-Za-z0-9._-]+)\/uploads\/([A-Za-z0-9._-]+)$/);
+      const upload = path.match(
+        /^\/runs\/([A-Za-z0-9._-]+)\/uploads\/([A-Za-z0-9._-]+)$/
+      );
       if (upload && request.method === "POST") {
         const name = url.searchParams.get("name") ?? "";
         const sha256 = request.headers.get("X-Content-SHA256") ?? "";
-        if (!name.trim() || name.length > 180 || /[\/\\\x00-\x1f\x7f]/.test(name) || !/^[a-f0-9]{64}$/.test(sha256) || !request.body)
-          throw new Error("400: valid filename, SHA-256 and file body are required");
+        if (
+          !name.trim() ||
+          name.length > 180 ||
+          /[\/\\\x00-\x1f\x7f]/.test(name) ||
+          !/^[a-f0-9]{64}$/.test(sha256) ||
+          !request.body
+        )
+          throw new Error(
+            "400: valid filename, SHA-256 and file body are required"
+          );
         const length = request.headers.get("Content-Length");
-        if (length !== null && (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length))))
+        if (
+          length !== null &&
+          (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length)))
+        )
           throw new Error("400: invalid upload length");
-        if (length !== null && Number(length) > MATERIAL_FILE_LIMIT) throw new Error("413: file exceeds 2 MiB");
-        return Response.json(await coordinator.stageUpload({
-          runId: upload[1]!, id: upload[2]!, name, sha256, body: request.body, uploadedBy: identity,
-        }), {status: 201, headers: {"Cache-Control": "no-store"}});
+        if (length !== null && Number(length) > MATERIAL_FILE_LIMIT)
+          throw new Error("413: file exceeds 2 MiB");
+        return Response.json(
+          await coordinator.stageUpload({
+            runId: upload[1]!,
+            id: upload[2]!,
+            name,
+            sha256,
+            body: request.body,
+            uploadedBy: identity
+          }),
+          { status: 201, headers: { "Cache-Control": "no-store" } }
+        );
       }
       const fileRoute = path.match(/^\/runs\/([A-Za-z0-9._-]+)\/(files|file)$/);
       if (fileRoute && request.method === "GET") {
         const runId = fileRoute[1]!;
         if (fileRoute[2] === "files")
-          return Response.json(await coordinator.files(runId, url.searchParams.get("job") ?? undefined), {headers: {"Cache-Control": "no-store"}});
+          return Response.json(
+            await coordinator.files(
+              runId,
+              url.searchParams.get("job") ?? undefined
+            ),
+            { headers: { "Cache-Control": "no-store" } }
+          );
         const commit = url.searchParams.get("commit") ?? "";
         const requested = url.searchParams.get("path") ?? "";
-        if (!/^[a-f0-9]{40}$/.test(commit) || !requested || requested.split("/").includes(".git")) throw new Error("400: immutable commit and file path are required");
+        if (
+          !/^[a-f0-9]{40}$/.test(commit) ||
+          !requested ||
+          requested.split("/").includes(".git")
+        )
+          throw new Error("400: immutable commit and file path are required");
         let filePath: string;
-        try { filePath = confinedRelative(requested); } catch { throw new Error("400: invalid file path"); }
-        const response = await coordinator.file(runId, commit, filePath, url.searchParams.get("preview") === "1");
+        try {
+          filePath = confinedRelative(requested);
+        } catch {
+          throw new Error("400: invalid file path");
+        }
+        const response = await coordinator.file(
+          runId,
+          commit,
+          filePath,
+          url.searchParams.get("preview") === "1"
+        );
         const headers = new Headers(response.headers);
         headers.set("X-Content-Type-Options", "nosniff");
         headers.set("Content-Security-Policy", "default-src 'none'; sandbox");
         headers.set("Cache-Control", "private, no-store");
         headers.set("Referrer-Policy", "no-referrer");
-        return new Response(response.body, {status: response.status, headers});
+        return new Response(response.body, {
+          status: response.status,
+          headers
+        });
       }
       if (path === "/runtime-diagnostics" && request.method === "GET")
-        return Response.json(await coordinator.diagnostics(), {headers: {"Cache-Control": "no-store"}});
+        return Response.json(await coordinator.diagnostics(), {
+          headers: { "Cache-Control": "no-store" }
+        });
       if (path === "/runtime-recovery" && request.method === "POST") {
         const value = await body(request);
-        if (!Object.keys(value).every(key => ["scope", "observedAt", "attemptId"].includes(key)) ||
-            !["coordinator", "attempt"].includes(String(value.scope)) ||
-            typeof value.observedAt !== "number" || !Number.isSafeInteger(value.observedAt) || value.observedAt < 0 ||
-            (value.attemptId !== undefined && (typeof value.attemptId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(value.attemptId))) ||
-            (value.scope === "attempt" && !value.attemptId))
+        if (
+          !Object.keys(value).every((key) =>
+            ["scope", "observedAt", "attemptId"].includes(key)
+          ) ||
+          !["coordinator", "attempt"].includes(String(value.scope)) ||
+          typeof value.observedAt !== "number" ||
+          !Number.isSafeInteger(value.observedAt) ||
+          value.observedAt < 0 ||
+          (value.attemptId !== undefined &&
+            (typeof value.attemptId !== "string" ||
+              !/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(value.attemptId))) ||
+          (value.scope === "attempt" && !value.attemptId)
+        )
           throw new Error("400: invalid runtime recovery identity");
-        return Response.json(await coordinator.rearmPlatformRecovery(value as {scope: "coordinator" | "attempt"; observedAt: number; attemptId?: string}));
+        return Response.json(
+          await coordinator.rearmPlatformRecovery(
+            value as {
+              scope: "coordinator" | "attempt";
+              observedAt: number;
+              attemptId?: string;
+            }
+          )
+        );
       }
       if (path === "/runs" && request.method === "GET") {
-        const view=url.searchParams.get("view") ?? "active";
-        if(!["active","archived","trash","all"].includes(view))throw new Error("400: invalid run view");
-        const current = view==="active" ? await coordinator.listRuns() : await coordinator.listRuns(view as "archived"|"trash"|"all");
-        const previous = view==="active" || view==="all" ? await history.listRuns() : {runs:[]};
+        const view = url.searchParams.get("view") ?? "active";
+        if (!["active", "archived", "trash", "all"].includes(view))
+          throw new Error("400: invalid run view");
+        const current =
+          view === "active"
+            ? await coordinator.listRuns()
+            : await coordinator.listRuns(view as "archived" | "trash" | "all");
+        const previous =
+          view === "active" || view === "all"
+            ? await history.listRuns()
+            : { runs: [] };
         const ids = new Set(current.runs.map((r) => r.id));
         return Response.json({
           runs: [
             ...current.runs,
-            ...previous.runs.filter((r) => !ids.has(r.id)),
-          ],
+            ...previous.runs.filter((r) => !ids.has(r.id))
+          ]
         });
       }
       if (path === "/runs" && request.method === "POST") {
         const value = await body(request);
-        if (value.upload_ids !== undefined) value.upload_ids = normalizeUploadIds(value.upload_ids);
+        if (value.upload_ids !== undefined)
+          value.upload_ids = normalizeUploadIds(value.upload_ids);
         return Response.json(
-          await coordinator.createRun(
-            {...value,actor:identity} as unknown as import("./types").NewRunInput,
-          ),
-          { status: 202 },
+          await coordinator.createRun({
+            ...value,
+            actor: identity
+          } as unknown as import("./types").NewRunInput),
+          { status: 202 }
         );
       }
       if (path === "/queue" && request.method === "GET")
@@ -272,14 +558,20 @@ export default {
           await coordinator.saveSettings(
             value.roles as AgentSettings["roles"],
             revision,
-            identity,
-          ),
+            identity
+          )
         );
       }
       if (path === "/settings/models" && request.method === "GET")
-        return Response.json(await coordinator.modelCatalog((url.searchParams.get("route")??"go") as "go"|"console",url.searchParams.get("refresh")==="1"),{headers:{"Cache-Control":"no-store"}});
+        return Response.json(
+          await coordinator.modelCatalog(
+            (url.searchParams.get("route") ?? "go") as "go" | "console",
+            url.searchParams.get("refresh") === "1"
+          ),
+          { headers: { "Cache-Control": "no-store" } }
+        );
       const run = path.match(
-        /^\/runs\/([A-Za-z0-9._-]+)\/(jobs|workflow-events|cancel)$/,
+        /^\/runs\/([A-Za-z0-9._-]+)\/(jobs|workflow-events|cancel)$/
       );
       if (run) {
         const id = run[1]!,
@@ -295,13 +587,15 @@ export default {
             const archived = await history.getRun(id);
             if (action === "jobs") return Response.json(archived);
             return new Response(
-              url.searchParams.get("protocol") === "2" ? "event: done\ndata: {}\n\n" : "event: end\ndata: {}\n\n",
+              url.searchParams.get("protocol") === "2"
+                ? "event: done\ndata: {}\n\n"
+                : "event: end\ndata: {}\n\n",
               {
                 headers: {
                   "Content-Type": "text/event-stream",
-                  "Cache-Control": "no-store",
-                },
-              },
+                  "Cache-Control": "no-store"
+                }
+              }
             );
           }
         }
@@ -309,13 +603,23 @@ export default {
           return Response.json(await coordinator.cancelRun(id));
       }
       const remoteReceipt = path.match(
-        /^\/jobs\/([A-Za-z0-9._-]+)\/remote-receipts(?:\/([^/]+)\/(reconcile))?$/,
+        /^\/jobs\/([A-Za-z0-9._-]+)\/remote-receipts(?:\/([^/]+)\/(reconcile))?$/
       );
-      const apiReceipt=path.match(/^\/jobs\/([A-Za-z0-9._-]+)\/api-receipts\/([^/]+)\/reconcile$/);
-      if(apiReceipt&&request.method==="POST"){
-        const attempt=env.ATTEMPTS.getByName(apiReceipt[1]!);
-        const result=await attempt.reconcileAPIReceipt(decodeURIComponent(apiReceipt[2]!),await body(request) as {reference:string;outcome:"completed"|"not-executed";confirm:string});
-        await coordinator.reconcileToolOutcome(apiReceipt[1]!);return Response.json(result);
+      const apiReceipt = path.match(
+        /^\/jobs\/([A-Za-z0-9._-]+)\/api-receipts\/([^/]+)\/reconcile$/
+      );
+      if (apiReceipt && request.method === "POST") {
+        const attempt = env.ATTEMPTS.getByName(apiReceipt[1]!);
+        const result = await attempt.reconcileAPIReceipt(
+          decodeURIComponent(apiReceipt[2]!),
+          (await body(request)) as {
+            reference: string;
+            outcome: "completed" | "not-executed";
+            confirm: string;
+          }
+        );
+        await coordinator.reconcileToolOutcome(apiReceipt[1]!);
+        return Response.json(result);
       }
       if (remoteReceipt) {
         const id = remoteReceipt[1]!,
@@ -342,11 +646,11 @@ export default {
             scanId: value.scanId,
             ...(value.identityEvidence === undefined
               ? {}
-              : { identityEvidence: value.identityEvidence }),
+              : { identityEvidence: value.identityEvidence })
           } as Parameters<typeof attempt.reconcileRemote>[1];
           const result: unknown = await attempt.reconcileRemote(
             receiptId,
-            proof,
+            proof
           );
           if (
             !result ||
@@ -360,7 +664,7 @@ export default {
         }
       }
       const remoteControl = path.match(
-        /^\/jobs\/([A-Za-z0-9._-]+)\/remote-control$/,
+        /^\/jobs\/([A-Za-z0-9._-]+)\/remote-control$/
       );
       if (remoteControl && request.method === "POST") {
         const value = await body(request);
@@ -374,13 +678,13 @@ export default {
           !value.request_id.trim()
         )
           throw new Error(
-            "400: tool, args object, and request_id are required",
+            "400: tool, args object, and request_id are required"
           );
         const id = remoteControl[1]!;
         const result: unknown = await env.ATTEMPTS.getByName(id).controlRemote(
           value.tool,
           value.args as Record<string, unknown>,
-          value.request_id,
+          value.request_id
         );
         if (
           !result ||
@@ -395,7 +699,7 @@ export default {
         return Response.json(result, { status: result.verified ? 200 : 202 });
       }
       const remoteInspect = path.match(
-        /^\/jobs\/([A-Za-z0-9._-]+)\/remote-inspect$/,
+        /^\/jobs\/([A-Za-z0-9._-]+)\/remote-inspect$/
       );
       if (remoteInspect && request.method === "POST") {
         const value = await body(request);
@@ -409,28 +713,53 @@ export default {
         return Response.json(
           await env.ATTEMPTS.getByName(remoteInspect[1]!).inspectRemote(
             value.tool,
-            value.args as Record<string, unknown>,
-          ),
+            value.args as Record<string, unknown>
+          )
         );
       }
-      const browserView = path.match(/^\/jobs\/([A-Za-z0-9._-]+)\/browser-live-view$/);
+      const browserView = path.match(
+        /^\/jobs\/([A-Za-z0-9._-]+)\/browser-live-view$/
+      );
       if (browserView) {
-        if (request.method !== "POST") return new Response("Not found", {status: 404, headers: browserViewHeaders});
-        return Response.json(await env.ATTEMPTS.getByName(browserView[1]!).browserLiveView(), {headers: browserViewHeaders});
+        if (request.method !== "POST")
+          return new Response("Not found", {
+            status: 404,
+            headers: browserViewHeaders
+          });
+        return Response.json(
+          await env.ATTEMPTS.getByName(browserView[1]!).browserLiveView(),
+          { headers: browserViewHeaders }
+        );
       }
-      const controls = path.match(/^\/jobs\/([A-Za-z0-9._-]+)\/session-controls$/);
+      const controls = path.match(
+        /^\/jobs\/([A-Za-z0-9._-]+)\/session-controls$/
+      );
       if (controls && request.method === "GET")
-        return Response.json(await env.ATTEMPTS.getByName(controls[1]!).sessionControls(), {headers: {"Cache-Control": "no-store"}});
-      const nativeReply = path.match(/^\/jobs\/([A-Za-z0-9._-]+)\/(forms|permissions)\/([A-Za-z0-9._~-]{1,255})\/(reply|cancel)$/);
-      if (nativeReply && request.method === "POST" && !(nativeReply[2] === "permissions" && nativeReply[4] === "cancel")) {
+        return Response.json(
+          await env.ATTEMPTS.getByName(controls[1]!).sessionControls(),
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      const nativeReply = path.match(
+        /^\/jobs\/([A-Za-z0-9._-]+)\/(forms|permissions)\/([A-Za-z0-9._~-]{1,255})\/(reply|cancel)$/
+      );
+      if (
+        nativeReply &&
+        request.method === "POST" &&
+        !(nativeReply[2] === "permissions" && nativeReply[4] === "cancel")
+      ) {
         const input = await body(request);
-        return Response.json(await env.ATTEMPTS.getByName(nativeReply[1]!).replyNative(
-          nativeReply[2] === "forms" ? "form" : "permission",
-          nativeReply[3]!, input, nativeReply[4] === "cancel",
-        ), {headers: {"Cache-Control": "no-store"}});
+        return Response.json(
+          await env.ATTEMPTS.getByName(nativeReply[1]!).replyNative(
+            nativeReply[2] === "forms" ? "form" : "permission",
+            nativeReply[3]!,
+            input,
+            nativeReply[4] === "cancel"
+          ),
+          { headers: { "Cache-Control": "no-store" } }
+        );
       }
       const job = path.match(
-        /^\/jobs\/([A-Za-z0-9._-]+)\/(events|inspect|steer|revisions|interrupt)$/,
+        /^\/jobs\/([A-Za-z0-9._-]+)\/(events|inspect|steer|revisions|interrupt)$/
       );
       if (job) {
         const id = job[1]!,
@@ -442,7 +771,7 @@ export default {
           } catch (error) {
             if (
               !/not initialized|not found|404|uninitialized/i.test(
-                String(error),
+                String(error)
               )
             )
               throw error;
@@ -471,13 +800,23 @@ export default {
               typeof value.request_id !== "string"
             )
               throw new Error(
-                "400: revision instructions and request identity must be strings",
+                "400: revision instructions and request identity must be strings"
               );
             return Response.json(
               value.upload_ids === undefined
-                ? await coordinator.revise(id, value.instructions, value.request_id)
-                : await coordinator.revise(id, value.instructions, value.request_id, undefined, normalizeUploadIds(value.upload_ids)),
-              { status: 202 },
+                ? await coordinator.revise(
+                    id,
+                    value.instructions,
+                    value.request_id
+                  )
+                : await coordinator.revise(
+                    id,
+                    value.instructions,
+                    value.request_id,
+                    undefined,
+                    normalizeUploadIds(value.upload_ids)
+                  ),
+              { status: 202 }
             );
           }
         }
@@ -485,9 +824,14 @@ export default {
       return new Response("Not found", { status: 404 });
     } catch (error) {
       const response = errorResponse(error, env);
-      if (/^\/v1(?:\/ui)?\/jobs\/[A-Za-z0-9._-]+\/browser-live-view$/.test(url.pathname))
-        for (const [name, value] of Object.entries(browserViewHeaders)) response.headers.set(name, value);
+      if (
+        /^\/v1(?:\/ui)?\/jobs\/[A-Za-z0-9._-]+\/browser-live-view$/.test(
+          url.pathname
+        )
+      )
+        for (const [name, value] of Object.entries(browserViewHeaders))
+          response.headers.set(name, value);
       return response;
     }
-  },
+  }
 } satisfies ExportedHandler<NativeEnv>;

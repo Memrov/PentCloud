@@ -1,4 +1,4 @@
-import type {ToolboxService} from "../../../../shared/toolbox-rpc";
+import type { ToolboxService } from "../../../../shared/toolbox-rpc";
 import { RpcTarget } from "cloudflare:workers";
 import type { Workspace } from "@cloudflare/computer";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -7,7 +7,11 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Role } from "./types";
 import { uniqueClientIds } from "./mcp-ids";
-import { TOOLBOX_GENERATION_HEADER, toolboxGeneration, ToolboxGenerationLostError } from "./toolbox-lifecycle";
+import {
+  TOOLBOX_GENERATION_HEADER,
+  toolboxGeneration,
+  ToolboxGenerationLostError
+} from "./toolbox-lifecycle";
 import { REPO_DIR, assertRoleWrite, confinedRelative } from "./tool-policy";
 export * from "./tool-policy";
 
@@ -22,7 +26,7 @@ export async function resolveWorkspacePath(
   workspace: Workspace,
   requested: string,
   write = false,
-  authority?: WorkspaceAuthority,
+  authority?: WorkspaceAuthority
 ): Promise<string> {
   const root = authority?.root ?? REPO_DIR;
   const confined = confinedRelative(requested, root);
@@ -55,16 +59,27 @@ function isNotFound(error: unknown) {
 export class GuardedFilesystem extends RpcTarget {
   constructor(
     private workspace: Workspace,
-    private authority: WorkspaceAuthority,
+    private authority: WorkspaceAuthority
   ) {
     super();
   }
   private async path(path: string, write = false) {
     return resolveWorkspacePath(this.workspace, path, write, this.authority);
   }
-  async readFile(path: string, options: "utf8" | { encoding: "utf8" }): Promise<string>;
-  async readFile(path: string, options?: { byteOffset?: number; byteLength?: number }): Promise<ReadableStream<Uint8Array>>;
-  async readFile(path: string, options?: { encoding?: "utf8"; byteOffset?: number; byteLength?: number } | "utf8") {
+  async readFile(
+    path: string,
+    options: "utf8" | { encoding: "utf8" }
+  ): Promise<string>;
+  async readFile(
+    path: string,
+    options?: { byteOffset?: number; byteLength?: number }
+  ): Promise<ReadableStream<Uint8Array>>;
+  async readFile(
+    path: string,
+    options?:
+      | { encoding?: "utf8"; byteOffset?: number; byteLength?: number }
+      | "utf8"
+  ) {
     const target = await this.path(path);
     return options === "utf8" || options?.encoding === "utf8"
       ? this.workspace.fs.readFile(target, "utf8")
@@ -96,24 +111,28 @@ export class GuardedFilesystem extends RpcTarget {
     return this.statOrNull(path);
   }
   async readdir(path: string, options?: { limit?: number; offset?: number }) {
-    return (await this.workspace.fs.readdir(await this.path(path), options)).filter(
-      (e) => e.name.toLowerCase() !== ".git",
-    );
+    return (
+      await this.workspace.fs.readdir(await this.path(path), options)
+    ).filter((e) => e.name.toLowerCase() !== ".git");
   }
-  async find(path: string, pattern?: string, options?: { limit?: number; offset?: number }) {
+  async find(
+    path: string,
+    pattern?: string,
+    options?: { limit?: number; offset?: number }
+  ) {
     return (
       await this.workspace.fs.find(await this.path(path), pattern, options)
     ).filter((e) => !e.path.split("/").includes(".git"));
   }
   async ls(path: string) {
     return (await this.workspace.fs.ls(await this.path(path))).filter(
-      (p) => !p.split("/").includes(".git"),
+      (p) => !p.split("/").includes(".git")
     );
   }
   async grep(
     pattern: string,
     path: string,
-    options?: Parameters<Workspace["fs"]["grep"]>[2],
+    options?: Parameters<Workspace["fs"]["grep"]>[2]
   ) {
     return (
       await this.workspace.fs.grep(pattern, await this.path(path), options)
@@ -122,18 +141,31 @@ export class GuardedFilesystem extends RpcTarget {
   async readlink(_path: string): Promise<string> {
     throw new Error("Symlinks are unavailable to model tools");
   }
-  async writeFile(path: string, content: string | Uint8Array, options?: { mode?: number }) {
-    await this.workspace.fs.writeFile(await this.path(path, true), content, options);
+  async writeFile(
+    path: string,
+    content: string | Uint8Array,
+    options?: { mode?: number }
+  ) {
+    await this.workspace.fs.writeFile(
+      await this.path(path, true),
+      content,
+      options
+    );
   }
   async mkdir(path: string, options?: { recursive?: boolean }) {
     await this.authority.active();
     // Stock file tools ensure parent directories even when they already exist.
     // Recursive mkdir of an existing directory is a no-op; actual writes remain guarded.
-    if (options?.recursive && (await this.statOrNull(path))?.isDirectory) return;
+    if (options?.recursive && (await this.statOrNull(path))?.isDirectory)
+      return;
     await this.workspace.fs.mkdir(await this.path(path, true), options);
   }
   async rm(path: string, options?: { recursive?: boolean; force?: boolean }) {
-    if(confinedRelative(path,this.authority.root??REPO_DIR)===`.pentagi/evidence/${this.authority.id}`)throw new Error("Captured evidence directory is runtime owned");
+    if (
+      confinedRelative(path, this.authority.root ?? REPO_DIR) ===
+      `.pentagi/evidence/${this.authority.id}`
+    )
+      throw new Error("Captured evidence directory is runtime owned");
     await this.workspace.fs.rm(await this.path(path, true), options);
   }
   async chmod(path: string, mode: number) {
@@ -143,17 +175,24 @@ export class GuardedFilesystem extends RpcTarget {
     throw new Error("Symlinks are unavailable to model tools");
   }
   async rename(from: string, to: string) {
-    if([from,to].some(path=>confinedRelative(path,this.authority.root??REPO_DIR)===`.pentagi/evidence/${this.authority.id}`))throw new Error("Captured evidence directory is runtime owned");
+    if (
+      [from, to].some(
+        (path) =>
+          confinedRelative(path, this.authority.root ?? REPO_DIR) ===
+          `.pentagi/evidence/${this.authority.id}`
+      )
+    )
+      throw new Error("Captured evidence directory is runtime owned");
     await this.workspace.fs.rename(
       await this.path(from, true),
-      await this.path(to, true),
+      await this.path(to, true)
     );
   }
 }
 export class GuardedGit extends RpcTarget {
   constructor(
     private workspace: Workspace,
-    private authority: WorkspaceAuthority,
+    private authority: WorkspaceAuthority
   ) {
     super();
   }
@@ -163,7 +202,7 @@ export class GuardedGit extends RpcTarget {
     if (
       !argv ||
       !["status", "diff", "log", "show", "ls-files", "rev-parse"].includes(
-        argv[0] ?? "",
+        argv[0] ?? ""
       ) ||
       argv.some(
         (arg) =>
@@ -171,18 +210,18 @@ export class GuardedGit extends RpcTarget {
           arg.startsWith("--git-dir") ||
           arg.startsWith("--work-tree") ||
           arg === "--output" ||
-          arg.startsWith("--output="),
+          arg.startsWith("--output=")
       )
     )
       return {
         stdout: "",
         stderr:
           "git: only read-only inspection is available; runtime publishes candidate commits\n",
-        exitCode: 1,
+        exitCode: 1
       };
     return this.workspace.git.cli({
       ...input,
-      cwd: this.authority.root ?? REPO_DIR,
+      cwd: this.authority.root ?? REPO_DIR
     });
   }
 }
@@ -191,7 +230,7 @@ class DeniedArtifacts extends RpcTarget {
     return {
       stdout: "",
       stderr: "artifacts: publication is owned by the runtime\n",
-      exitCode: 1,
+      exitCode: 1
     };
   }
 }
@@ -238,8 +277,8 @@ export class ToolboxMCP {
     { name: "pentagi-native", version: "1" },
     {
       capabilities: {},
-      jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
-    },
+      jsonSchemaValidator: new CfWorkerJsonSchemaValidator()
+    }
   );
   private connected = false;
   private connecting: Promise<void> | undefined;
@@ -250,10 +289,13 @@ export class ToolboxMCP {
   constructor(
     private fetcher: Pick<ToolboxService, "fetch">,
     private sessions: ToolboxSessionStorage | undefined,
-    private readonly generation: string,
-  ) { if (!toolboxGeneration(generation)) throw new ToolboxGenerationLostError(); }
+    private readonly generation: string
+  ) {
+    if (!toolboxGeneration(generation)) throw new ToolboxGenerationLostError();
+  }
   private createTransport(session?: ToolboxSession) {
-    if (session && session.generation !== this.generation) throw new ToolboxGenerationLostError();
+    if (session && session.generation !== this.generation)
+      throw new ToolboxGenerationLostError();
     const transport = new StreamableHTTPClientTransport(
       new URL("https://toolbox.internal/mcp?codemode=false"),
       {
@@ -265,14 +307,19 @@ export class ToolboxMCP {
           const signal = deleting
             ? AbortSignal.any([
                 request.signal,
-                AbortSignal.timeout(CONTROL_TIMEOUT_MS),
+                AbortSignal.timeout(CONTROL_TIMEOUT_MS)
               ])
             : request.signal;
           const response = await this.fetcher.fetch(
-            new Request(request, { signal }),
+            new Request(request, { signal })
           );
-          const responseGeneration = response.headers.get(TOOLBOX_GENERATION_HEADER);
-          if (responseGeneration !== this.generation || response.headers.get("X-Pentcloud-Toolbox-Lost") === "true") {
+          const responseGeneration = response.headers.get(
+            TOOLBOX_GENERATION_HEADER
+          );
+          if (
+            responseGeneration !== this.generation ||
+            response.headers.get("X-Pentcloud-Toolbox-Lost") === "true"
+          ) {
             await response.body?.cancel();
             throw new ToolboxGenerationLostError(response.status === 409);
           }
@@ -286,7 +333,7 @@ export class ToolboxMCP {
                 ? { protocolVersion: transport.protocolVersion }
                 : session?.protocolVersion
                   ? { protocolVersion: session.protocolVersion }
-                  : {}),
+                  : {})
             });
           if (deleting) {
             // SDK accepts 405 as protocol-valid. This application requires positive
@@ -294,21 +341,21 @@ export class ToolboxMCP {
             if (!response.ok) {
               await response.body?.cancel();
               throw new Error(
-                `MCP session deletion was not confirmed (HTTP ${response.status})`,
+                `MCP session deletion was not confirmed (HTTP ${response.status})`
               );
             }
             this.deleteConfirmed = true;
           }
           return response;
-        },
-      },
+        }
+      }
     );
     if (session?.protocolVersion)
       transport.setProtocolVersion(session.protocolVersion);
     return transport;
   }
   private async persist(session: ToolboxSession) {
-    this.saved = {...session, generation: this.generation};
+    this.saved = { ...session, generation: this.generation };
     await this.sessions?.save(this.saved);
   }
   private connect(): Promise<void> {
@@ -322,14 +369,14 @@ export class ToolboxMCP {
         // Public SDK sessionId resume deliberately skips initialize. Default
         // strict-capability enforcement is off, so no private Client mutation is needed.
         await this.client.connect(uniqueClientIds(transport as Transport), {
-          timeout: CONTROL_TIMEOUT_MS,
+          timeout: CONTROL_TIMEOUT_MS
         });
         if (transport.sessionId)
           await this.persist({
             sessionId: transport.sessionId,
             ...(transport.protocolVersion
               ? { protocolVersion: transport.protocolVersion }
-              : {}),
+              : {})
           });
         this.connected = true;
       } catch (error) {
@@ -338,7 +385,7 @@ export class ToolboxMCP {
             sessionId: transport.sessionId,
             ...(transport.protocolVersion
               ? { protocolVersion: transport.protocolVersion }
-              : {}),
+              : {})
           });
         throw error;
       }
@@ -352,7 +399,7 @@ export class ToolboxMCP {
     let cursor: string | undefined;
     for (let page = 0; page < 32; page++) {
       const result = await this.client.listTools(cursor ? { cursor } : {}, {
-        timeout: CONTROL_TIMEOUT_MS,
+        timeout: CONTROL_TIMEOUT_MS
       });
       tools.push(...result.tools);
       if (!result.nextCursor) return tools;
@@ -366,13 +413,13 @@ export class ToolboxMCP {
     name: string,
     args: Record<string, unknown>,
     signal?: AbortSignal,
-    timeoutMs = 10_800_000,
+    timeoutMs = 10_800_000
   ) {
     await this.connect();
     // A tool deadline is not an attempt deadline. Mutations are never retried.
     return this.client.callTool({ name, arguments: args }, undefined, {
       timeout: timeoutMs,
-      ...(signal ? { signal } : {}),
+      ...(signal ? { signal } : {})
     });
   }
   /** Close only this isolate's streams, preserving backend/result identity for recovery. */

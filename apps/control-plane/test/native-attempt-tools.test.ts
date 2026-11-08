@@ -9,34 +9,45 @@ import {
   catalogForRole,
   confinedRelative,
   redact,
-  validateToolInput,
+  validateToolInput
 } from "../src/native/tool-policy";
 
 describe("native attempt authority", () => {
   it("retains role tool separation and validates result payloads", () => {
     expect(catalogForRole("reporter").map((t) => t.name)).toEqual([
-      "report_result",
+      "report_result"
     ]);
     expect(catalogForRole("adviser")).toEqual([]);
     expect(catalogForRole("primary").map((t) => t.name)).toContain("yield");
     expect(() => catalogForRole("reporter", ["browser"])).toThrow(
-      "not optional",
+      "not optional"
     );
     expect(() =>
-      validateToolInput("done", { success: "yes", result: "x", message: "x" }),
+      validateToolInput("done", { success: "yes", result: "x", message: "x" })
     ).toThrow();
     expect(() =>
       validateToolInput("done", {
         success: true,
         result: "x",
         message: "x",
-        extra: 1,
-      }),
+        extra: 1
+      })
     ).toThrow();
   });
   it("retires duplicate executable contracts without enabling remote aliases", () => {
-    for (const role of ["primary", "adviser", "reporter", "coder", "maintenance", "memorist", "pentester", "searcher"] as const) {
-      const names = catalogForRole(role, supportedOptionalTools(role)).map(tool => tool.name);
+    for (const role of [
+      "primary",
+      "adviser",
+      "reporter",
+      "coder",
+      "maintenance",
+      "memorist",
+      "pentester",
+      "searcher"
+    ] as const) {
+      const names = catalogForRole(role, supportedOptionalTools(role)).map(
+        (tool) => tool.name
+      );
       for (const name of ["file", "terminal", "workspace_javascript"]) {
         expect(names).not.toContain(name);
         expect(allowedRemoteTool(role, name)).toBe(false);
@@ -50,17 +61,17 @@ describe("native attempt authority", () => {
       "/etc/passwd",
       ".git/config",
       "src/../.git/HEAD",
-      ".pentagi/jobs/other/result.json",
+      ".pentagi/jobs/other/result.json"
     ]) {
       expect(() => assertRoleWrite("coder", "own", path)).toThrow();
     }
     expect(() => assertRoleWrite("primary", "own", "src/app.ts")).toThrow();
     expect(() =>
-      assertRoleWrite("reporter", "own", ".pentagi/memory/x"),
+      assertRoleWrite("reporter", "own", ".pentagi/memory/x")
     ).toThrow();
     expect(() => assertRoleWrite("coder", "own", "src/app.ts")).not.toThrow();
     expect(() =>
-      assertRoleWrite("memorist", "own", ".pentagi/memory/code/x.md"),
+      assertRoleWrite("memorist", "own", ".pentagi/memory/code/x.md")
     ).not.toThrow();
     expect(confinedRelative("/workspace/repo/src/app.ts")).toBe("src/app.ts");
   });
@@ -78,16 +89,15 @@ describe("native attempt authority", () => {
         {
           headers: { authorization: "Bearer x" },
           output: "token secret-value",
-          nested: ["secret-value"],
+          nested: ["secret-value"]
         },
-        ["secret-value"],
-      ),
+        ["secret-value"]
+      )
     ).toEqual({
       headers: { authorization: "[redacted]" },
       output: "token [redacted]",
-      nested: ["[redacted]"],
+      nested: ["[redacted]"]
     });
-
   });
   it("pins only implemented optional capabilities for each original role", () => {
     expect(supportedOptionalTools("memorist")).toEqual(["search_in_memory"]);
@@ -99,7 +109,7 @@ describe("native attempt authority", () => {
       "maintenance",
       "memorist",
       "pentester",
-      "searcher",
+      "searcher"
     ] as const) {
       const names = supportedOptionalTools(role);
       expect(() => catalogForRole(role, names)).not.toThrow();
@@ -112,13 +122,13 @@ describe("native attempt authority", () => {
   it("clears uncertainty only with matching stock terminal evidence", () => {
     const args = { target: "127.0.0.1" };
     const reply = (data: object) => ({
-      content: [{ type: "text", text: JSON.stringify(data) }],
+      content: [{ type: "text", text: JSON.stringify(data) }]
     });
     const terminal = {
       scan_id: "scan-1",
       target: "127.0.0.1",
       scan_type: "port",
-      status: "completed",
+      status: "completed"
     };
     expect(isRemoteInspection("nmap_list_active_scans")).toBe(true);
     expect(isRemoteInspection("nmap_port_scan")).toBe(false);
@@ -128,14 +138,14 @@ describe("native attempt authority", () => {
         args,
         "nmap_get_scan_results",
         "scan-1",
-        reply(terminal),
-      ),
+        reply(terminal)
+      )
     ).toEqual(terminal);
     for (const invalid of [
       { ...terminal, status: "running" },
       { ...terminal, scan_id: "scan-2" },
       { ...terminal, target: "other" },
-      { ...terminal, scan_type: "service" },
+      { ...terminal, scan_type: "service" }
     ]) {
       expect(() =>
         validateRemoteReconciliation(
@@ -143,8 +153,8 @@ describe("native attempt authority", () => {
           args,
           "nmap_get_scan_results",
           "scan-1",
-          reply(invalid),
-        ),
+          reply(invalid)
+        )
       ).toThrow();
     }
     expect(() =>
@@ -153,8 +163,8 @@ describe("native attempt authority", () => {
         args,
         "masscan_get_scan_results",
         "scan-1",
-        reply(terminal),
-      ),
+        reply(terminal)
+      )
     ).toThrow();
     expect(() =>
       validateRemoteReconciliation(
@@ -162,22 +172,22 @@ describe("native attempt authority", () => {
         args,
         "nmap_list_active_scans",
         "scan-1",
-        reply({ active_scans: [] }),
-      ),
+        reply({ active_scans: [] })
+      )
     ).toThrow();
   });
 
   it("uses actual FFUF and Wayback inspector names, ID keys and stock canonical identities", () => {
     expect(resultInspector("ffuf_ffuf_dir")?.tool).toBe(
-      "ffuf_get_fuzz_results",
+      "ffuf_get_fuzz_results"
     );
     expect(resultInspector("waybackurls_fetch_wayback_urls")?.idKey).toBe(
-      "fetch_id",
+      "fetch_id"
     );
     expect(isRemoteInspection("ffuf_get_scan_results")).toBe(false);
     expect(isRemoteInspection("waybackurls_list_active_fetches")).toBe(true);
     const reply = (data: object) => ({
-      content: [{ type: "text", text: JSON.stringify(data) }],
+      content: [{ type: "text", text: JSON.stringify(data) }]
     });
     expect(
       validateRemoteReconciliation(
@@ -188,9 +198,9 @@ describe("native attempt authority", () => {
         reply({
           scan_id: "fuzz-1",
           target: "https://example.com/FUZZ",
-          status: "completed",
-        }),
-      ).status,
+          status: "completed"
+        })
+      ).status
     ).toBe("completed");
     expect(
       validateRemoteReconciliation(
@@ -201,9 +211,9 @@ describe("native attempt authority", () => {
         reply({
           fetch_id: "fetch-1",
           domain: "example.com",
-          status: "completed",
-        }),
-      ).status,
+          status: "completed"
+        })
+      ).status
     ).toBe("completed");
     expect(() =>
       validateRemoteReconciliation(
@@ -214,9 +224,9 @@ describe("native attempt authority", () => {
         reply({
           scan_id: "fetch-1",
           domain: "example.com",
-          status: "completed",
-        }),
-      ),
+          status: "completed"
+        })
+      )
     ).toThrow();
   });
 });

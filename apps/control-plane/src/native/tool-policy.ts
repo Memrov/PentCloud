@@ -14,10 +14,14 @@ export interface ToolContract {
 export const contracts = new Map<string, ToolContract>(
   ([...original.tools, ...extensions.tools] as ToolContract[]).map((t) => [
     t.name,
-    t,
-  ]),
+    t
+  ])
 );
-export const retiredTools = new Set(["file", "terminal", "workspace_javascript"]);
+export const retiredTools = new Set([
+  "file",
+  "terminal",
+  "workspace_javascript"
+]);
 export const delegationTools = new Set([
   "advice",
   "coder",
@@ -25,7 +29,7 @@ export const delegationTools = new Set([
   "memorist",
   "pentester",
   "search",
-  "revise_attempt",
+  "revise_attempt"
 ]);
 export const resultTools = new Set([
   "done",
@@ -36,7 +40,7 @@ export const resultTools = new Set([
   "hack_result",
   "memorist_result",
   "search_result",
-  "report_result",
+  "report_result"
 ]);
 const sourceWriters = new Set<Role>(["coder", "maintenance", "pentester"]);
 
@@ -57,14 +61,14 @@ export function supportedOptionalTools(role: Role): string[] {
     coder: ["search_code", "store_code"],
     maintenance: ["search_guide", "store_guide"],
     searcher: ["browser", "search_answer", "store_answer", "web_search"],
-    pentester: ["browser", "search_guide", "store_guide", "web_search"],
+    pentester: ["browser", "search_guide", "store_guide", "web_search"]
   };
   return [...supported[role]];
 }
 
 export function catalogForRole(
   role: Role,
-  enabled: string[] = [],
+  enabled: string[] = []
 ): ToolContract[] {
   const base: string[] = roles.roles[role];
   const optional: string[] =
@@ -76,8 +80,8 @@ export function catalogForRole(
     ...new Set([
       ...base,
       ...((extensions.roles as Record<string, string[]>)[role] ?? []),
-      ...enabled,
-    ]),
+      ...enabled
+    ])
   ]
     .sort()
     .map((name) => {
@@ -88,20 +92,23 @@ export function catalogForRole(
 }
 export function validateToolInput(
   name: string,
-  input: unknown,
+  input: unknown
 ): Record<string, unknown> {
-  if (retiredTools.has(name)) throw new Error(`Tool ${name} is retired; use the advertised computer_* tools with their current schemas`);
+  if (retiredTools.has(name))
+    throw new Error(
+      `Tool ${name} is retired; use the advertised computer_* tools with their current schemas`
+    );
   const tool = contracts.get(name);
   if (!tool) throw new Error(`Unknown original tool ${name}`);
   const result = new Validator(tool.input_schema, "2020-12", false).validate(
-    input,
+    input
   );
   if (!result.valid)
     throw new Error(
       `Invalid ${name} arguments: ${result.errors
         .map((e) => e.error)
         .join("; ")
-        .slice(0, 1000)}`,
+        .slice(0, 1000)}`
     );
   return input as Record<string, unknown>;
 }
@@ -110,7 +117,8 @@ export function allowedRemoteTool(role: Role, name: string): boolean {
   return (
     sourceWriters.has(role) &&
     /^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}$/.test(name) &&
-    !contracts.has(name) && !retiredTools.has(name)
+    !contracts.has(name) &&
+    !retiredTools.has(name)
   );
 }
 export interface ResultInspector {
@@ -129,24 +137,24 @@ const inspectors: Record<string, ResultInspector> = Object.fromEntries(
         activeTool: `${family}_list_active_scans`,
         idKey: "scan_id" as const,
         argumentKeys: ["target"],
-        evidenceKeys: ["target"],
-      },
-    ],
-  ),
+        evidenceKeys: ["target"]
+      }
+    ]
+  )
 );
 inspectors.ffuf = {
   tool: "ffuf_get_fuzz_results",
   activeTool: "ffuf_list_active_scans",
   idKey: "scan_id",
   argumentKeys: ["url"],
-  evidenceKeys: ["url", "target"],
+  evidenceKeys: ["url", "target"]
 };
 inspectors.waybackurls = {
   tool: "waybackurls_get_fetch_results",
   activeTool: "waybackurls_list_active_fetches",
   idKey: "fetch_id",
   argumentKeys: ["domain"],
-  evidenceKeys: ["domain", "target"],
+  evidenceKeys: ["domain", "target"]
 };
 /** Exact names and ID keys from the live unchanged stock tool catalog. */
 export function resultInspector(name: string): ResultInspector | undefined {
@@ -159,7 +167,7 @@ export function isRemoteInspection(name: string): boolean {
   )
     return true;
   return Object.values(inspectors).some(
-    (item) => item.tool === name || item.activeTool === name,
+    (item) => item.tool === name || item.activeTool === name
   );
 }
 export function remoteResultObject(value: unknown): Record<string, unknown> {
@@ -181,7 +189,7 @@ export function remoteResultObject(value: unknown): Record<string, unknown> {
             item &&
             typeof item === "object" &&
             item.type === "text" &&
-            typeof item.text === "string",
+            typeof item.text === "string"
         )
         .map((item) => item.text as string)
         .join("\n")
@@ -191,7 +199,7 @@ export function remoteResultObject(value: unknown): Record<string, unknown> {
     parsed = JSON.parse(text);
   } catch {
     throw new Error(
-      "Stock inspector did not return structured operation evidence",
+      "Stock inspector did not return structured operation evidence"
     );
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
@@ -203,13 +211,13 @@ export function validateRemoteReconciliation(
   args: Record<string, unknown>,
   inspectionTool: string,
   scanId: string,
-  response: unknown,
+  response: unknown
 ): Record<string, unknown> {
   const family = tool.split("_")[0];
   const inspector = resultInspector(tool);
   if (!inspector || inspectionTool !== inspector.tool)
     throw new Error(
-      "Reconciliation requires the matching stock result inspector",
+      "Reconciliation requires the matching stock result inspector"
     );
   const result = remoteResultObject(response);
   let originalIdentity = inspector.argumentKeys
@@ -242,7 +250,7 @@ export function validateRemoteReconciliation(
     observedIdentity !== originalIdentity
   )
     throw new Error(
-      "Inspection evidence does not match the original operation identity",
+      "Inspection evidence does not match the original operation identity"
     );
   if (
     ![
@@ -253,11 +261,11 @@ export function validateRemoteReconciliation(
       "terminated",
       "timed_out",
       "timeout",
-      "error",
+      "error"
     ].includes(String(result.status))
   )
     throw new Error(
-      "Inspection evidence does not prove the remote operation has stopped",
+      "Inspection evidence does not prove the remote operation has stopped"
     );
   if (family === "nmap") {
     const expectedType: Record<string, string> = {
@@ -265,7 +273,7 @@ export function validateRemoteReconciliation(
       nmap_service_scan: "service",
       nmap_os_detection: "os",
       nmap_script_scan: "script",
-      nmap_quick_scan: "quick",
+      nmap_quick_scan: "quick"
     };
     if (expectedType[tool] && result.scan_type !== expectedType[tool])
       throw new Error("Inspection evidence has a different scan type");
@@ -295,10 +303,15 @@ export function confinedRelative(requested: string, root = REPO_DIR): string {
 export function assertRoleWrite(
   role: Role,
   id: string,
-  requested: string,
+  requested: string
 ): string {
   const path = confinedRelative(requested);
-  if(path===`.pentagi/evidence/${id}/manifest.json`||path===`.pentagi/evidence/${id}/captured`||path.startsWith(`.pentagi/evidence/${id}/captured/`))throw new Error("Captured evidence is immutable runtime data");
+  if (
+    path === `.pentagi/evidence/${id}/manifest.json` ||
+    path === `.pentagi/evidence/${id}/captured` ||
+    path.startsWith(`.pentagi/evidence/${id}/captured/`)
+  )
+    throw new Error("Captured evidence is immutable runtime data");
   if (
     path === "." ||
     path === ".pentagi" ||
@@ -326,7 +339,7 @@ export function assertRoleWrite(
 }
 export function redact(
   value: unknown,
-  secrets: readonly (string | undefined)[] = [],
+  secrets: readonly (string | undefined)[] = []
 ): unknown {
   if (typeof value === "string") {
     let result = value;
@@ -335,17 +348,17 @@ export function redact(
     return result
       .replace(
         /(\b[A-Za-z0-9_]*(?:TOKEN|PASSWORD|SECRET|API_KEY)[A-Za-z0-9_]*\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/gi,
-        "$1[redacted]",
+        "$1[redacted]"
       )
       .replace(
         /("(?:password|token|secret|api_key|authorization)"\s*:\s*)"(?:[^"\\]|\\.)*"/gi,
-        '$1"[redacted]"',
+        '$1"[redacted]"'
       )
       .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9+/_=.?~-]+/gi, "$1 [redacted]")
       .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted]@")
       .replace(
         /([?&](?:token|api_key|apikey|access_token|secret|signature)=)[^&\s"']+/gi,
-        "$1[redacted]",
+        "$1[redacted]"
       );
   }
   if (Array.isArray(value)) return value.map((v) => redact(v, secrets));
@@ -354,11 +367,11 @@ export function redact(
       Object.entries(value).map(([key, v]) => [
         key,
         /^(authorization|cookie|set-cookie|token|secret|credentials?|.*(?:api[_-]?key|access[_-]?token|client[_-]?secret|password))$/i.test(
-          key,
+          key
         )
           ? "[redacted]"
-          : redact(v, secrets),
-      ]),
+          : redact(v, secrets)
+      ])
     );
   return value;
 }

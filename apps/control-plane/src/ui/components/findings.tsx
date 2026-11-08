@@ -1,39 +1,430 @@
-import {Badge,Button,Collapsible,LayerDialog,Link,Loader,Pagination,Select,Table} from '@cloudflare/kumo';
-import {useEffect,useMemo,useState} from 'react';
-import type {Finding} from '../../../../../shared/findings';
-import type {UIRun} from '../api';
-import {findingTargets,loadAssessments,retained,targetKey,type Assessment} from '../findings-model';
-import {runLabel} from '../run-label';
-import {chatPath} from '../dashboard/model';
-import {materialFileURL,type RunFile} from '../materials-api';
-import {ReportButton} from './report-reader';
-import {RunFilesPanel} from './materials';
-import {ChatMarkdown} from './chat-markdown';
-type Row={assessment:Assessment;finding:Finding};
-const reportFile=(a:Assessment):RunFile|undefined=>{const bundle=a.snapshot?.bundle;if(!bundle)return;const f=bundle.files.find(f=>f.path===bundle.document.reportPath)!;return {...f,name:f.path.split('/').at(-1)!,kind:'report',previewable:true,mediaType:'text/markdown',commit:a.snapshot!.commit};};
-export function Findings({runs,initialTarget,inventoryLoading=false,inventoryError,onRefresh}:{runs:UIRun[];initialTarget?:string|undefined;inventoryLoading?:boolean;inventoryError?:string|undefined;onRefresh?:()=>void}){
- const targets=useMemo(()=>findingTargets(runs),[runs]),[target,setTarget]=useState(initialTarget??''),[page,setPage]=useState(0),[selected,setSelected]=useState<Row>(),[findingOpen,setFindingOpen]=useState(false),[refresh,setRefresh]=useState(0);
- const key=targets.some(t=>t.key===target)?target:targets[0]?.key??'';
- const source=runs.filter(r=>retained(r)&&targetKey(r)===key),fingerprint=source.map(r=>`${r.id}:${r.status}:${r.lifecycle}`).join('|');
- const [loaded,setLoaded]=useState<{key:string;assessments:Assessment[];errors:string[]}>({key:'',assessments:[],errors:[]}),[loading,setLoading]=useState(false),[reportId,setReportId]=useState('');
- useEffect(()=>{let live=true;setPage(0);setFindingOpen(false);setReportId('');setLoading(!!key);if(!key){setLoaded({key,assessments:[],errors:[]});return;}
-  void loadAssessments(source).then(result=>{if(live)setLoaded({key,...result});}).catch(error=>{if(live)setLoaded({key,assessments:[],errors:[error instanceof Error?error.message:'Findings unavailable']});}).finally(()=>{if(live)setLoading(false);});return()=>{live=false;};
- },[key,fingerprint,refresh]);
- const assessments=loaded.key===key?loaded.assessments:[],errors=loaded.key===key?loaded.errors:[],rows=assessments.flatMap(assessment=>assessment.snapshot?.bundle?.document.findings.map(finding=>({assessment,finding}))??[]);
- const busy=loading||inventoryLoading;
- const issues=(inventoryError?1:0)+errors.length+assessments.filter(a=>a.error).length,legacy=assessments.filter(a=>a.snapshot&&!a.snapshot.bundle).length,partial=assessments.some(a=>a.snapshot?.bundle?.document.coverage==='partial');
- const report=assessments.find(a=>`${a.run.id}:${a.job.id}`===reportId)??assessments[0],pages=Math.max(1,Math.ceil(rows.length/20)),currentPage=Math.min(page,pages-1),visible=rows.slice(currentPage*20,currentPage*20+20),open=selected;
- return <section className="findings-workspace" aria-label="Target findings" aria-busy={busy||loaded.key!==key}>
-  <header className="findings-heading"><div><h1>Findings</h1><p>Vulnerabilities from all retained runs for this target.</p></div><Button variant="secondary" onClick={()=>{onRefresh?.();setRefresh(n=>n+1);}} disabled={busy}>Refresh findings</Button></header>
-  <div className="findings-controls"><Select className="w-full min-w-0 max-w-full" label="Target" placeholder="Choose a target" renderValue={value=>targets.find(t=>t.key===value)?.label??"Choose a target"} value={key} onValueChange={value=>{setFindingOpen(false);setTarget(String(value??''));const u=new URL(location.href);u.searchParams.set('target',String(value??''));history.replaceState(null,'',u);setPage(0);}}>{targets.map(t=><Select.Option className="[overflow-wrap:anywhere]" key={t.key} value={t.key}>{t.label}</Select.Option>)}</Select>
-  {report&&<div className="finding-report-control"><Select className="w-full min-w-0 max-w-full" label="Assessment report" renderValue={()=>report?runLabel(report.run):"Choose a report"} value={`${report.run.id}:${report.job.id}`} onValueChange={value=>setReportId(String(value??''))}>{assessments.map(a=><Select.Option className="[overflow-wrap:anywhere]" key={`${a.run.id}:${a.job.id}`} value={`${a.run.id}:${a.job.id}`}>{runLabel(a.run)} · {a.job.id}</Select.Option>)}</Select><ReportButton runId={report.run.id} jobs={[report.job]} verifiedFile={reportFile(report)} label={report.snapshot?.bundle?"Full report":"Assessment files"}/></div>}</div>
-  {busy&&<p role="status"><Loader size="sm"/>Loading target assessments…</p>}
-  {!busy&&issues>0&&<p role="alert">Some assessments could not be loaded. Displayed findings are incomplete. {inventoryError?`Run inventory incomplete: ${inventoryError}.`:""} {errors.join(' ')} {assessments.filter(a=>a.error).map(a=>`${a.run.id}: ${a.error}`).join(' ')}</p>}
-  {!busy&&legacy>0&&<p>{legacy} older {legacy===1?'assessment has':'assessments have'} no structured findings index. Open assessment files to review the results.</p>}
-  {!busy&&partial&&<p role="status">Assessment coverage is partial. Review each report’s limitations.</p>}
-  {!busy&&rows.length>0&&<><div className="finding-table-summary"><strong>{rows.length} {rows.length===1?'finding':'findings'}</strong><span>Page {currentPage+1} of {pages}</span></div><div className="finding-table-scroll"><Table><Table.Header><Table.Row><Table.Head>Severity</Table.Head><Table.Head>Vulnerability</Table.Head><Table.Head>Target</Table.Head><Table.Head>Status</Table.Head></Table.Row></Table.Header><Table.Body>{visible.map(row=><Table.Row key={`${row.assessment.run.id}:${row.assessment.job.id}:${row.finding.id}`}><Table.Cell><Badge variant={['critical','high'].includes(row.finding.severity)?'destructive':'secondary'}>{row.finding.severity}</Badge></Table.Cell><Table.Cell><Button variant="ghost" className="finding-title" onClick={()=>{setSelected(row);setFindingOpen(true);}}>{row.finding.title}</Button><small>{row.assessment.run.id}</small></Table.Cell><Table.Cell><span className="finding-target">{row.finding.target}</span></Table.Cell><Table.Cell>{row.finding.status}</Table.Cell></Table.Row>)}</Table.Body></Table></div><Pagination page={currentPage+1} setPage={value=>setPage(value-1)} perPage={20} totalCount={rows.length}><Pagination.Info/><Pagination.Controls controls="simple"/></Pagination></>}
-  {!busy&&rows.length===0&&<p>{issues?'Findings could not be fully loaded.':!key?'No target assessments yet.':legacy?'Review the existing reports above.':assessments.length?'No findings were reported in these assessments.':'No accepted assessment reports yet. Runs may still be working or may have stopped before reporting.'}</p>}
-  <Collapsible className="finding-source-files"><Collapsible.DefaultTrigger>Assessment notes and files</Collapsible.DefaultTrigger><Collapsible.DefaultPanel>{source.map(run=><section key={run.id}><h2>{run.id}</h2><p>{run.status}{run.lifecycle==='archived'?' · Archived':''}</p><Link href={chatPath(run.id)}>Open conversations</Link>{assessments.filter(a=>a.run.id===run.id).map(a=><div key={a.job.id}>{a.snapshot?.bundle&&<ChatMarkdown>{a.snapshot.bundle.document.summary}</ChatMarkdown>}<RunFilesPanel runId={run.id} jobId={a.job.id}/></div>)}</section>)}</Collapsible.DefaultPanel></Collapsible>
-  <LayerDialog.Root open={findingOpen} onOpenChange={setFindingOpen} onOpenChangeComplete={value=>{if(!value)setSelected(undefined);}}><LayerDialog.Content size="xl" closeLabel="Close finding"><LayerDialog.Title>{open?.finding.title??'Finding details'}</LayerDialog.Title><LayerDialog.Description>{open?`${open.finding.severity} · ${open.finding.status} · ${open.finding.target}`:'Finding evidence and report'}</LayerDialog.Description><LayerDialog.Body><div className="finding-detail">{open&&<><h2>Summary</h2><ChatMarkdown>{open.finding.summary}</ChatMarkdown><h2>Evidence / PoC</h2><ChatMarkdown>{open.finding.evidence||'No reproduction evidence was supplied.'}</ChatMarkdown><div className="finding-evidence-links">{open.finding.evidencePaths.map(path=><a key={path} href={materialFileURL(open.assessment.run.id,{commit:open.assessment.snapshot!.commit,path})} download>{path.split('/').at(-1)}</a>)}</div><h2>Detailed report</h2><ChatMarkdown>{open.finding.report}</ChatMarkdown><Collapsible><Collapsible.DefaultTrigger>Source assessment</Collapsible.DefaultTrigger><Collapsible.DefaultPanel><p>{open.assessment.run.id} · Target revision {open.assessment.run.target?.revision??'legacy'}</p><p>Accepted commit <code>{open.assessment.snapshot!.commit}</code></p><Link href={chatPath(open.assessment.run.id,open.assessment.job.id)}>Open source conversation</Link></Collapsible.DefaultPanel></Collapsible></>}</div></LayerDialog.Body></LayerDialog.Content></LayerDialog.Root>
- </section>;
+import {
+  Badge,
+  Button,
+  Collapsible,
+  LayerDialog,
+  Link,
+  Loader,
+  Pagination,
+  Select,
+  Table
+} from "@cloudflare/kumo";
+import { useEffect, useMemo, useState } from "react";
+import type { Finding } from "../../../../../shared/findings";
+import type { UIRun } from "../api";
+import {
+  findingTargets,
+  loadAssessments,
+  retained,
+  targetKey,
+  type Assessment
+} from "../findings-model";
+import { runLabel } from "../run-label";
+import { chatPath } from "../dashboard/model";
+import { materialFileURL, type RunFile } from "../materials-api";
+import { ReportButton } from "./report-reader";
+import { RunFilesPanel } from "./materials";
+import { ChatMarkdown } from "./chat-markdown";
+type Row = { assessment: Assessment; finding: Finding };
+const reportFile = (a: Assessment): RunFile | undefined => {
+  const bundle = a.snapshot?.bundle;
+  if (!bundle) return;
+  const f = bundle.files.find((f) => f.path === bundle.document.reportPath)!;
+  return {
+    ...f,
+    name: f.path.split("/").at(-1)!,
+    kind: "report",
+    previewable: true,
+    mediaType: "text/markdown",
+    commit: a.snapshot!.commit
+  };
+};
+export function Findings({
+  runs,
+  initialTarget,
+  inventoryLoading = false,
+  inventoryError,
+  onRefresh
+}: {
+  runs: UIRun[];
+  initialTarget?: string | undefined;
+  inventoryLoading?: boolean;
+  inventoryError?: string | undefined;
+  onRefresh?: () => void;
+}) {
+  const targets = useMemo(() => findingTargets(runs), [runs]),
+    [target, setTarget] = useState(initialTarget ?? ""),
+    [page, setPage] = useState(0),
+    [selected, setSelected] = useState<Row>(),
+    [findingOpen, setFindingOpen] = useState(false),
+    [refresh, setRefresh] = useState(0);
+  const key = targets.some((t) => t.key === target)
+    ? target
+    : (targets[0]?.key ?? "");
+  const source = runs.filter((r) => retained(r) && targetKey(r) === key),
+    fingerprint = source
+      .map((r) => `${r.id}:${r.status}:${r.lifecycle}`)
+      .join("|");
+  const [loaded, setLoaded] = useState<{
+      key: string;
+      assessments: Assessment[];
+      errors: string[];
+    }>({ key: "", assessments: [], errors: [] }),
+    [loading, setLoading] = useState(false),
+    [reportId, setReportId] = useState("");
+  useEffect(() => {
+    let live = true;
+    setPage(0);
+    setFindingOpen(false);
+    setReportId("");
+    setLoading(!!key);
+    if (!key) {
+      setLoaded({ key, assessments: [], errors: [] });
+      return;
+    }
+    void loadAssessments(source)
+      .then((result) => {
+        if (live) setLoaded({ key, ...result });
+      })
+      .catch((error) => {
+        if (live)
+          setLoaded({
+            key,
+            assessments: [],
+            errors: [
+              error instanceof Error ? error.message : "Findings unavailable"
+            ]
+          });
+      })
+      .finally(() => {
+        if (live) setLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [key, fingerprint, refresh]);
+  const assessments = loaded.key === key ? loaded.assessments : [],
+    errors = loaded.key === key ? loaded.errors : [],
+    rows = assessments.flatMap(
+      (assessment) =>
+        assessment.snapshot?.bundle?.document.findings.map((finding) => ({
+          assessment,
+          finding
+        })) ?? []
+    );
+  const busy = loading || inventoryLoading;
+  const issues =
+      (inventoryError ? 1 : 0) +
+      errors.length +
+      assessments.filter((a) => a.error).length,
+    legacy = assessments.filter((a) => a.snapshot && !a.snapshot.bundle).length,
+    partial = assessments.some(
+      (a) => a.snapshot?.bundle?.document.coverage === "partial"
+    );
+  const report =
+      assessments.find((a) => `${a.run.id}:${a.job.id}` === reportId) ??
+      assessments[0],
+    pages = Math.max(1, Math.ceil(rows.length / 20)),
+    currentPage = Math.min(page, pages - 1),
+    visible = rows.slice(currentPage * 20, currentPage * 20 + 20),
+    open = selected;
+  return (
+    <section
+      className="findings-workspace"
+      aria-label="Target findings"
+      aria-busy={busy || loaded.key !== key}
+    >
+      <header className="findings-heading">
+        <div>
+          <h1>Findings</h1>
+          <p>Vulnerabilities from all retained runs for this target.</p>
+        </div>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            onRefresh?.();
+            setRefresh((n) => n + 1);
+          }}
+          disabled={busy}
+        >
+          Refresh findings
+        </Button>
+      </header>
+      <div className="findings-controls">
+        <Select
+          className="w-full min-w-0 max-w-full"
+          label="Target"
+          placeholder="Choose a target"
+          renderValue={(value) =>
+            targets.find((t) => t.key === value)?.label ?? "Choose a target"
+          }
+          value={key}
+          onValueChange={(value) => {
+            setFindingOpen(false);
+            setTarget(String(value ?? ""));
+            const u = new URL(location.href);
+            u.searchParams.set("target", String(value ?? ""));
+            history.replaceState(null, "", u);
+            setPage(0);
+          }}
+        >
+          {targets.map((t) => (
+            <Select.Option
+              className="[overflow-wrap:anywhere]"
+              key={t.key}
+              value={t.key}
+            >
+              {t.label}
+            </Select.Option>
+          ))}
+        </Select>
+        {report && (
+          <div className="finding-report-control">
+            <Select
+              className="w-full min-w-0 max-w-full"
+              label="Assessment report"
+              renderValue={() =>
+                report ? runLabel(report.run) : "Choose a report"
+              }
+              value={`${report.run.id}:${report.job.id}`}
+              onValueChange={(value) => setReportId(String(value ?? ""))}
+            >
+              {assessments.map((a) => (
+                <Select.Option
+                  className="[overflow-wrap:anywhere]"
+                  key={`${a.run.id}:${a.job.id}`}
+                  value={`${a.run.id}:${a.job.id}`}
+                >
+                  {runLabel(a.run)} · {a.job.id}
+                </Select.Option>
+              ))}
+            </Select>
+            <ReportButton
+              runId={report.run.id}
+              jobs={[report.job]}
+              verifiedFile={reportFile(report)}
+              label={
+                report.snapshot?.bundle ? "Full report" : "Assessment files"
+              }
+            />
+          </div>
+        )}
+      </div>
+      {busy && (
+        <p role="status">
+          <Loader size="sm" />
+          Loading target assessments…
+        </p>
+      )}
+      {!busy && issues > 0 && (
+        <p role="alert">
+          Some assessments could not be loaded. Displayed findings are
+          incomplete.{" "}
+          {inventoryError ? `Run inventory incomplete: ${inventoryError}.` : ""}{" "}
+          {errors.join(" ")}{" "}
+          {assessments
+            .filter((a) => a.error)
+            .map((a) => `${a.run.id}: ${a.error}`)
+            .join(" ")}
+        </p>
+      )}
+      {!busy && legacy > 0 && (
+        <p>
+          {legacy} older {legacy === 1 ? "assessment has" : "assessments have"}{" "}
+          no structured findings index. Open assessment files to review the
+          results.
+        </p>
+      )}
+      {!busy && partial && (
+        <p role="status">
+          Assessment coverage is partial. Review each report’s limitations.
+        </p>
+      )}
+      {!busy && rows.length > 0 && (
+        <>
+          <div className="finding-table-summary">
+            <strong>
+              {rows.length} {rows.length === 1 ? "finding" : "findings"}
+            </strong>
+            <span>
+              Page {currentPage + 1} of {pages}
+            </span>
+          </div>
+          <div className="finding-table-scroll">
+            <Table>
+              <Table.Header>
+                <Table.Row>
+                  <Table.Head>Severity</Table.Head>
+                  <Table.Head>Vulnerability</Table.Head>
+                  <Table.Head>Target</Table.Head>
+                  <Table.Head>Status</Table.Head>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {visible.map((row) => (
+                  <Table.Row
+                    key={`${row.assessment.run.id}:${row.assessment.job.id}:${row.finding.id}`}
+                  >
+                    <Table.Cell>
+                      <Badge
+                        variant={
+                          ["critical", "high"].includes(row.finding.severity)
+                            ? "destructive"
+                            : "secondary"
+                        }
+                      >
+                        {row.finding.severity}
+                      </Badge>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Button
+                        variant="ghost"
+                        className="finding-title"
+                        onClick={() => {
+                          setSelected(row);
+                          setFindingOpen(true);
+                        }}
+                      >
+                        {row.finding.title}
+                      </Button>
+                      <small>{row.assessment.run.id}</small>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <span className="finding-target">
+                        {row.finding.target}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell>{row.finding.status}</Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>
+            </Table>
+          </div>
+          <Pagination
+            page={currentPage + 1}
+            setPage={(value) => setPage(value - 1)}
+            perPage={20}
+            totalCount={rows.length}
+          >
+            <Pagination.Info />
+            <Pagination.Controls controls="simple" />
+          </Pagination>
+        </>
+      )}
+      {!busy && rows.length === 0 && (
+        <p>
+          {issues
+            ? "Findings could not be fully loaded."
+            : !key
+              ? "No target assessments yet."
+              : legacy
+                ? "Review the existing reports above."
+                : assessments.length
+                  ? "No findings were reported in these assessments."
+                  : "No accepted assessment reports yet. Runs may still be working or may have stopped before reporting."}
+        </p>
+      )}
+      <Collapsible className="finding-source-files">
+        <Collapsible.DefaultTrigger>
+          Assessment notes and files
+        </Collapsible.DefaultTrigger>
+        <Collapsible.DefaultPanel>
+          {source.map((run) => (
+            <section key={run.id}>
+              <h2>{run.id}</h2>
+              <p>
+                {run.status}
+                {run.lifecycle === "archived" ? " · Archived" : ""}
+              </p>
+              <Link href={chatPath(run.id)}>Open conversations</Link>
+              {assessments
+                .filter((a) => a.run.id === run.id)
+                .map((a) => (
+                  <div key={a.job.id}>
+                    {a.snapshot?.bundle && (
+                      <ChatMarkdown>
+                        {a.snapshot.bundle.document.summary}
+                      </ChatMarkdown>
+                    )}
+                    <RunFilesPanel runId={run.id} jobId={a.job.id} />
+                  </div>
+                ))}
+            </section>
+          ))}
+        </Collapsible.DefaultPanel>
+      </Collapsible>
+      <LayerDialog.Root
+        open={findingOpen}
+        onOpenChange={setFindingOpen}
+        onOpenChangeComplete={(value) => {
+          if (!value) setSelected(undefined);
+        }}
+      >
+        <LayerDialog.Content size="xl" closeLabel="Close finding">
+          <LayerDialog.Title>
+            {open?.finding.title ?? "Finding details"}
+          </LayerDialog.Title>
+          <LayerDialog.Description>
+            {open
+              ? `${open.finding.severity} · ${open.finding.status} · ${open.finding.target}`
+              : "Finding evidence and report"}
+          </LayerDialog.Description>
+          <LayerDialog.Body>
+            <div className="finding-detail">
+              {open && (
+                <>
+                  <h2>Summary</h2>
+                  <ChatMarkdown>{open.finding.summary}</ChatMarkdown>
+                  <h2>Evidence / PoC</h2>
+                  <ChatMarkdown>
+                    {open.finding.evidence ||
+                      "No reproduction evidence was supplied."}
+                  </ChatMarkdown>
+                  <div className="finding-evidence-links">
+                    {open.finding.evidencePaths.map((path) => (
+                      <a
+                        key={path}
+                        href={materialFileURL(open.assessment.run.id, {
+                          commit: open.assessment.snapshot!.commit,
+                          path
+                        })}
+                        download
+                      >
+                        {path.split("/").at(-1)}
+                      </a>
+                    ))}
+                  </div>
+                  <h2>Detailed report</h2>
+                  <ChatMarkdown>{open.finding.report}</ChatMarkdown>
+                  <Collapsible>
+                    <Collapsible.DefaultTrigger>
+                      Source assessment
+                    </Collapsible.DefaultTrigger>
+                    <Collapsible.DefaultPanel>
+                      <p>
+                        {open.assessment.run.id} · Target revision{" "}
+                        {open.assessment.run.target?.revision ?? "legacy"}
+                      </p>
+                      <p>
+                        Accepted commit{" "}
+                        <code>{open.assessment.snapshot!.commit}</code>
+                      </p>
+                      <Link
+                        href={chatPath(
+                          open.assessment.run.id,
+                          open.assessment.job.id
+                        )}
+                      >
+                        Open source conversation
+                      </Link>
+                    </Collapsible.DefaultPanel>
+                  </Collapsible>
+                </>
+              )}
+            </div>
+          </LayerDialog.Body>
+        </LayerDialog.Content>
+      </LayerDialog.Root>
+    </section>
+  );
 }

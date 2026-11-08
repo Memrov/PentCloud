@@ -20,7 +20,7 @@ export function ModelPicker(props: ModelPickerProps) {
     inputModalities: [],
     outputModalities: [],
     supportedParameters: [],
-    reasoningEfforts: [],
+    reasoningEfforts: []
   };
   return (
     <section className="settings-model-picker">
@@ -33,39 +33,67 @@ export function ModelPicker(props: ModelPickerProps) {
         isItemEqualToValue={(model, value) => model.id === value.id}
         filter={(model, query) => filterModels([model], query).length > 0}
         // Every role needs a model; clearing resets the search while keeping its saved selection.
-        onValueChange={(model) => { if (model) props.onSelect(model); }}
+        onValueChange={(model) => {
+          if (model) props.onSelect(model);
+        }}
       >
-        <Combobox.TriggerInput aria-label="Search connected models" clearLabel="Clear model search" placeholder="Search OpenCode Go models…" />
+        <Combobox.TriggerInput
+          aria-label="Search connected models"
+          clearLabel="Clear model search"
+          placeholder="Search OpenCode Go models…"
+        />
         <Combobox.Content className="settings-model-popup">
           <Combobox.List>
             {(model: UISettingsModel) => (
-              <Combobox.Item key={model.id} value={model} className="settings-model-option">
+              <Combobox.Item
+                key={model.id}
+                value={model}
+                className="settings-model-option"
+              >
                 <ModelSummary model={model} />
               </Combobox.Item>
             )}
           </Combobox.List>
-          <Combobox.Empty>No connected models match this search.</Combobox.Empty>
+          <Combobox.Empty>
+            No connected models match this search.
+          </Combobox.Empty>
         </Combobox.Content>
       </Combobox>
-      <div className="settings-model-selection" role="group" aria-label="Selected model">
+      <div
+        className="settings-model-selection"
+        role="group"
+        aria-label="Selected model"
+      >
         <ModelSummary model={selected} />
       </div>
-      {(!connected || props.stale) && <span className="settings-stale"><WarningCircleIcon size={13} />
-        {connected ? "Cached catalog" : "Saved selection is not in the connected catalog"}
-      </span>}
+      {(!connected || props.stale) && (
+        <span className="settings-stale">
+          <WarningCircleIcon size={13} />
+          {connected
+            ? "Cached catalog"
+            : "Saved selection is not in the connected catalog"}
+        </span>
+      )}
     </section>
   );
 }
 
 function ModelSummary({ model }: { model: UISettingsModel }) {
-  return <>
-    <span className="settings-model-main"><strong>{model.name}</strong><small>{model.id}</small></span>
-    <span className="settings-model-meta">
-      <span>{model.provider}</span>
-      {model.contextLength && <span>{formatContext(model.contextLength)} context</span>}
-      {model.supportedParameters.includes("tools") && <span>Tools</span>}
-    </span>
-  </>;
+  return (
+    <>
+      <span className="settings-model-main">
+        <strong>{model.name}</strong>
+        <small>{model.id}</small>
+      </span>
+      <span className="settings-model-meta">
+        <span>{model.provider}</span>
+        {model.contextLength && (
+          <span>{formatContext(model.contextLength)} context</span>
+        )}
+        {model.supportedParameters.includes("tools") && <span>Tools</span>}
+      </span>
+    </>
+  );
 }
 
 function formatContext(tokens: number): string {

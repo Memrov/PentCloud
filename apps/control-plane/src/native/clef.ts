@@ -20,7 +20,7 @@ export interface ClefAI {
   run(
     model: string,
     input: Record<string, unknown>,
-    options?: Record<string, unknown>,
+    options?: Record<string, unknown>
   ): Promise<Record<string, unknown>>;
 }
 
@@ -62,7 +62,7 @@ export function validateClefAuditRequest(input: unknown): ClefAuditRequest {
   exactKeys(
     input,
     ["model", "sources", "questions", "message"],
-    "Clef audit request",
+    "Clef audit request"
   );
   if (input.model !== "clef-flash" && input.model !== "clef")
     throw new Error("Clef audit model is invalid");
@@ -102,7 +102,7 @@ export function validateClefAuditRequest(input: unknown): ClefAuditRequest {
     return {
       job_id: value.job_id,
       commit: value.commit,
-      ...(paths ? { paths } : {}),
+      ...(paths ? { paths } : {})
     };
   });
   if (!isRecord(input.questions))
@@ -128,7 +128,7 @@ export function validateClefAuditRequest(input: unknown): ClefAuditRequest {
         exactKeys(
           value,
           ["type", "instructions", "criteria"],
-          `Clef question ${id}`,
+          `Clef question ${id}`
         );
         let criteria: { true?: string; false?: string } | undefined;
         if (value.criteria !== undefined) {
@@ -137,7 +137,7 @@ export function validateClefAuditRequest(input: unknown): ClefAuditRequest {
           exactKeys(
             value.criteria,
             ["true", "false"],
-            `Clef question ${id} criteria`,
+            `Clef question ${id} criteria`
           );
           criteria = {};
           for (const key of ["true", "false"] as const) {
@@ -158,15 +158,15 @@ export function validateClefAuditRequest(input: unknown): ClefAuditRequest {
           {
             type: "noul",
             instructions: value.instructions,
-            ...(criteria ? { criteria } : {}),
-          },
+            ...(criteria ? { criteria } : {})
+          }
         ];
       }
       if (value.type === "choice") {
         exactKeys(
           value,
           ["type", "instructions", "criteria"],
-          `Clef question ${id}`,
+          `Clef question ${id}`
         );
         if (!isRecord(value.criteria))
           throw new Error(`Clef question ${id} choice criteria are invalid`);
@@ -184,22 +184,22 @@ export function validateClefAuditRequest(input: unknown): ClefAuditRequest {
               text.length > 2000
             ) {
               throw new Error(
-                `Clef question ${id} choice criteria are invalid`,
+                `Clef question ${id} choice criteria are invalid`
               );
             }
             return [key, text];
-          }),
+          })
         );
         return [
           id,
-          { type: "choice", instructions: value.instructions, criteria },
+          { type: "choice", instructions: value.instructions, criteria }
         ];
       }
       if (value.type === "score") {
         exactKeys(
           value,
           ["type", "instructions", "criteria"],
-          `Clef question ${id}`,
+          `Clef question ${id}`
         );
         if (
           !Array.isArray(value.criteria) ||
@@ -209,7 +209,7 @@ export function validateClefAuditRequest(input: unknown): ClefAuditRequest {
             (text) =>
               typeof text !== "string" ||
               text.trim().length === 0 ||
-              text.length > 2000,
+              text.length > 2000
           )
         ) {
           throw new Error(`Clef question ${id} score criteria are invalid`);
@@ -219,12 +219,12 @@ export function validateClefAuditRequest(input: unknown): ClefAuditRequest {
           {
             type: "score",
             instructions: value.instructions,
-            criteria: [...value.criteria] as string[],
-          },
+            criteria: [...value.criteria] as string[]
+          }
         ];
       }
       throw new Error(`Clef question ${id} type is invalid`);
-    }),
+    })
   );
   if (
     typeof input.message !== "string" ||
@@ -238,7 +238,7 @@ export function validateClefAuditRequest(input: unknown): ClefAuditRequest {
 
 export function validateClefResponse(
   response: unknown,
-  questions: Record<string, ClefQuestion>,
+  questions: Record<string, ClefQuestion>
 ): Record<string, unknown> {
   if (!isRecord(response) || !isRecord(response.answers))
     throw new Error("Clef response has no answers");
@@ -273,7 +273,7 @@ export function validateClefResponse(
       (answer.score as number) > question.criteria.length - 1 ||
       !probabilityMap(
         answer.probabilities,
-        question.criteria.map((_, index) => String(index)),
+        question.criteria.map((_, index) => String(index))
       )
     ) {
       throw new Error(`Clef answer ${id} is malformed`);
@@ -314,7 +314,7 @@ function validatePath(path: string): void {
 function exactKeys(
   value: Record<string, unknown>,
   allowed: string[],
-  name: string,
+  name: string
 ): void {
   const accepted = new Set(allowed);
   const extra = Object.keys(value).find((key) => !accepted.has(key));

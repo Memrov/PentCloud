@@ -24,7 +24,7 @@ const launchers = new Set([
   "metasploit_start_listener",
   "metasploit_run_exploit",
   "metasploit_run_post_module",
-  "metasploit_run_auxiliary_module",
+  "metasploit_run_auxiliary_module"
 ]);
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -40,17 +40,17 @@ function id(value: unknown): string | undefined {
   return undefined;
 }
 const unique = (values: Array<string | undefined>) => [
-  ...new Set(values.filter((value): value is string => value !== undefined)),
+  ...new Set(values.filter((value): value is string => value !== undefined))
 ];
 function copy(owned: MetasploitOwnership): MetasploitOwnership {
   return {
     ...owned,
     jobIds: [...owned.jobIds],
-    sessionIds: [...owned.sessionIds],
+    sessionIds: [...owned.sessionIds]
   };
 }
 export function metasploitOwnershipState(
-  owned: MetasploitOwnership,
+  owned: MetasploitOwnership
 ): MetasploitOutcome["state"] {
   if (owned.uncertain) return "unknown";
   return owned.jobIds.length ||
@@ -75,14 +75,14 @@ export function isMetasploitControl(tool: string): boolean {
 export function metasploitOutcome(
   tool: string,
   args: Record<string, unknown>,
-  result: unknown,
+  result: unknown
 ): MetasploitOutcome | undefined {
   if (!launchers.has(tool)) return undefined;
   const data = record(result) ? result : {};
   const jobIds = unique([id(data.job_id)]);
   const sessionIds = unique([
     id(data.session_id),
-    id(data.session_id_detected),
+    id(data.session_id_detected)
   ]);
   const rawUuid =
     data.uuid ?? (record(data.result) ? data.result.uuid : undefined);
@@ -99,7 +99,7 @@ export function metasploitOutcome(
     (key) =>
       data[key] !== undefined &&
       data[key] !== null &&
-      id(data[key]) === undefined,
+      id(data[key]) === undefined
   );
   const abortedBeforeExecution =
     data.status === "aborted" && !jobIds.length && !sessionIds.length;
@@ -117,7 +117,7 @@ export function metasploitOutcome(
     sessionIds,
     ...(executionUuid ? { executionUuid } : {}),
     uncertain,
-    needsSessionInspection: jobIds.length > 0,
+    needsSessionInspection: jobIds.length > 0
   };
   return { state: metasploitOwnershipState(owned), owned };
 }
@@ -126,11 +126,11 @@ export function metasploitOutcome(
 export function authorizeMetasploitControl(
   tool: string,
   args: Record<string, unknown>,
-  receipts: readonly MetasploitOwnedReceipt[],
+  receipts: readonly MetasploitOwnedReceipt[]
 ): MetasploitControl {
   if (!isMetasploitControl(tool))
     throw new Error(
-      "Only owned Metasploit stop/terminate controls are permitted during a remote hold",
+      "Only owned Metasploit stop/terminate controls are permitted during a remote hold"
     );
   const kind = tool === "metasploit_stop_job" ? "job" : "session";
   const field = kind === "job" ? "job_id" : "session_id";
@@ -142,7 +142,7 @@ export function authorizeMetasploitControl(
     supplied < 0
   )
     throw new Error(
-      `Metasploit control requires only the original integer ${field}`,
+      `Metasploit control requires only the original integer ${field}`
     );
   const resourceId = String(supplied);
   const receiptIds = [
@@ -152,26 +152,26 @@ export function authorizeMetasploitControl(
           (kind === "job"
             ? receipt.owned.jobIds
             : receipt.owned.sessionIds
-          ).includes(resourceId),
+          ).includes(resourceId)
         )
-        .map((receipt) => receipt.id),
-    ),
+        .map((receipt) => receipt.id)
+    )
   ];
   if (!receiptIds.length)
     throw new Error(
-      `Metasploit ${kind} ${resourceId} is not owned by this attempt`,
+      `Metasploit ${kind} ${resourceId} is not owned by this attempt`
     );
   return { receiptIds, kind, resourceId };
 }
 
 function inventory(
   value: unknown,
-  label: string,
+  label: string
 ): Record<string, Record<string, unknown>> {
   if (
     !record(value) ||
     Object.entries(value).some(
-      ([key, entry]) => id(key) !== key || !record(entry),
+      ([key, entry]) => id(key) !== key || !record(entry)
     )
   )
     throw new Error(`Malformed successful Metasploit ${label} inventory`);
@@ -189,7 +189,7 @@ function count(value: unknown, expected: number, label: string): void {
 export function applyMetasploitInspection(
   owned: MetasploitOwnership,
   tool: string,
-  result: unknown,
+  result: unknown
 ): MetasploitOwnership {
   if (!isMetasploitInspection(tool))
     throw new Error("Not a Metasploit resource inspection");
@@ -205,7 +205,7 @@ export function applyMetasploitInspection(
     count(result.other_job_count, Object.keys(jobs).length, "job");
     count(result.total_job_count, names.length, "total job");
     next.jobIds = next.jobIds.filter(
-      (job) => Object.hasOwn(handlers, job) || Object.hasOwn(jobs, job),
+      (job) => Object.hasOwn(handlers, job) || Object.hasOwn(jobs, job)
     );
     if (owned.jobIds.length > 0) next.needsSessionInspection = true;
     return next;
@@ -213,7 +213,7 @@ export function applyMetasploitInspection(
   const sessions = inventory(result.sessions, "session");
   count(result.count, Object.keys(sessions).length, "session");
   next.sessionIds = next.sessionIds.filter((session) =>
-    Object.hasOwn(sessions, session),
+    Object.hasOwn(sessions, session)
   );
   if (next.executionUuid)
     for (const [sessionId, session] of Object.entries(sessions)) {

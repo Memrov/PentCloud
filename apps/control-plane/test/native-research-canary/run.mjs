@@ -15,11 +15,23 @@ const dispatcher = new EnvHttpProxyAgent();
 const directory = mkdtempSync(resolve(tmpdir(), "pentcloud-managed-research-"));
 let runtime;
 try {
-  execFileSync(process.execPath, [resolve(root, "node_modules/wrangler/bin/wrangler.js"), "deploy", "--dry-run", "--config", "test/native-research-canary/wrangler.jsonc", "--outdir", directory], {
-    cwd: resolve(root, "apps/control-plane"),
-    env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  execFileSync(
+    process.execPath,
+    [
+      resolve(root, "node_modules/wrangler/bin/wrangler.js"),
+      "deploy",
+      "--dry-run",
+      "--config",
+      "test/native-research-canary/wrangler.jsonc",
+      "--outdir",
+      directory
+    ],
+    {
+      cwd: resolve(root, "apps/control-plane"),
+      env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
+      stdio: ["ignore", "pipe", "pipe"]
+    }
+  );
   let keylessRequests = 0;
   const options = {
     script: readFileSync(resolve(directory, "worker.js"), "utf8"),
@@ -43,33 +55,53 @@ try {
       const response = await fetch(request.url, {
         method: request.method,
         headers: [...request.headers],
-        body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer(),
+        body: ["GET", "HEAD"].includes(request.method)
+          ? undefined
+          : await request.arrayBuffer(),
         dispatcher,
         redirect: "manual",
-        signal: AbortSignal.timeout(35000),
+        signal: AbortSignal.timeout(35000)
       });
       // Undici has already decoded the body; do not make workerd decode twice.
       const headers = new Headers([...response.headers]);
       headers.delete("content-encoding");
       headers.delete("content-length");
-      return new mf.Response(await response.arrayBuffer(), { status: response.status, headers: [...headers] });
-    },
+      return new mf.Response(await response.arrayBuffer(), {
+        status: response.status,
+        headers: [...headers]
+      });
+    }
   };
-  runtime = new mf.Miniflare(mf.convertV4MiniflareOptions?.(options) ?? options);
-  const response = await runtime.dispatchFetch("http://proof.invalid/run", { method: "POST", headers: { Authorization: "Bearer local-retrieval-proof" } });
+  runtime = new mf.Miniflare(
+    mf.convertV4MiniflareOptions?.(options) ?? options
+  );
+  const response = await runtime.dispatchFetch("http://proof.invalid/run", {
+    method: "POST",
+    headers: { Authorization: "Bearer local-retrieval-proof" }
+  });
   assert.equal(response.status, 200);
   const proof = await response.json();
-  assert.equal(proof.durableObject.error, undefined, JSON.stringify(proof.durableObject));
+  assert.equal(
+    proof.durableObject.error,
+    undefined,
+    JSON.stringify(proof.durableObject)
+  );
   assert.equal(proof.durableObject.search.provider, "tinyfish");
   assert.equal(proof.durableObject.search.items.length, 3);
-  assert.ok(proof.durableObject.search.items.some((item) => item.url === "https://developers.cloudflare.com/agents/"));
+  assert.ok(
+    proof.durableObject.search.items.some(
+      (item) => item.url === "https://developers.cloudflare.com/agents/"
+    )
+  );
   assert.equal(proof.durableObject.browserStatus, 200);
   assert.equal(proof.durableObject.browserFormat, "markdown-negotiated");
   assert.ok(proof.durableObject.browserCharacters > 100);
   assert.equal(keylessRequests, 1);
   assert.equal(proof.modelCalls, 0);
   assert.equal(proof.scans, 0);
-  console.log(JSON.stringify({ ...proof, keylessRequests, deployments: 0 }, null, 2));
+  console.log(
+    JSON.stringify({ ...proof, keylessRequests, deployments: 0 }, null, 2)
+  );
 } finally {
   await runtime?.dispose();
   await dispatcher.close();
