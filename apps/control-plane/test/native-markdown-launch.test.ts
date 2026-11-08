@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { renderLaunch } from "../src/native/prompts";
 import { renderMarkdownLaunch } from "../src/native/markdown-launch";
+import { specialistSources } from "../src/native/specialist-sources";
+import { pinToolSkill } from "../src/native/skills";
 
 describe("native specialist Markdown launch", () => {
   it.each([undefined, "pentagi-template"] as const)("rejects %s format at the application launch boundary", async (promptFormat) => {
@@ -51,10 +53,21 @@ describe("native specialist Markdown launch", () => {
     await expect(renderMarkdownLaunch("coder", {}, "")).rejects.toThrow("empty");
     await expect(renderMarkdownLaunch("coder", [] as unknown as Record<string, unknown>, "x")).rejects.toThrow("object");
   });
-  it("advertises installed package execution instead of promising a Kali backend",async()=>{
-    const launch=await renderMarkdownLaunch("coder",{},"Retain evidence.",{toolBackend:"tool-packs"});
-    expect(launch.prompt).toContain("pentcloud_tool");
-    expect(launch.prompt).toContain("bounded profiles");
-    expect(launch.prompt).not.toContain("existing private stock Kali MCP");
+  it.each(["tool-packs", "stock-kali"] as const)("keeps default roles safe and uses the selected %s instructions", async (toolBackend) => {
+    const packages = toolBackend === "tool-packs";
+    const skill = await pinToolSkill(packages);
+    expect(skill.content).toContain(packages ? "installed bounded profiles" : "one shared on-demand Cloudflare Kali Container");
+    for (const [role, source] of Object.entries(specialistSources)) {
+      // These obligations must survive even when the model never loads the skill.
+      expect(source).toContain("respect engagement scope, guarded paths, cancellation and immutable result ownership");
+      expect(source).toContain("reconcile unknown outcomes before any mutation retry");
+      expect(source).toContain("Delegation returns a dispatch receipt, not a completed peer response");
+      expect(source).toContain("do not depend on loading a skill");
+      expect(source).not.toMatch(/Kali|30-minute inactivity/);
+      const launch = await renderLaunch(role, {}, source, { promptFormat: "markdown", toolBackend });
+      expect(launch.prompt).toContain(source);
+      expect(launch.prompt).toContain(packages ? "pentcloud_tool" : "existing private stock Kali MCP");
+      if (packages) expect(launch.prompt).not.toContain("existing private stock Kali MCP");
+    }
   });
 });

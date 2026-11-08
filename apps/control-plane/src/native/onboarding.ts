@@ -24,7 +24,7 @@ export interface CredentialMetadata {
 interface TargetProof extends AddressCheck {targetId:string;targetRevision:number;checkedAt:number;expiresAt:number}
 interface ModelProof {credentialFingerprint?:string;model:string;credentialId:string;credentialVersion:number;catalogDigest:string;testedAt:number;expiresAt:number}
 export interface SetupDraft {
-  revision:number;profile?:ModelProfile;apiCredential?:{id:string;version:number};publicAPI:boolean;
+  revision:number;profile?:ModelProfile;publicAPI:boolean;
   endpoint?:string;expectedStatus?:number;expectedText?:string;updatedBy:string;
 }
 type Catalog={models:OpenCodeModel[];fetchedAt:string;stale:boolean;digest:string;modelDigests:Record<string,string>;providerConfig?:string};
@@ -108,23 +108,6 @@ export class OnboardingStore {
     records.unshift(...(this.io.modelBindings?.()??(this.io.boundGoKey?.()?[{id:"bound-go",purpose:"model" as const,label:"OpenCode Go · Cloudflare",version:0,revoked:false,updatedAt:0,updatedBy:"deployment"}]:[])));
     return records;
   }
-  saveCredential(raw:{id:string;purpose:string;label:string;value:string;targetId?:string;header?:string;scheme?:string},expected:number|null,actor:string) {
-    if(raw.purpose==="model")throw new Error("400: Manage OpenCode keys through Cloudflare secret bindings, not application storage");
-    const id=identifier(raw.id,"credential id");if(id==="bound-go"||id==="bound-console")throw new Error("400: The deployment key is managed in Cloudflare");
-    const prior=this.io.get<CredentialMetadata>(this.key("credential",id));
-    if(prior?expected!==prior.version:expected!==null)throw new Error("409: Credential changed; reload");
-    if(!["model","api"].includes(raw.purpose)||typeof raw.value!=="string"||!raw.value.trim()||raw.value.length>8192||/[\r\n\0]/.test(raw.value)||!raw.label?.trim()||raw.label.length>160)throw new Error("400: Enter a valid credential value and label");
-    if(prior&&(prior.purpose!==raw.purpose||prior.targetId!==raw.targetId||raw.purpose==="api"&&(prior.header!==raw.header||prior.scheme!==raw.scheme)))throw new Error("409: Credential purpose and target cannot change");
-    if(raw.purpose==="api"){
-      const target=this.target(String(raw.targetId));if(target.kind!=="api"||target.archived)throw new Error("400: Select an active API target");
-      if(prior&&prior.audienceURL!==target.url)throw new Error("409: Credential audience changed; save a new API key reference for the new address");
-      if(!["bearer","header"].includes(String(raw.scheme))||!raw.header||!validAuthHeader(raw.header,String(raw.scheme)))throw new Error("400: Choose a valid API authorization header");
-    }
-    const meta:CredentialMetadata={id,purpose:raw.purpose as CredentialMetadata["purpose"],label:raw.label.trim(),version:(prior?.version??0)+1,revoked:false,updatedAt:this.now(),updatedBy:actor,
-      ...(raw.purpose==="api"?{targetId:raw.targetId!,audienceURL:this.target(raw.targetId!).url,targetRevision:this.target(raw.targetId!).revision,header:raw.header!,scheme:raw.scheme as "header"|"bearer"}:{})};
-    this.io.put(this.key("value",id+":"+meta.version),raw.value);
-    this.io.put(this.key("credential",id),meta);this.audit("credential.save",id,actor);return meta;
-  }
   private requireModelCredential(id:string,version:number) {
     const meta=this.credentials().find(c=>c.id===id&&c.purpose==="model");
     if(!["bound-go","bound-console"].includes(id)||version!==0||!meta||meta.revoked||meta.missing)throw new Error("409: Select a configured Cloudflare OpenCode secret binding");
@@ -135,24 +118,6 @@ export class OnboardingStore {
     if(!key)throw new Error("409: Configure the OpenCode secret in Cloudflare");
     return key;
   }
-  resolveCredential(id:string,version:number,purpose:"model"|"api",targetId?:string):string {
-    if(purpose==="model")throw new Error("409: Use the Cloudflare model secret binding");
-    const meta=this.io.get<CredentialMetadata>(this.key("credential",identifier(id)));
-    if(!meta||meta.missing)throw new Error("409: Credential missing; re-enter the key");
-    if(meta.revoked)throw new Error("409: Credential revoked; select a current key");
-    if(meta.purpose!==purpose||meta.targetId!==targetId||!Number.isSafeInteger(version)||version<1||version>meta.version)throw new Error("403: Credential purpose, target or version mismatch");
-    const value=this.io.get<string>(this.key("value",id+":"+version));
-    if(!value)throw new Error("409: Credential value missing; re-enter the key");return value;
-  }
-  revokeCredential(id:string,version:number,actor:string) {
-    if(id==="bound-go"||id==="bound-console")throw new Error("400: Manage the deployment key in Cloudflare");
-    const meta=this.io.get<CredentialMetadata>(this.key("credential",identifier(id)));
-    if(!meta||meta.version!==version)throw new Error("409: Credential changed; reload");
-    this.io.put(this.key("credential",id),{...meta,revoked:true,updatedAt:this.now(),updatedBy:actor});
-    for(let v=1;v<=meta.version;v++)this.io.remove(this.key("value",id+":"+v));
-    this.audit("credential.revoke",id,actor);return {revoked:true as const};
-  }
-  secretValues(){return this.io.list<string>(prefix+"value:");}
   async catalog(route:OpenCodeRoute,refresh=false):Promise<Catalog> {
     if(!["go","console"].includes(route))throw new Error("400: Choose OpenCode Go or Console");
     const providers=route==="console"?this.io.byokProviders?.()??[]:[],providerConfig=canonical(providers);
@@ -214,7 +179,6 @@ export class OnboardingStore {
     if(input.expectedText!==undefined&&(typeof input.expectedText!=="string"||input.expectedText.length>500))throw new Error("400: Authentication match is too long");
     const next:SetupDraft={revision:prior.revision+1,publicAPI:input.publicAPI,updatedBy:actor,
       ...(input.profile?{profile:structuredClone(input.profile)}:{}),
-      ...(input.apiCredential?{apiCredential:{id:identifier(input.apiCredential.id),version:input.apiCredential.version}}:{}),
       ...(input.endpoint?{endpoint:normalizeTargetURL(input.endpoint)}:{}),
       ...(input.expectedStatus?{expectedStatus:input.expectedStatus}:{}),
       ...(input.expectedText?{expectedText:input.expectedText}:{}),
@@ -233,16 +197,11 @@ export class OnboardingStore {
     }
     return models;
   }
-  apiConfig(target:SavedTarget,credential:{id:string;version:number}){
-    const value=this.resolveCredential(credential.id,credential.version,"api",target.id),meta=this.io.get<CredentialMetadata>(this.key("credential",credential.id))!;
-    if(meta.audienceURL!==target.url)throw new Error("403: API credential audience does not match this target snapshot; save a key for this address");
-    return {targetURL:meta.audienceURL,header:meta.header!,value:meta.scheme==="bearer"?"Bearer "+value:value};
-  }
   async testAPI(runId:string,target:SavedTarget,operation:string,actor:string) {
-    const draft=this.draft(runId),bound=target.access?.api;if((!bound&&!draft.apiCredential)||!draft.endpoint||!draft.expectedStatus)throw new Error("400: Choose a key, protected read-only endpoint and expected status");
-    const config=bound?{targetURL:bound.url,header:bound.header,value:(bound.scheme==="bearer"?"Bearer ":"")+(this.io.readTargetSecret?await this.io.readTargetSecret(bound.binding):(()=>{throw new Error("409: Configure the Cloudflare target binding");})())}:this.apiConfig(target,draft.apiCredential!);assertAudience(config.targetURL,draft.endpoint);
-    const credentialFingerprint=bound?await digest(config.value):undefined;
-    const identity={runId,revision:draft.revision,targetRevision:target.revision,...(credentialFingerprint?{credentialFingerprint}:{})};
+    const draft=this.draft(runId),bound=target.access?.api;if(!bound||!draft.endpoint||!draft.expectedStatus)throw new Error("400: Configure a Cloudflare API binding, protected read-only endpoint and expected status");
+    const config={targetURL:bound.url,header:bound.header,value:(bound.scheme==="bearer"?"Bearer ":"")+(this.io.readTargetSecret?await this.io.readTargetSecret(bound.binding):(()=>{throw new Error("409: Configure the Cloudflare target binding");})())};assertAudience(config.targetURL,draft.endpoint);
+    const credentialFingerprint=await digest(config.value);
+    const identity={runId,revision:draft.revision,targetRevision:target.revision,credentialFingerprint};
     return this.operation("api-test",operation,identity,async()=>{
       const resolved=await resolveTargetHeaders(target,name=>this.io.readTargetSecret!(name));
       const request=(authenticated:boolean)=>{const init={method:"GET",headers:targetHeaders(undefined,authenticated?config:undefined),redirect:"manual" as const,signal:AbortSignal.timeout(5000)};return target.access?performTargetFetch(resolved,new Request(draft.endpoint!,init),this.io.fetcher,authenticated?config:undefined):(this.io.fetcher??fetch)(draft.endpoint!,init);};
@@ -251,9 +210,8 @@ export class OnboardingStore {
       const matches=(status:number,body:string)=>status===draft.expectedStatus&&(!draft.expectedText||body.includes(draft.expectedText));
       if(!matches(response.status,text)||matches(anonymous.status,anonymousText))throw new Error("409: The response did not distinguish authenticated access. Use a protected read-only endpoint and an accurate success condition.");
       if(this.draft(runId).revision!==draft.revision)throw new Error("409: Setup changed during API test");
-      if(bound){const current=await this.io.readTargetSecret!(bound.binding);if(await digest((bound.scheme==="bearer"?"Bearer ":"")+current)!==credentialFingerprint)throw new Error("409: Cloudflare API secret changed during testing; test it again");}
-      else this.apiConfig(target,draft.apiCredential!);
-      const proof={...identity,configuration:apiProofIdentity(draft,target),credential:draft.apiCredential,testedAt:this.now(),expiresAt:this.now()+86400000};
+      const current=await this.io.readTargetSecret!(bound.binding);if(await digest((bound.scheme==="bearer"?"Bearer ":"")+current)!==credentialFingerprint)throw new Error("409: Cloudflare API secret changed during testing; test it again");
+      const proof={...identity,configuration:apiProofIdentity(draft,target),testedAt:this.now(),expiresAt:this.now()+86400000};
       this.io.put(this.key("api-proof",runId),proof);this.audit("api.test",target.id,actor);return {verified:true,testedAt:proof.testedAt};
     });
   }
@@ -261,8 +219,8 @@ export class OnboardingStore {
     const draft=this.draft(runId);if(target.kind!=="api"||draft.publicAPI)return;
     const proof=this.io.get<{revision:number;targetRevision:number;expiresAt:number;configuration:string;credentialFingerprint?:string}>(this.key("api-proof",runId));
     if(!proof||proof.configuration!==apiProofIdentity(draft,target)||proof.targetRevision!==target.revision||proof.expiresAt<this.now())throw new Error("409: Test API access before authenticated analysis");
-    if(!target.access?.api)this.apiConfig(target,draft.apiCredential!);
-    else if(!proof.credentialFingerprint)throw new Error("409: Test the current Cloudflare API secret again");
+    if(!target.access?.api)throw new Error("409: Configure Cloudflare API authentication in the saved target and start a new run");
+    if(!proof.credentialFingerprint)throw new Error("409: Test the current Cloudflare API secret again");
     return proof;
   }
   async verifyAPIProof(runId:string,target:SavedTarget){
@@ -306,7 +264,6 @@ export class OnboardingStore {
       const d=defaults.draft;
       const draft:SetupDraft={revision:0,publicAPI:d.publicAPI===true,updatedBy:actor,
         ...(d.profile?{profile:{default:clean(d.profile.default),overrides:Object.fromEntries(MODEL_ROLES.filter(role=>!!d.profile?.overrides[role]).map(role=>[role,clean(d.profile!.overrides[role]!)]))}}:{}),
-        ...(d.apiCredential?{apiCredential:{id:identifier(d.apiCredential.id),version:Number(d.apiCredential.version)}}:{}),
         ...(d.endpoint?{endpoint:normalizeTargetURL(d.endpoint)}:{}),
         ...(d.expectedStatus?{expectedStatus:Number(d.expectedStatus)}:{}),
         ...(d.expectedText?{expectedText:String(d.expectedText).slice(0,500)}:{}),
@@ -327,4 +284,4 @@ function validAuthHeader(header:string,scheme:string){
     (scheme==="bearer"?header.toLowerCase()==="authorization":!operatorIdentityHeader(header)&&!["host","connection","content-length","transfer-encoding"].includes(header.toLowerCase()));
 }
 
-function apiProofIdentity(draft:SetupDraft,target:SavedTarget){return canonical({credential:draft.apiCredential,endpoint:draft.endpoint,status:draft.expectedStatus,text:draft.expectedText,target:{id:target.id,revision:target.revision,url:target.url}});}
+function apiProofIdentity(draft:SetupDraft,target:SavedTarget){return canonical({endpoint:draft.endpoint,status:draft.expectedStatus,text:draft.expectedText,target:{id:target.id,revision:target.revision,url:target.url}});}

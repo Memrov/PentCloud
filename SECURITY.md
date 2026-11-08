@@ -9,19 +9,22 @@ required.
 
 Cloudflare Access protects the app. The Worker verifies signed Access tokens,
 including issuer, audience and expiry, and checks browser origins for mutations
-and WebSockets. The toolbox gateway is reached through a private service binding;
-its public HTTP handler returns 404. Runtime Workers have model/tool capabilities,
+and WebSockets. Tool capabilities use private native bindings. The retained legacy
+toolbox gateway's public HTTP handler returns 404. Runtime Workers have model/tool capabilities,
 not Cloudflare account-administration API credentials.
 
-The installer uses your selected account, its own Access policy and short-lived
-deployment authorization. It revokes issued deployment leases on normal exit;
-an interrupted process may leave one valid until expiry. Keep installation state
-outside Git and reconcile interrupted operations before repeating mutations.
+Cloudflare Workers Builds deploys into your selected account. The browser setup
+wizard creates the installation's own Access policy using explicit, scoped
+account authorization, verifies the deployed Worker version before mutations,
+and does not retain that token. Keep private installation state outside Git and
+reconcile interrupted operations before repeating mutations.
 Checked-in Wrangler examples contain no trusted Access issuer or audience.
 
 Store OpenCode workspace keys in Cloudflare Worker Secrets or supported Secrets
-Store bindings. Optional BYOK provider keys stay in OpenCode. Target API keys
-have a separate server-side, audience-bound path. Never put keys in source,
+Store bindings. Optional BYOK provider keys stay in OpenCode. Target API values
+also remain in native secret bindings; the application keeps only nonsecret
+references, audiences and connection-proof fingerprints. It has no API-key vault.
+Never put keys in source,
 prompts, uploaded files, command arguments or public issue reports.
 See [authentication](docs/operations/authentication.md).
 
@@ -39,14 +42,15 @@ IP/CIDR confinement, DNS pinning, protocol isolation or program-rule enforcement
   still depends on a live trusted Worker connection; this is not a promise of
   independent browser-wide path isolation after a platform failure. Browser WebSockets are disabled.
   Plain targets without managed settings retain broader browser reach.
-- Coder, Maintenance and Pentester use shared Kali with direct Internet access.
-  Scope is not enforced at its network layer. Browser headers and login state do
-  not automatically apply to stock scanners. Operators must configure engagement
+- Scanner capabilities depend on the installed backend and its bounded profiles.
+  Legacy installations retain shared Kali with direct Internet access; scope is
+  not enforced at its network layer. Browser headers and login state do
+  not automatically apply to scanners. Operators must configure engagement
   egress and ensure agents respect program rules and rate limits.
 - The Worker shell supports fetch-backed HTTP(S) curl. Its JavaScript execution
   backend has no network, but that restriction does not apply to the browser,
-  curl or Kali tools.
-- Managed curl, API and retrieval routes check URLs, paths and redirects. Saved API keys
+  curl or scanner tools.
+- Managed curl, API and retrieval routes check URLs, paths and redirects. Bound API secrets
   are bound to their configured audience/path. These checks do not provide
   engagement-wide host confinement or DNS/IP pinning.
 - Public catalog revisions can be incomplete or stale. Program instructions,
@@ -72,7 +76,7 @@ See [hosted UI privacy](docs/operations/hosted-ui.md).
 
 AI findings and reports require review. Structural validation of evidence and
 report files does not independently prove a vulnerability or complete coverage.
-Evidence capture is bounded; unrecorded or expired Kali scratch is not recoverable.
+Evidence capture is bounded; unrecorded or expired scanner scratch is not recoverable.
 
 Permanent run deletion removes owned PentCloud data after safe drain. It does
 not reset the target or erase independent logs, backups and exports. Unknown

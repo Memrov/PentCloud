@@ -18,7 +18,7 @@ CLI/package versions. `cf` and Wrangler have separate sign-in sessions.
 | App sign-in, blank page or loading failure | Browser console/Network, Access application domain/audience/email policy, app Worker Logs and Issues. Separate Cloudflare sign-in, application access, model access and target API authentication; [Worker routes](../../apps/control-plane/src/native/worker.ts). |
 | Target verification, model/API tests or analysis gate fails | [Onboarding behavior](onboarding.md), [`target-check.ts`](../../apps/control-plane/src/native/target-check.ts), [`onboarding.ts`](../../apps/control-plane/src/native/onboarding.ts), [`opencode-models.ts`](../../apps/control-plane/src/native/opencode-models.ts). Check target/setup revisions and proof/key versions. Model tests may consume credits; request them deliberately. |
 | Scope import, required headers or login fails | [Target access](onboarding.md#bounty-scope-and-target-login), catalog refresh/checksum, concrete origin/base path and applicable exclusions. Check `PENTCLOUD_TARGET_*` app bindings without reading values; verify login field selectors and same-target URLs. Native Browser Run guardrails and [`browser-interception.ts`](../../apps/control-plane/src/native/browser-interception.ts) cover different layers; Playwright route handlers alone skip redirect hops. |
-| Discovery waits or scanner execution fails | Recorded queue/run/job state, app and gateway Worker Logs, native Container logs, [`attempt.ts`](../../apps/control-plane/src/native/attempt.ts) startup markers, [`toolbox-lifecycle.ts`](../../apps/control-plane/src/native/toolbox-lifecycle.ts) and [toolbox operations](../../infra/cloudflare-kali/README.md). Do not poll Kali status: it counts as activity. |
+| Discovery waits or scanner execution fails | Recorded queue/run/job state, app Worker Logs, native tool-pack/Container logs and [`attempt.ts`](../../apps/control-plane/src/native/attempt.ts) startup markers. On legacy installations also inspect gateway logs, [`toolbox-lifecycle.ts`](../../apps/control-plane/src/native/toolbox-lifecycle.ts) and [legacy toolbox operations](../../infra/cloudflare-kali/README.md). Do not poll legacy Kali status: it counts as activity. |
 | Runtime reset, stuck work or uncertain external outcome | Settings → Runtime status, authenticated `GET /v1/runtime-diagnostics`, job receipts and [scanner recovery](../operations.md#scanner-cancellation-and-recovery). Use recorded recovery controls and exact-operation evidence, not blind retries. |
 | Missing files, Git results, export or cleanup failure | The run's accepted commit and owned Artifacts repository, [`material-store.ts`](../../apps/control-plane/src/native/material-store.ts), [`coordinator.ts`](../../apps/control-plane/src/native/coordinator.ts), [operations](../operations.md) and [deployment lifecycle](../deployment.md). |
 | Source attachment/import or agent source reads fail | [Source context](source-context.md), [`source-context.ts`](../../apps/control-plane/src/native/source-context.ts), frozen run pins and the import request/destination. A pending import or private GitHub connection is not proof of ready source. Never repeat an unknown import under a new identity to hide its outcome. |
@@ -43,8 +43,9 @@ credential values and internal Cloudflare tables are not needed for diagnosis.
 A job marked running is not by itself evidence of progress.
 
 For missing evidence, inspect the verified checkpoint manifest, collection notes,
-original tool receipt and expected Kali generation. A missing file or push reply
-does not establish that a scanner never ran. See [Kali evidence](kali-evidence.md).
+original tool receipt and run/attempt ownership. For legacy file-bridge output,
+also check the expected Kali generation. A missing file or push reply does not
+establish that a scanner never ran. See [legacy Kali evidence](kali-evidence.md).
 
 ## Discovery, chat and model setup
 

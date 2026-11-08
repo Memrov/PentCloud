@@ -1,11 +1,11 @@
 import {reconcileFormRevision} from "./form-revision";
 import { DiscoveryProgress } from "./discovery-progress";
 import { ExternalLink } from "../components/external-link";
-import { Badge, Banner, Button, Checkbox, Collapsible, Dialog, Input, Select } from "@cloudflare/kumo";
+import { Badge, Banner, Button, Checkbox, Collapsible, Input, Select } from "@cloudflare/kumo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UIJob, UIRun } from "../api";
 import { MODEL_ROLES,type ModelRole } from "../../native/onboarding-roles";
-import type { ModelChoice, ModelProfile, SetupDraft, CredentialMetadata } from "../../native/onboarding";
+import type { ModelChoice, ModelProfile, SetupDraft } from "../../native/onboarding";
 import type { OpenCodeModel } from "../../native/opencode-models";
 import { action, activate, canActivate, catalogs, snapshot, type OnboardingSnapshot } from "./api";
 export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActivated:(run:UIRun,job:UIJob)=>void}) {
@@ -13,9 +13,9 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
   const [keyVersion,setKeyVersion]=useState(0),[overrideKeys,setOverrideKeys]=useState<Partial<Record<ModelRole,{id:string;version:number}>>>({});
   const [conflict,setConflict]=useState(false),[catalogErrors,setCatalogErrors]=useState<string[]>([]);
   const [key,setKey]=useState(""),[defaultModel,setDefaultModel]=useState(""),[overrides,setOverrides]=useState<Partial<Record<ModelRole,string>>>({});
-  const [publicAPI,setPublicAPI]=useState(true),[apiKey,setAPIKey]=useState("");
+  const [publicAPI,setPublicAPI]=useState(true);
   const [endpoint,setEndpoint]=useState(""),[expectedStatus,setExpectedStatus]=useState("200"),[expectedText,setExpectedText]=useState("");
-  const [busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[error,setError]=useState<string>(),[notice,setNotice]=useState<string>(),[ack,setAck]=useState(false),[revoking,setRevoking]=useState<CredentialMetadata>(),[revokeOpen,setRevokeOpen]=useState(false);
+  const [busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[error,setError]=useState<string>(),[notice,setNotice]=useState<string>(),[ack,setAck]=useState(false);
   const initialized=useRef(false),startRequest=useRef<string|undefined>(undefined),formRevision=useRef(0),dirtyRef=useRef(false),conflictRef=useRef(false);
   const receive=useCallback((next:OnboardingSnapshot,force=false)=>{
     const decision=reconcileFormRevision({revision:formRevision.current,dirty:dirtyRef.current,initialized:initialized.current},next.draft?.revision??0,force);
@@ -26,7 +26,7 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
       setDefaultModel(c?.model??"");
       setOverrides(Object.fromEntries(Object.entries(d?.profile?.overrides??{}).map(([role,c])=>[role,c?.model])));
       setOverrideKeys(Object.fromEntries(Object.entries(d?.profile?.overrides??{}).map(([role,c])=>[role,c?{id:c.credentialId,version:c.credentialVersion}:undefined])));
-      setPublicAPI(d?.publicAPI??true);setAPIKey(d?.apiCredential?.id??"");setEndpoint(d?.endpoint??run.target?.url??"");
+      setPublicAPI(d?.publicAPI??true);setEndpoint(d?.endpoint??run.target?.url??"");
       setExpectedStatus(String(d?.expectedStatus??200));setExpectedText(d?.expectedText??"");
     }else if(decision==="conflict"){conflictRef.current=true;setConflict(true);}
     setData(next);
@@ -45,7 +45,6 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
   const edit=()=>{dirtyRef.current=true;setDirty(true);setNotice(undefined);};
   const selectedKey=data?.credentials.find(c=>c.id===key);
   const modelCredentials=data?.credentials.filter(c=>c.purpose==="model"&&!c.revoked)??[];
-  const apiCredentials=data?.credentials.filter(c=>c.purpose==="api"&&c.targetId===run.target?.id&&c.audienceURL===run.target?.url&&!c.revoked)??[];
   const choice=(model:string,role?:ModelRole):ModelChoice=>{
     const inherited=role?overrideKeys[role]:undefined;
     if(inherited)return {model,credentialId:inherited.id,credentialVersion:inherited.version};
@@ -55,8 +54,7 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
   const saveDraft=async()=>{
     if(conflictRef.current)throw new Error("Setup changed in another tab. Reload the saved setup before saving or testing.");
     const profile:ModelProfile|undefined=defaultModel&&selectedKey?{default:choice(defaultModel),overrides:Object.fromEntries(Object.entries(overrides).filter(([,id])=>!!id).map(([role,id])=>[role,choice(id!,role as ModelRole)]))}:undefined;
-    const selectedAPI=apiCredentials.find(c=>c.id===apiKey);
-    const draft={publicAPI,...(profile?{profile}:{}),...(!publicAPI&&selectedAPI?{apiCredential:{id:selectedAPI.id,version:selectedAPI.version}}:{}),
+    const draft={publicAPI,...(profile?{profile}:{}),
       ...(!publicAPI?{endpoint,expectedStatus:Number(expectedStatus),...(expectedText?{expectedText}:{})}:{})};
     const saved=await action<SetupDraft>("setup.save",{runId:run.id,revision:formRevision.current,draft});
     formRevision.current=saved.revision;dirtyRef.current=false;setDirty(false);setData(old=>old?{...old,draft:saved}:old);return {saved,profile};
@@ -86,7 +84,7 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
     <DiscoveryProgress jobs={discoveries} settled={data?.readiness?.discoverySettled===true} failed={failed} refreshing={busy} onRefresh={()=>void perform(async()=>{await refresh();})}>
       {failed&&<Checkbox checked={ack} onCheckedChange={setAck} label="I understand discovery was incomplete. Continue with that coverage gap once execution is safely settled."/>}
     </DiscoveryProgress>
-    {conflict&&<div className="onboarding-error" role="alert"><p>Setup changed in another tab. Your edits have not been saved.</p><Button variant="secondary" disabled={busy} onClick={()=>void perform(async()=>{receive(await snapshot(run.id),true);setError(undefined);})}>Reload saved setup</Button></div>}{error&&!revokeOpen&&<Banner variant="error" role="alert" description={error}/>}{notice&&<Banner variant="secondary" role="status" description={notice}/>}
+    {conflict&&<div className="onboarding-error" role="alert"><p>Setup changed in another tab. Your edits have not been saved.</p><Button variant="secondary" disabled={busy} onClick={()=>void perform(async()=>{receive(await snapshot(run.id),true);setError(undefined);})}>Reload saved setup</Button></div>}{error&&<Banner variant="error" role="alert" description={error}/>}{notice&&<Banner variant="secondary" role="status" description={notice}/>}
     <div className="onboarding-grid">
       <section className="onboarding-card onboarding-form" aria-label="OpenCode models">
         <h2>OpenCode models</h2><p>Use an OpenCode Console or Go key with permission to request models. Your OpenCode plan, privacy settings and budgets apply.</p>
@@ -106,18 +104,14 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
         {run.target?.kind!=="api"?<p>{run.target?.access?.loginConfigured?"Agents can fill the website's login form with Cloudflare-held credentials. Each run starts a fresh login; its agents reuse that run’s private browser state.":"Add optional Cloudflare login references in the saved target's network and login settings. This run uses the target settings captured when it started."}</p>:<>
           <Select label="Access type" aria-label="API access type" required value={publicAPI?"public":"authenticated"} disabled={busy} onValueChange={value=>{setPublicAPI(value==="public");edit();}}><Select.Option value="public">Public API / unauthenticated coverage</Select.Option><Select.Option value="authenticated">Authenticated API</Select.Option></Select>
           {!publicAPI&&<>
-            {run.target.access?.apiConfigured?<Banner variant="secondary" description="This target uses its saved Cloudflare API credential binding. Test a protected endpoint below; key values stay in Cloudflare."/>:<>
-            <Select label="Saved API key" aria-label="Saved API key" value={apiKey||null} placeholder="Choose a saved API key" disabled={busy} onValueChange={value=>{setAPIKey(String(value??""));edit();}}>{apiCredentials.map(c=><Select.Option key={c.id} value={c.id}>{c.label}{c.missing?" · re-enter key":""}</Select.Option>)}</Select>
-            <Banner variant="secondary" description="For new credentials, configure Cloudflare API authentication in the saved target’s settings, then start a fresh run to use it. Existing saved keys remain available above."/>
-            <Button variant="ghost" disabled={busy||!apiKey} onClick={()=>{setRevoking(apiCredentials.find(c=>c.id===apiKey));setRevokeOpen(true);}}>Revoke selected API key</Button>
-            </>}
+            <Banner variant="secondary" description={run.target.access?.apiConfigured?"This target uses its saved Cloudflare API credential binding. Test a protected endpoint below; key values stay in Cloudflare.":"Configure Cloudflare API authentication in the saved target’s settings, then start a fresh run to use it."}/>
             <Input label="Protected read-only test endpoint" value={endpoint} onValueChange={value=>{setEndpoint(value);edit();}} disabled={busy}/>
             <Input label="Expected success status" value={expectedStatus} onValueChange={value=>{setExpectedStatus(value);edit();}} disabled={busy}/>
             <Input label="Response must contain (optional)" value={expectedText} onValueChange={value=>{setExpectedText(value);edit();}} disabled={busy}/>
             <p>The test compares an anonymous GET with an authenticated GET. A public 200 response alone does not prove the key works.</p>
-            <Button variant="secondary" disabled={busy||!apiKey&&!run.target.access?.apiConfigured||!endpoint} onClick={()=>void testAPI()}>Test protected API access</Button>
+            <Button variant="secondary" disabled={busy||!run.target.access?.apiConfigured||!endpoint} onClick={()=>void testAPI()}>Test protected API access</Button>
           </>}
-          <p>Saved keys are injected by the API request tool. Most stock scanners do not accept arbitrary authorization headers; reports must distinguish authenticated requests from unauthenticated scanner coverage.</p>
+          <p>Cloudflare-held keys are injected by the API request tool. Most stock scanners do not accept arbitrary authorization headers; reports must distinguish authenticated requests from unauthenticated scanner coverage.</p>
         </>}
         {run.target?.kind==="api"&&<DefinitionUpload targetId={run.target.id} version={data?.definition?.version??0} disabled={busy} onSaved={refresh}/>}
         <Button variant="secondary" disabled={busy||conflict||!dirty} onClick={()=>void perform(async()=>{await saveDraft();await refresh();setNotice("Setup saved.");})}>Save setup</Button>
@@ -125,7 +119,6 @@ export function RunSetup({run,jobs,onActivated}:{run:UIRun;jobs:UIJob[];onActiva
       </section>
     </div>
     <footer className="onboarding-card onboarding-row"><div><h2>Open your chat</h2><p>Chat uses OpenCode credits and pins this configuration. You can discuss your project and read supplied files while discovery runs. Assessment tools become available after discovery safely finishes.</p></div><Button variant="primary" disabled={busy||!ready} onClick={()=>void start()}>{busy?"Working…":"Open chat"}</Button></footer>
-    <Dialog.Root open={revokeOpen} onOpenChange={setRevokeOpen} onOpenChangeComplete={open=>{if(!open)setRevoking(undefined);}}><Dialog size="sm" className="grid gap-4"><Dialog.Title>Revoke saved credential</Dialog.Title><Dialog.Description>Stop future use of {revoking?.label??"this credential"} in every run using it. Already sent requests cannot be retracted.</Dialog.Description>{error&&<Banner variant="error" role="alert" description={error}/>}<div className="onboarding-row"><Button variant="secondary" disabled={busy} onClick={()=>setRevokeOpen(false)}>Keep credential</Button><Button variant="primary" disabled={busy} onClick={()=>void perform(async()=>{await action("credential.revoke",{id:revoking!.id,revision:revoking!.version});setRevokeOpen(false);edit();await refresh();})}>Revoke credential</Button></div></Dialog></Dialog.Root>
   </section>;
 }
 function ModelSelect({label,value,onChange,models,disabled,inherit=false}:{label:string;value:string;onChange:(value:string)=>void;models:OpenCodeModel[];disabled:boolean;inherit?:boolean}) {

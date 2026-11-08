@@ -12,15 +12,19 @@ issuer, audience and expiry with JOSE. Arbitrary bearer text does not replace
 that check. Browser mutations and WebSocket upgrades reject foreign origins.
 Admitted operators share the installation's work; this is not tenant isolation.
 
-The gateway's default public HTTP handler returns 404 and production configs
-disable workers.dev/previews. Toolbox capabilities are supplied through the
-ToolboxGateway service binding, with generation and operation-ownership checks.
-The app and gateway have model/tool secrets, not account-admin API credentials.
+New installations supply tool-pack capabilities through private native bindings
+with task ownership and bounded-profile checks. For retained shared-Kali
+installations, the gateway's default public HTTP handler returns 404 and
+production configs disable workers.dev/previews. Legacy toolbox capabilities
+use the ToolboxGateway service binding, with generation and operation-ownership
+checks. Runtime services have model/tool secrets, not account-admin API credentials.
 
 OpenCode keys belong in Cloudflare Worker Secrets (or supported Secrets Store
 bindings), entered through the first-run wizard or native Dashboard/CLI prompts.
-Optional BYOK provider keys stay in OpenCode. Target API credentials have a separate audience-bound
-storage/use path. Do not put credentials into prompts, Git or source config.
+Optional BYOK provider keys stay in OpenCode. Target API secret values also use
+native Worker Secrets or Secrets Store bindings. The application stores only
+nonsecret binding references, allowed audiences and connection-proof fingerprints;
+it has no API-key vault. Do not put credentials into prompts, Git or source config.
 
 ## Setup authorization
 

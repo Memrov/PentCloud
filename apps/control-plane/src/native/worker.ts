@@ -154,7 +154,7 @@ export default {
       const onboardingAction=path.match(/^\/onboarding\/([a-z]+(?:\.[a-z]+){1,2})$/);
       if(onboardingAction && request.method==="POST"){
         const input=await body(request,onboardingAction[1]==="metadata.import"?16*1024*1024:2300*1024);
-        if(onboardingAction[1]==="credential.save"&&input.purpose==="model")throw new Error("400: Manage OpenCode keys through Cloudflare secret bindings");
+        if(onboardingAction[1]!.startsWith("credential."))throw new Error("400: Manage credentials through Cloudflare secret bindings");
         return Response.json(await coordinator.onboardingAction(onboardingAction[1]!,input,identity),{headers:{"Cache-Control":"no-store"}});
       }
       const activation=path.match(/^\/runs\/([A-Za-z0-9._-]+)\/analysis$/);

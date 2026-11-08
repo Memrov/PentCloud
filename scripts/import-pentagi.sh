@@ -127,7 +127,7 @@ payload = {"roles": roles, "optional": optional}
 roles_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 PY
 
-mkdir -p "$repo_root/upstream/pentagi" "$repo_root/contracts" "$repo_root/internal/contracts/assets" "$repo_root/internal/prompts/assets"
+mkdir -p "$repo_root/upstream/pentagi" "$repo_root/contracts" "$repo_root/internal/contracts/assets"
 rm -rf "$repo_root/upstream/pentagi/prompts"
 cp -a "$stage/upstream/pentagi/prompts" "$repo_root/upstream/pentagi/prompts"
 cp "$stage/upstream/pentagi/manifest.json" "$repo_root/upstream/pentagi/manifest.json"
@@ -135,5 +135,3 @@ cp "$stage/contracts/pentagi-tools.json" "$repo_root/contracts/pentagi-tools.jso
 cp "$stage/contracts/pentagi-roles.json" "$repo_root/contracts/pentagi-roles.json"
 cp "$stage/contracts/pentagi-tools.json" "$repo_root/internal/contracts/assets/pentagi-tools.json"
 cp "$stage/contracts/pentagi-roles.json" "$repo_root/internal/contracts/assets/pentagi-roles.json"
-rm -rf "$repo_root/internal/prompts/assets"
-cp -a "$stage/upstream/pentagi/prompts" "$repo_root/internal/prompts/assets"

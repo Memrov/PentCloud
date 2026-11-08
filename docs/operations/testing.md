@@ -5,25 +5,25 @@ and [Wrangler test harness](https://developers.cloudflare.com/workers/testing/).
 They run local Workers and isolated state; deterministic substitutes represent
 external model/scanner services.
 
-Use Node 26.12.1 or a compatible later 26.x, Go 1.26.5 and Python 3.11+.
-Run `npm ci` after checkout or a lockfile change. The gates reuse dependencies
-and the installed Go compiler. Go checks the preserved prompt sources and generated
-Markdown defaults; it is not part of the deployed prompt renderer.
+Use Node 26.12.1 or a compatible later 26.x and Python 3.11+. The full gate also
+uses Go 1.26.5 to verify preserved import hashes and contract catalogs.
+Run `npm ci` after checkout or a lockfile change; gates reuse those dependencies.
+Native Markdown is loaded directly, without a Go prompt build or runtime renderer.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run check` | App types, prompt preservation and unit/native API checks |
+| `npm run check` | App types, native Markdown policy and unit/native API checks |
 | `npm run test:watch` | Watch unit tests |
 | `npm run test:workers:watch` | Watch native Worker tests |
 | `npm run verify` | App checks, Vite production build, compiled stack/map checks and Wrangler dry run |
 | `npm run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
-| `npm run verify:full` | Both Worker gates, Go specialist generation, auth, lifecycle, Git publication and recovery checks |
+| `npm run verify:full` | Both Worker gates, import/contract integrity, auth, lifecycle, Git publication and recovery checks |
 | `npm run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
-| `npm run test:browser` | Attachment/browser fixtures; requires installed Chrome |
+| `npm run test:browser` | Playwright UI fixtures; install Chromium with `npm exec -- playwright install chromium` |
 
 A focused test can be selected with, for example,
 `npm run test:unit -- test/materials-ui.test.ts`.
-Environment-gated browser cases are skipped unless explicitly enabled; a passing
+The unit gate does not run the separate Playwright browser suite. A passing
 local gate does not establish live human login, browser appearance, paid inference
 or scanner acceptance in a Cloudflare account.
 
@@ -60,29 +60,9 @@ for package downloads. A cache is not a stored test result. Use the generated
 installation configs and private deployment authorization; public pull requests
 must not receive production credentials.
 
-To deploy an existing installation from shared source, save its generated
-Wrangler JSON as `PENTCLOUD_DEPLOY_CONFIG`, a **secret build variable** on that
-Worker's Cloudflare Builds connection. Run
-`node scripts/configure-cloudflare-build.mjs app` (or `gateway`) before compiling.
-The helper applies installation metadata inside the ephemeral build checkout,
-checks the Worker identity and preserves the source's migrations and binding
-contracts. Installer entrypoint and asset paths are rebased to the build checkout;
-both shipped migration histories are accepted without rewriting migration tags.
-Required secret names are declared for generated types; their values stay bound.
-Keep actual API keys in bound Worker secrets; the JSON must contain
-configuration metadata only. Never upload the generated config or deployment
-logs as public CI artifacts. Vite builds the client and Worker together; deploy
-with `npm run deploy --workspace @pentagi-artifacts/control-plane`. That command
-builds and uses `dist/worker/wrangler.json`, the native generated config. Existing
-private build metadata with Wrangler minify/Text rules is normalized to the Vite
-source configuration without changing installation identity or migration history.
-If an existing native Builds connection still uses
-`node scripts/deploy-native-app.mjs`, change its deploy command to
-`npm run deploy --workspace @pentagi-artifacts/control-plane` before selecting
-this source revision. That npm command also works with the previous source
-revision. The customer/root connection continues to use `npm run build` and
-`npm run deploy`. These are configuration instructions; no existing connection
-is changed by the repository update.
+New customer installs use root `npm run build` and `npm run deploy`. Existing
+separate-Worker installations must retain their private configuration and
+historical migration tags; use the [dated upgrade instructions](legacy-migrations-2026-11-08.md#existing-separate-worker-builds).
 
 Protect `main` with passing GitHub checks; Cloudflare's push-triggered build does not wait for GitHub environment
 approvals.
@@ -93,9 +73,11 @@ The original PentAGI templates and their import/provenance hashes are preserved.
 Go template execution is retired for new settings and launches; reset historical
 roles to Markdown in settings before starting new work. Historical settings and
 already-rendered attempts retain their original bytes and digests.
-Regenerate the native Markdown defaults with `go run ./scripts/native-specialists`
-and check them with `go run ./scripts/native-specialists -check`.
-The full gate verifies deterministic generation and original prompt hashes.
+Edit the [canonical native Markdown](../../apps/control-plane/src/native/specialists/README.md)
+directly. Native launch tests cover both installed backend variants and the rules
+that remain active without a loaded skill. The full gate verifies original import
+hashes and contract catalogs. The [frozen adaptation record](../../upstream/pentagi/README.md)
+describes the retired generator baseline; it is not regenerated to match edits.
 
 ## Worker build output
 

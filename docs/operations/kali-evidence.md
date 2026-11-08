@@ -1,4 +1,8 @@
-# Kali files and durable evidence
+# Legacy Kali files and durable evidence
+
+This guide applies to retained shared-Kali installations. New installations use
+the native tool-pack backend described in [execution backends](../architecture.md#execution-backends-and-prompt-ownership).
+Its runtime ownership and advertised tools differ from this legacy file bridge.
 
 Kali-capable agents (coder, maintenance and pentester) use the existing private
 ToolboxGateway to move files between Computer Workspace and the unchanged stock
@@ -59,7 +63,7 @@ Unknown remote outcomes retain their existing ownership/reconciliation fence.
 Durable Coordinator recovery reads the exact persisted Attempt result without
 requiring an Artifacts push notification or completion acknowledgement.
 
-Saved API credentials continue through `pentcloud_api_request`, injected by the
+Native bound API secrets continue through `pentcloud_api_request`, injected by the
 Worker for the selected API audience with redirects disabled. No blanket secret
 forwarding to scanner headers, cookies or browser storage is added. The stock
 FFUF/SQLMap knobs exist, but their end-to-end credential/redirect/session behavior

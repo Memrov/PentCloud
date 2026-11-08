@@ -1,14 +1,8 @@
-import { afterAll,beforeAll,describe,expect,it } from "vitest";
-import { chromium,type Browser } from "playwright";
-import { expect as browserExpect } from "playwright/test";
-import {createServer,type ViteDevServer} from "vite";
-import {fileURLToPath} from "node:url";
-describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first setup in a real browser",()=>{
-  let server:ViteDevServer,browser:Browser,origin:string;
-  beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL("../",import.meta.url)),mode:"browser-fixture",server:{host:"127.0.0.1",port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!;browser=await chromium.launch({channel:"chrome",headless:true});},30000);
-  afterAll(async()=>{await browser?.close();await server?.close();});
-  for(const viewport of [{width:1440,height:1000},{width:390,height:844}])it('stops a setup-stage run without opening chat at '+viewport.width+'px',async()=>{
-    const context=await browser.newContext({viewport}),page=await context.newPage();
+import {test, expect, expect as browserExpect} from 'playwright/test';
+test.describe("target-first setup in a real browser",()=>{
+   for(const viewport of [{width:1440,height:1000},{width:390,height:844}])test('stops a setup-stage run without opening chat at '+viewport.width+'px',async({context,page,baseURL})=>{
+  const origin=baseURL!;
+    await page.setViewportSize(viewport);
     const target={id:'target-stop',kind:'website',name:'Stop fixture',url:'https://owned.example/',revision:1,archived:false};
     let run:any={id:'run-stop',phase:'setup',status:'waiting',target,baselineRepo:'fixture',inputCommit:'a'.repeat(40),maxDepth:4,maxJobs:48};
     let job:any={id:'discovery-stop',runId:run.id,role:'pentester',tool:'native_discovery',status:'created',revision:1};
@@ -29,7 +23,7 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first se
       if(path.endsWith('/events'))return route.fulfill({status:200,contentType:'text/event-stream',body:'event: end\ndata: {}\n\n'});
       return json({});
     });
-    try{
+
       await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(origin+'?run='+run.id+'&job='+job.id);
       const management=page;
       await browserExpect(page.getByRole('heading',{name:'OpenCode models',exact:true})).toBeVisible();
@@ -37,10 +31,11 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first se
       await browserExpect(management.getByRole('button',{name:'Stop run',exact:true})).toHaveCount(0);
       expect(run.phase).toBe('cancelled');expect(job.status).toBe('interrupted');
       expect(writes).toEqual(['/v1/ui/runs/run-stop/cancel']);
-    }finally{await context.close();}
-  },30000);
-  for(const viewport of [{width:1440,height:1000},{width:390,height:844}])it("saves and reuses a target, opens chat during discovery with Cloudflare secrets at "+viewport.width+"px",async()=>{
-    const context=await browser.newContext({viewport,reducedMotion:"reduce"}),page=await context.newPage();
+
+  });
+  for(const viewport of [{width:1440,height:1000},{width:390,height:844}])test("saves and reuses a target, opens chat during discovery with Cloudflare secrets at "+viewport.width+"px",async({context,page,baseURL})=>{
+  const origin=baseURL!;
+    await page.setViewportSize(viewport);await page.emulateMedia({reducedMotion:"reduce"});
     const pageErrors:string[]=[];
     page.on("pageerror",error=>pageErrors.push(error.message));
     page.on("console",message=>{if(message.type()==="error"&&!message.text().includes("Failed to load resource: net::ERR_FAILED"))pageErrors.push(message.text());});
@@ -76,7 +71,7 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first se
       if(path.endsWith("/events"))return route.fulfill({status:200,contentType:"text/event-stream",body:'event: snapshot\ndata: {"messages":[{"id":"fixture-assistant","type":"assistant","content":[{"type":"text","text":"We can discuss your project while discovery runs."}]}],"pending":[],"busy":false}\n\nevent: end\ndata: {}\n\n'});
       return json({});
     });
-    try{
+
       await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(origin);
       expect(new URL(page.url()).origin).toBe(new URL(origin).origin);expect(await page.title()).toContain("PentCloud");
       await browserExpect(page.locator("vite-error-overlay")).toHaveCount(0);
@@ -170,6 +165,6 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("target-first se
       await browserExpect(page.getByRole("button",{name:/My project.*owned.example/})).toBeVisible();
       await browserExpect(page.locator("vite-error-overlay")).toHaveCount(0);
       expect(pageErrors).toEqual([]);
-    }finally{await context.close();}
-  },30000);
+
+  });
 });

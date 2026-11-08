@@ -1106,12 +1106,13 @@ export class ProbeAttempt extends NativeAttempt {
       checks.blockEscape = await javascript(
         'import fs from "node:fs/promises"; export default async function() { console.log(await fs.readFile("/workspace/repo/.git/config", "utf8")); }',
       );
-      checks.memory = await javascript('import {call} from "ws:attempt"; export default async function() { return await call("search_code", {questions:["accepted memory"],lang:"typescript",message:"Read accepted memory"}); }');
+      checks.memory = await javascript('import {search_code} from "ws:tools"; export default async function() { const result = await search_code({questions:["accepted memory"],lang:"typescript",message:"Read accepted memory"}); if(result.isError || typeof result.text !== "string" || !result.details) throw Error("Missing native tool result"); return result.details; }');
+      checks.invalidArguments = await javascript('import {search_code} from "ws:tools"; export default async function() { return search_code("invalid", {}); }');
       checks.fileRead = await javascript(
-        'import {call} from "ws:attempt"; export default async function() { console.log(await call("file", {action:"read_file",path:"README.md",message:"probe"})); }',
+        'import {file} from "ws:tools"; export default async function() { console.log(await file({action:"read_file",path:"README.md",message:"probe"})); }',
       );
       checks.fileWrite = await javascript(
-        'import {call} from "ws:attempt"; export default async function() { console.log(await call("file", {action:"write_file",path:"README.md",content:"changed",message:"probe"})); }',
+        'import {file} from "ws:tools"; export default async function() { console.log(await file({action:"write_file",path:"README.md",content:"changed",message:"probe"})); }',
       );
     } else if (kind === "publish" || kind === "replay") {
       checks.terminal = await internal.publish({

@@ -39,7 +39,7 @@ assessment. Existing configured installations open the application directly;
 The root `wrangler.jsonc` is the new-customer deployment. It deploys **one Worker**
 containing the app, a private tool gateway through native
 [loopback bindings](https://developers.cloudflare.com/workers/runtime-apis/context/#exports),
-Durable Objects, Artifacts, a Workflow, Browser Run, Workers AI, Worker Loader and
+Durable Objects, Artifacts, Browser Run, Workers AI, Worker Loader and
 all eleven smaller tool Containers. New installs do not use Kali. Existing
 separate-Worker and legacy installations retain their private configurations.
 
@@ -47,9 +47,11 @@ separate-Worker and legacy installations retain their private configurations.
 do not deploy multiple Workers together, and subdirectory templates cannot import
 files outside that subdirectory. Deploying the whole repository as one Worker
 avoids both restrictions. Worker names selected by Builds determine the Artifacts
-namespace and Workflow name, keeping separate installations isolated.
-Native [Artifacts push triggers](https://developers.cloudflare.com/artifacts/guides/build-and-deploy-on-push/)
-connect that namespace to the results Workflow; the wizard needs no event-subscription code.
+namespace, keeping separate installations isolated. Coordinator validates accepted
+results and uses native Agents Lifecycle to recover persisted Attempt results.
+No results Workflow or Artifacts push subscription is needed. The source retains
+an explicit empty event-trigger list so native Wrangler reconciliation can remove
+the former result subscription; unrelated existing triggers must be preserved.
 
 The build fetches a checksum-pinned revision of
 [PentCloud-tools](https://github.com/Memrov/PentCloud-tools) and uses its existing
@@ -107,28 +109,15 @@ npx wrangler deploy --config apps/control-plane/dist-customer/worker/wrangler.js
 Source-only dry runs skip Container rollout; the actual deploy builds/publishes
 images through Wrangler. A dry run alone does not prove image provisioning.
 
-The real deployment button was exercised against the PR branch in the separate
-Cloudflare Test Account, using a private disposable customer repository and
-`button.heflare.app`. Native Workers Builds completed the build and deployment.
-The hosted wizard created an owner-email Access policy, saved native Secrets,
-prepared Artifacts storage and reached the fresh Coordinator SQLite database.
-All eleven tool images passed hosted startup, SDK/image-pin validation and
-shutdown checks. Desktop and mobile hosted captures showed all three setup checks
-complete with a dummy model key. Native Artifacts push events started the results
-Workflow and completed its Coordinator validation step for a synthetic unknown
-attempt, which was correctly ignored. A second Workers Build preserved the saved
-settings. Owner sign-in through Cloudflare SSO, all three wizard steps and
-**Open PentCloud** were exercised in Chrome through the existing `workers.dev`
-hostname, reaching the empty **Your targets** screen.
-
-A real model key, paid inference and a complete assessment are separate checks.
-The dummy key, setup tokens, temporary native Access service auth and runtime
-probes were removed after validation. Owner-only Access remains. A real OpenCode
-key is required before running models on the retained test installation.
-Production remains separate and this PR is not merged.
+Earlier hosted deployment evidence is retained in the
+[dated legacy migration notes](operations/legacy-migrations-2026-11-08.md#historical-deployment-validation).
+It includes the retired result Workflow and does not establish that the current
+source revision has passed live deployment, human login, paid inference or a
+complete assessment. Validate those separately when promoting a deployment.
 
 Use the copied repository's Workers Builds connection for updates. Preserve its
 configuration and secrets. Existing installations keep using their original
 build/deploy commands and private configuration; do not replace them with the new
-customer template. See [Cloudflare setup](cloudflare-setup.md) and
+customer template. Follow the [legacy upgrade instructions](operations/legacy-migrations-2026-11-08.md)
+when changing an existing install. See [Cloudflare setup](cloudflare-setup.md) and
 [operations](operations.md).

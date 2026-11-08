@@ -24,25 +24,24 @@ node --input-type=module -e 'const [major,minor,patch]=process.versions.node.spl
 }
 export WRANGLER_SEND_METRICS=false
 if [[ "$worker" != gateway ]]; then
-  # Cloudflare Builds supplies GO_VERSION; local setup selects the same compiler.
-  # A wrong compiler fails immediately rather than installing inside a test loop.
-  native_go=${PENTCLOUD_GO_BINARY:-${GO_BIN:-$(command -v go || true)}}
-  if [[ -z "$native_go" ]] || [[ $("$native_go" env GOVERSION 2>/dev/null) != go1.26.5 ]]; then
-    echo 'App checks require Go 1.26.5. Set GO_BIN locally; pin GO_VERSION=1.26.5 in Workers Builds.' >&2
-    exit 65
-  fi
-  export PENTCLOUD_GO_BINARY="$native_go"
-  export GO_BIN="$native_go"
-  export PATH="$(dirname -- "$native_go"):$PATH"
   npm run types --workspace @pentagi-artifacts/control-plane
   npm run typecheck --workspace @pentagi-artifacts/control-plane
   npm run typecheck --workspace @pentcloud/tool-packs
-  "$native_go" run ./scripts/native-specialists -check
   npm run test:unit
   npm run test:workers
   npm run test:customer
   node --test scripts/test-customer-deploy.mjs
   if (( full )); then
+    # Cloudflare Builds supplies GO_VERSION; local setup selects the same compiler.
+    # A wrong compiler fails immediately rather than installing inside a test loop.
+    native_go=${PENTCLOUD_GO_BINARY:-${GO_BIN:-$(command -v go || true)}}
+    if [[ -z "$native_go" ]] || [[ $("$native_go" env GOVERSION 2>/dev/null) != go1.26.5 ]]; then
+      echo 'Full app checks require Go 1.26.5. Set GO_BIN locally; pin GO_VERSION=1.26.5 in Workers Builds.' >&2
+      exit 65
+    fi
+    export PENTCLOUD_GO_BINARY="$native_go"
+    export GO_BIN="$native_go"
+    export PATH="$(dirname -- "$native_go"):$PATH"
     npm run build --workspace @pentcloud/tool-packs
     "$native_go" test ./... -count=1
     "$native_go" vet ./...

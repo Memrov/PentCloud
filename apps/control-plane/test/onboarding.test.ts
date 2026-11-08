@@ -72,31 +72,21 @@ describe('saved targets and credential readiness',()=>{
     await expect(store.verifyAPIProof('run-rotate',target)).resolves.toMatchObject({credentialFingerprint:expect.any(String)});
     setTargetSecret('rotated-untested-key');await expect(store.verifyAPIProof('run-rotate',target)).rejects.toThrow(/changed|test/i);
   });
-  it('refuses to persist OpenCode keys in application storage',()=>{
-    const {store,records}=fixture();
-    expect(()=>store.saveCredential({id:'model-key',purpose:'model',label:'OpenCode',value:'never-store-this'},null,'owner')).toThrow(/Cloudflare/);
-    expect([...records.keys()].some(key=>key.startsWith('onboarding:value:'))).toBe(false);
+  it('refuses legacy key references without sending a request',async()=>{
+    let requests=0;const {store,records}=fixture(async()=>{requests++;return new Response('private');});
+    const target=store.saveTarget({id:'legacy-api',kind:'api',name:'API',url:'https://example.com/v1/'},null,'owner');
+    records.set('onboarding:setup:legacy-run',{revision:1,publicAPI:false,apiCredential:{id:'legacy-key',version:1},endpoint:target.url+'me',expectedStatus:200,updatedBy:'legacy'});
+    records.set('onboarding:value:legacy-key:1','retired-key-value');
+    await expect(store.testAPI('legacy-run',target,'legacy-test','owner')).rejects.toThrow(/Cloudflare API binding/);
+    expect(requests).toBe(0);expect(()=>store.requireAPIProof('legacy-run',target)).toThrow(/Test API access/);
   });
-  it('stores keys write-only, versions replacement and invalidates revoked use',()=>{
-    const {store}=fixture();
-    store.saveTarget({id:'key-target',kind:'api',name:'API',url:'https://owned.example/'},null,'owner');
-    const c=store.saveCredential({id:'key-one',purpose:'api',targetId:'key-target',scheme:'bearer',header:'Authorization',label:'API',value:'secret-one'},null,'owner');
-    expect(JSON.stringify(store.credentials())).not.toContain('secret-one');
-    expect(store.resolveCredential(c.id,c.version,'api','key-target')).toBe('secret-one');
-    store.saveCredential({id:c.id,purpose:'api',targetId:'key-target',scheme:'bearer',header:'Authorization',label:'API',value:'secret-two'},c.version,'owner');
-    expect(store.resolveCredential(c.id,c.version,'api','key-target')).toBe('secret-one');
-    store.revokeCredential(c.id,2,'owner');
-    expect(()=>store.resolveCredential(c.id,1,'api','key-target')).toThrow(/revoked/);
-    expect(JSON.stringify(store.exportData())).not.toContain('secret-');
-  });
-  it('does not move an existing API credential to a target edited to a new audience',()=>{
-    const {store}=fixture();
-    const target=store.saveTarget({id:'target-one',kind:'api',name:'API',url:'https://owned.example/v1/'},null,'owner');
-    const key=store.saveCredential({id:'api-one',purpose:'api',label:'Test',value:'original-key',targetId:target.id,header:'Authorization',scheme:'bearer'},null,'owner');
-    const moved=store.saveTarget({...target,url:'https://other.example/v2/'},target.revision,'owner');
-    expect(()=>store.apiConfig(moved,{id:key.id,version:key.version})).toThrow(/audience/i);
-    expect(store.apiConfig(target,{id:key.id,version:key.version})).toMatchObject({targetURL:target.url});
-    expect(()=>store.saveCredential({id:key.id,purpose:'api',label:'Test',value:'replacement',targetId:target.id,header:'Authorization',scheme:'bearer'},key.version,'owner')).toThrow(/audience/i);
+  it('does not accept an anonymous success as proof of a Cloudflare API credential',async()=>{
+    const {store}=fixture(async()=>new Response('public',{status:200}));
+    const t=store.saveTarget({id:'public-api',kind:'api',name:'API',url:'https://example.com/v1/'},null,'owner');
+    const target=store.saveTargetAccess(t.id,t.revision,{headers:[],api:{url:t.url,binding:'PENTCLOUD_TARGET_API',header:'Authorization',scheme:'bearer'}},'owner');
+    store.saveDraft('run-public',{publicAPI:false,endpoint:t.url+'me',expectedStatus:200},0,'owner');
+    await expect(store.testAPI('run-public',target,'check-public','owner')).rejects.toThrow(/did not distinguish authenticated access/);
+    expect(()=>store.requireAPIProof('run-public',target)).toThrow(/Test API access/);
   });
   it('requires actual model tests, deduplicates proofs and expires them',async()=>{
     const {store,advance}=fixture();
@@ -138,17 +128,18 @@ describe('saved targets and credential readiness',()=>{
     expect(()=>store.requireTargetProof(target.id,target.revision+1)).toThrow(/verify/i);
   });
   it('exports metadata and targets with values excluded and imports keys as missing',()=>{
-    const {store}=fixture(); store.saveTarget({id:'target-one',kind:'api',name:'API',url:'example.com'},null,'owner');
-    store.saveCredential({id:'api-key',purpose:'api',label:'Test',value:'do-not-export',targetId:'target-one',header:'Authorization',scheme:'bearer'},null,'owner');
+    const {store,records}=fixture(); const target=store.saveTarget({id:'target-one',kind:'api',name:'API',url:'example.com'},null,'owner');
+    records.set('onboarding:credential:api-key',{id:'api-key',purpose:'api',label:'Historical key',targetId:target.id,audienceURL:target.url,header:'Authorization',scheme:'bearer',version:1,revoked:false});
+    records.set('onboarding:value:api-key:1','do-not-export');
     const data=store.exportData(); expect(JSON.stringify(data)).not.toContain('do-not-export');
     const other=fixture().store; other.importData(data,'owner');
     expect(other.targets()).toHaveLength(1);
-    expect(()=>other.resolveCredential('api-key',1,'api','target-one')).toThrow(/missing|re-enter/i);
+    expect(other.credentials().find(c=>c.id==='api-key')).toMatchObject({missing:true});
   });
   it('can import its own reusable-library export after an API target is deleted',()=>{
-    const {store}=fixture();
+    const {store,records}=fixture();
     const t=store.saveTarget({id:'target-one',kind:'api',name:'API',url:'owned.example'},null,'owner');
-    store.saveCredential({id:'old-key',purpose:'api',label:'Old key',value:'private-value',targetId:t.id,header:'Authorization',scheme:'bearer'},null,'owner');
+    records.set('onboarding:credential:old-key',{id:'old-key',purpose:'api',label:'Historical key',targetId:t.id,audienceURL:t.url,header:'Authorization',scheme:'bearer',version:1,revoked:false});
     store.lifecycleTarget(t.id,t.revision,'delete','owner');
     const exported=store.exportData();
     expect(exported.credentials).toHaveLength(0);

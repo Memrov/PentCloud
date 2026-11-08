@@ -1,45 +1,14 @@
-import { chromium } from 'playwright';
-import { expect } from 'playwright/test';
+import {test, expect} from 'playwright/test';
 import fs from 'node:fs/promises';
-import { spawn, execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import {join} from 'node:path';
 
 // Local UI contract smoke only. API/SSE fixtures never start a paid model or toolbox.
-const screenshotDir = process.env.PENTCLOUD_UI_SCREENSHOT_DIR ?? await fs.mkdtemp(join(tmpdir(), 'pentcloud-native-ui-'));
-await fs.mkdir(screenshotDir, { recursive: true });
-const port = await new Promise((resolve, reject) => {
-  const listener = createServer(); listener.once('error', reject);
-  listener.listen(0, '127.0.0.1', () => { const address = listener.address(); listener.close(() => resolve(address.port)); });
-});
-const origin = process.env.PENTCLOUD_UI_BASE_URL ?? `http://127.0.0.1:${port}`;
-if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(origin).hostname)) throw new Error('UI smoke requires a localhost URL');
-const appDirectory = fileURLToPath(new URL('../apps/control-plane', import.meta.url));
-const viteBinary = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
-const bundleDirectory = join(screenshotDir, 'bundle');
-if (!process.env.PENTCLOUD_UI_BASE_URL) {
-  const build = await promisify(execFile)(process.execPath, [viteBinary, 'build', '--mode', 'browser-fixture', '--outDir', bundleDirectory, '--emptyOutDir'], { cwd: appDirectory, maxBuffer: 8 * 1024 * 1024 });
-  await fs.writeFile(join(screenshotDir, 'build.log'), build.stdout + build.stderr);
-}
-const server = process.env.PENTCLOUD_UI_BASE_URL ? undefined : spawn(process.execPath, [viteBinary, 'preview', '--mode', 'browser-fixture', '--outDir', bundleDirectory, '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-  cwd: appDirectory, stdio: ['ignore', 'pipe', 'pipe'],
-});
-let serverOutput = '';
-server?.stdout.on('data', value => { serverOutput += value; });
-server?.stderr.on('data', value => { serverOutput += value; });
-try {
-  let available = false;
-  for (let attempt = 0; attempt < 100; attempt++) {
-    try { if ((await fetch(origin)).ok) { available = true; break; } } catch {}
-    if (server && server.exitCode !== null) break;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  if (!available) throw new Error(`Local UI server did not start: ${serverOutput}`);
-} catch (error) { server?.kill(); throw error; }
-
+test.use({viewport: {width: 1440, height: 1000}, reducedMotion: 'reduce'});
+test('native UI contracts across desktop and mobile', async ({page, baseURL}, testInfo) => {
+  test.setTimeout(120_000);
+  const origin=baseURL;
+  const screenshotDir=process.env.PENTCLOUD_UI_SCREENSHOT_DIR ?? testInfo.outputPath('evidence');
+  await fs.mkdir(screenshotDir,{recursive:true});
 const run = { id:'run-1',status:'running',baselineRepo:'native-fixture',inputCommit:'a'.repeat(40),maxDepth:4,maxJobs:32 };
 const jobs = [
   {id:'job-1',runId:run.id,role:'primary',tool:'primary',depth:0,status:'running',revision:2,model:'opencode-go:deepseek-v4-pro',task:'Inspect the authorized fixture',logicalThreadId:'job-1',attempt:1,nativeSession:true},
@@ -64,9 +33,6 @@ let recoveryConflictResponses=0;
 const sessionControls={session:'ses_root',canReply:true,forms:[{id:'frm_operator',sessionID:'ses_root',title:'Operator question',fields:[{key:'continue',title:'Continue?',type:'boolean',required:true},{key:'approach',title:'Approach',type:'string',options:[{value:'safe',label:'Safe choice'}],required:true,when:[{key:'continue',op:'eq',value:true}]}]}],permissions:[{id:'per_operator',sessionID:'ses_root',action:'fixture.read',resources:['exact-fixture-resource']}],usage:{stats:{steps:2,tokens:{input:1200,output:350,reasoning:20,cache:{read:0,write:0}},cost:0,tools:{mode:'summary',totals:{calls:1,succeeded:1,failed:0,unfinished:0}}},limits:null,limitsStatus:'not-connected'}};
 const operatorQuestion=sessionControls.forms[0], operatorPermission=sessionControls.permissions[0];
 const stockQuestion={id:'frm_native_custom',sessionID:'ses_root',title:'Native question choices',fields:[{key:'q0',type:'string',title:'Approach preference',description:'Which approach should continue?',options:[{value:'Focused',label:'Focused',description:'Keep the existing scope'},{value:'Broader',label:'Broader',description:'Include the optional section'}],custom:true},{key:'details',type:'string',title:'Focused details',when:[{key:'q0',op:'eq',value:'Focused'}]}]};
-let browser;
-try { browser = await chromium.launch({headless:true}); } catch (error) { server?.kill(); throw error; }
-const page=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
 const consoleErrors=[];
 const expectedConflictConsoleErrors=[];
 const externalRequests=[];
@@ -446,7 +412,9 @@ try{
  await fs.writeFile(join(screenshotDir, 'result.json'),JSON.stringify({url:origin,title:await page.title(),viewports:['1440x1000','390x844'],consoleErrors,expectedConflictConsoleErrors,externalRequests,screenshots:shots,requestCount:calls.length,stateEvidence,recoveryEvidence,recoveryRequests:recoveryCalls().map(call=>JSON.parse(call.body)),interactions:['native transcript and tool render','native conditional form reply','native permission allow once','recorded session usage','steer','interrupt','fresh revision','dashboard native phases','settings recovery stale CAS rejection without retry','unresolved scanner refusal','explicit coordinator and attempt recovery','settings save If-Match','selected State child survives delayed root-only REST','Kumo keyboard model selection and missing saved selection','exact edited and untouched prompt bytes','locked Kumo settings controls','shared theme persistence','mobile Kumo popup bounds','mobile navigation'],mobileWidth:width,layouts},null,2));
  console.log(JSON.stringify({passed:true,screenshots:shots,consoleErrors,expectedConflictConsoleErrors,externalRequests,stateEvidence,recoveryEvidence,requests:calls.length}));
 }catch(error){
- await fs.writeFile(join(screenshotDir,'failure.json'),JSON.stringify({url:page.url(),consoleErrors,expectedConflictConsoleErrors,externalRequests,stateEvidence,recoveryEvidence,recoveryRequests:recoveryCalls().map(call=>JSON.parse(call.body)),layouts,serverOutput,error:String(error),snapshot:await page.locator('body').ariaSnapshot()},null,2));
+ await fs.writeFile(join(screenshotDir,'failure.json'),JSON.stringify({url:page.url(),consoleErrors,expectedConflictConsoleErrors,externalRequests,stateEvidence,recoveryEvidence,recoveryRequests:recoveryCalls().map(call=>JSON.parse(call.body)),layouts,error:String(error),snapshot:await page.locator('body').ariaSnapshot()},null,2));
  await page.screenshot({path:join(screenshotDir,'failure.png')}).catch(()=>{});
  throw error;
-}finally{await browser.close();server?.kill();}
+}
+
+});

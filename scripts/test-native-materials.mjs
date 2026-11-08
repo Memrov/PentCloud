@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import {fileURLToPath} from "node:url";
-import {withNativeTestHarness} from "./lib/native-test-harness.mjs";
+import {withNativeTestHarness, rpcResult} from "./lib/native-test-harness.mjs";
 const root=fileURLToPath(new URL("../apps/control-plane",import.meta.url));
 for(const mode of ["advanced-head","initial","active","projection","interrupted","capacity","metadata","rejected"]){
   await withNativeTestHarness({root,workers:[{configPath:"test/native-coordinator-probe/wrangler.jsonc"}]},async server=>{
-    const response=await server.fetch(`https://coordinator.test/materials-scenario?mode=${mode}`);
-    const result=await response.json();
-    assert.equal(response.status,200,JSON.stringify(result));
+    const {COORDINATOR}=await server.getWorker().getEnv();
+    const result=await rpcResult(COORDINATOR.getByName("global").materialScenario(mode));
     if(mode==="advanced-head")assert.equal(result.error,undefined,"an advanced accepted head must admit the attachment without reverting evidence");
     if(mode==="rejected"){
       assert.equal(result.rejected.status,"invalid_result");

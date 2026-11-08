@@ -90,9 +90,13 @@ are 1 TB for North America/Europe and 500 GB for other listed regions; published
 overage is $0.025–$0.05/GB by region. Workers and Durable Objects supporting a
 Container still have their own meters.
 
-### What the shared Kali toolbox costs while awake
+### Legacy shared-Kali usage while awake
 
-The current gateway requests **2 vCPU, 6 GiB RAM and 20 GB disk**. Memory and disk
+This example applies only to existing shared-Kali installations. New installs use
+eleven smaller tool-pack profiles with their own resource settings; apply the
+Container meters above to the profiles actually running.
+
+The legacy gateway requests **2 vCPU, 6 GiB RAM and 20 GB disk**. Memory and disk
 are charged for provisioned resources while awake; CPU is charged for actual use.
 At published rates, before included allowances and other meters:
 
@@ -178,7 +182,6 @@ do not assume a service-account key inherits a personal Go subscription.
 | Target login / bound API credentials | Optional, engagement-specific | App Worker secrets or Secrets Store bindings named `PENTCLOUD_TARGET_*`; only names are saved on the target. Authenticator verification adds one seed binding. |
 | Bounty researcher API token | Optional, for imported HackerOne/Intigriti programs | Native app Worker secret binding; separate from target test-account credentials |
 | Verification email | Optional | Cloudflare Email Routing on an owned unused domain/subdomain, or an existing AgentMail inbox with a message-read key bound through Cloudflare Secrets Store. Preserve existing MX/mail services and the program’s registration alias. AgentMail charges/retention are separate. |
-| Legacy target API test credentials | Optional | Existing audience-bound application credential flow remains supported |
 
 Use [Cloudflare setup](cloudflare-setup.md#add-the-opencode-key-in-cloudflare)
 for exact Dashboard and terminal steps. One bound workspace key can serve all
@@ -189,8 +192,9 @@ included. [Target setup and network limitations](operations/onboarding.md#bounty
 
 ## Source verification and setup status
 
-Local source checks need Node **26.12.1 or compatible later 26.x**, npm, Git,
-Bash and Go **1.26.5**. Python **3.11+** is used by integration assertions.
+Local application checks need Node **26.12.1 or compatible later 26.x**, npm, Git
+and Bash. Full source checks also need Go **1.26.5** for the CLI and preserved
+import/contract checks. Python **3.11+** is used by integration assertions.
 Cloudflare Workers Builds owns application build and deployment execution.
 The previous CLI installer is removed; the browser setup wizard is available at `/setup`.
 See [deployment status](deployment.md) before attempting a new installation.
