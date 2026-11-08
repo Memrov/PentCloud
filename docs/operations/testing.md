@@ -12,7 +12,10 @@ Native Markdown is loaded directly, without a Go prompt build or runtime rendere
 
 | Command | Purpose |
 | --- | --- |
-| `npm run check` | App types, native Markdown policy and unit/native API checks |
+| `npm run check` | Formatting, lint, app types, native Markdown policy and unit/native API checks |
+| `npm run format` | Format code with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) (80 columns, Cloudflare's style) |
+| `npm run format:check` | Fail if any code is not formatted |
+| `npm run lint` | Type-aware [oxlint](https://oxc.rs/docs/guide/usage/linter), including `no-floating-promises` |
 | `npm run test:watch` | Watch unit tests |
 | `npm run test:workers:watch` | Watch native Worker tests |
 | `npm run verify` | App checks, Vite production build, compiled stack/map checks and Wrangler dry run |
@@ -20,6 +23,15 @@ Native Markdown is loaded directly, without a Go prompt build or runtime rendere
 | `npm run verify:full` | Both Worker gates, import/contract integrity, auth, lifecycle, Git publication and recovery checks |
 | `npm run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
 | `npm run test:browser` | Playwright UI fixtures; install Chromium with `npm exec -- playwright install chromium` |
+
+Every verify gate runs `format:check` and `lint` first. Formatting covers
+TypeScript, JavaScript and CSS only; Markdown (including specialist prompts),
+JSON, YAML and generated Worker types are never reformatted. If
+`format:check` still fails right after `npm run format`, run `format` once
+more: oxfmt 0.74 settles a few files on its second pass. Lint rules listed
+as backlog in `.oxlintrc.json` warn instead of failing until they are fixed.
+To skip the one-time formatting commit in `git blame`, run
+`git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
 A focused test can be selected with, for example,
 `npm run test:unit -- test/materials-ui.test.ts`.

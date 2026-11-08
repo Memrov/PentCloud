@@ -23,6 +23,9 @@ node --input-type=module -e 'const [major,minor,patch]=process.versions.node.spl
   exit 65
 }
 export WRANGLER_SEND_METRICS=false
+# Formatting and type-aware lint cover the whole repository, so run them once.
+npm run format:check
+npm run lint
 if [[ "$worker" != gateway ]]; then
   npm run types --workspace @pentagi-artifacts/control-plane
   npm run typecheck --workspace @pentagi-artifacts/control-plane
