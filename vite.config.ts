@@ -1,15 +1,23 @@
 import { defineConfig } from "vite-plus";
+import { verificationTasks } from "./scripts/verification-tasks";
 import { workerProjects } from "./apps/control-plane/vite.workers.config";
 
 export default defineConfig({
   test: {
-    projects: ["apps/control-plane/vite.config.ts", ...workerProjects]
+    projects: [
+      "apps/control-plane/vite.config.ts",
+      "apps/control-plane/vite.contract.config.ts",
+      ...workerProjects
+    ]
   },
   run: {
     // Scripts run fresh. Only the static check task opts into caching.
     cache: { scripts: false, tasks: true },
     tasks: {
-      "check:static": { command: "vp check" }
+      "check:static": {
+        command: ["vp fmt --check .", "vp lint --max-warnings=313"]
+      },
+      ...verificationTasks
     }
   },
   staged: {
@@ -39,12 +47,27 @@ export default defineConfig({
     ]
   },
   lint: {
-    plugins: ["react", "jsx-a11y", "typescript"],
+    plugins: ["react", "jsx-a11y", "typescript", "vitest"],
     categories: {
       correctness: "error"
     },
     rules: {
       "no-unused-expressions": "off",
+      "vitest/no-focused-tests": "error",
+      "vitest/expect-expect": [
+        "error",
+        {
+          assertFunctionNames: ["expect", "assert", "assert.*", "assertCase"]
+        }
+      ],
+      "vitest/no-identical-title": "error",
+      "vitest/valid-expect": ["error", { maxArgs: 2 }],
+      "vitest/require-to-throw-message": "warn",
+      // Typed mock implementations infer their signatures; parameterized cases
+      // intentionally branch on their explicit input matrix.
+      "vitest/require-mock-type-parameters": "off",
+      "vitest/no-conditional-expect": "off",
+      complexity: ["warn", { max: 50 }],
       "typescript/no-deprecated": "error",
       "no-this-alias": "off",
       "react-hooks/exhaustive-deps": "warn",

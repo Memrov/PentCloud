@@ -256,3 +256,68 @@ export async function liveSessionResponse(
     throw error;
   }
 }
+
+/** Replay settled history without opening a live model host or following new work. */
+export function historySessionResponse(
+  session: Pick<OpenCodeSession, "log">,
+  options: {
+    cursor: number;
+    snapshot: unknown;
+    abort: AbortController;
+    safe(value: unknown): unknown;
+    isPurged(): Promise<boolean>;
+    onClose(): void;
+    waitUntil(work: Promise<void>): void;
+    error(error: unknown): string;
+  }
+): Response {
+  const { cursor, snapshot, abort } = options;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start: (controller) => {
+      if (snapshot)
+        controller.enqueue(
+          encoder.encode(
+            `event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`
+          )
+        );
+      const pump = async () => {
+        try {
+          for await (const event of session.log({
+            after: cursor,
+            follow: false,
+            signal: abort.signal
+          })) {
+            if (abort.signal.aborted || (await options.isPurged())) break;
+            if (event.type === "log.synced") continue;
+            controller.enqueue(
+              encoder.encode(
+                `id: ${event.durable.seq}\nevent: session\ndata: ${JSON.stringify(options.safe(event))}\n\n`
+              )
+            );
+          }
+          if (!abort.signal.aborted)
+            controller.enqueue(encoder.encode("event: end\ndata: {}\n\n"));
+          controller.close();
+        } catch (error) {
+          if (!abort.signal.aborted)
+            controller.error(new Error(options.error(error)));
+        } finally {
+          options.onClose();
+        }
+      };
+      options.waitUntil(pump());
+    },
+    cancel: () => {
+      options.onClose();
+      abort.abort();
+    }
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no"
+    }
+  });
+}

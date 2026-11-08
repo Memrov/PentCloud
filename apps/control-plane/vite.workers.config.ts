@@ -5,7 +5,8 @@ import { defineConfig } from "vite-plus";
 export const workerProjects = [
   "test/runtime/vite.config.ts",
   "test/native-session-recovery-probe/vite.config.ts",
-  "test/native-attempt-probe/vite.config.ts"
+  "test/native-attempt-probe/vite.config.ts",
+  "test/native-coordinator-probe/vite.config.ts"
 ].map((path) => fileURLToPath(new URL(path, import.meta.url)));
 
 export default defineConfig({

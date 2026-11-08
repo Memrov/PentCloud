@@ -19,7 +19,7 @@
     "qa:ui": "node scripts/browser-run-qa.mjs",
     "qa:ui:interactive": "node scripts/browser-run-interactive-qa.mjs",
     "test:gateway": "npm test --workspace @pentagi-artifacts/aws-toolbox-control",
-    "test:integration": "node apps/control-plane/test/native-coordinator-probe/run.mjs && node scripts/test-native-materials.mjs && node scripts/test-native-evidence.mjs && node scripts/test-native-attempt-runtime.mjs",
+    "test:integration": "node apps/control-plane/test/native-coordinator-probe/state.mjs && node scripts/test-native-attempt-runtime.mjs",
     "check": "bash scripts/native-cloudflare-verify.sh --check",
     "format": "vp fmt --write .",
     "format:check": "vp fmt --check .",

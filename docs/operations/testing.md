@@ -25,19 +25,19 @@ Native Markdown is loaded directly, without a Go prompt build or runtime rendere
 | Command | Purpose |
 | --- | --- |
 | `vp check` | Formatting, type-aware lint, and TypeScript checks |
-| `vp run check:static` | Cached static checks with automatic input tracking |
+| `vp run check:static` | Cached native format/type-aware lint checks and warning ceiling |
 | `vp run check` | Static checks, generated type freshness, unit, Workers and customer checks |
 | `vp fmt` / `vp fmt --check` | Format code or check formatting (80 columns, Cloudflare's style) |
 | `vp lint` | Type-aware lint and type checks, including `no-floating-promises` |
-| `vp test` | All unit and Workers runtime projects |
+| `vp test` | All unit, contract and Workers runtime projects |
 | `vp run test:watch` | Watch unit tests |
-| `vp run test:workers` | Router/API, question recovery and migrated attempt probes |
+| `vp run test:workers` | Router/API, question recovery, coordinator/materials and attempt scenarios |
 | `vp run test:workers:watch` | Watch native Worker tests |
 | `vp run test:customer` | Customer Worker runtime checks |
 | `vp run verify` | App checks, production build, compiled stack/map checks and Wrangler dry run |
 | `vp run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
 | `vp run verify:full` | Both Worker gates, import/contract integrity, auth, lifecycle, Git publication and recovery checks |
-| `vp run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
+| `vp run test:integration` | Real HTTP/model/Explorer and Agent WebSocket smoke tests |
 | `vp run test:browser` | Playwright UI fixtures; install Chromium with `vp exec playwright install chromium` |
 
 Every verify gate runs the shared static check task first. Formatting covers
@@ -46,7 +46,17 @@ JSON, YAML and generated Worker types are excluded. Lint rules listed as
 backlog in the root `vite.config.ts` warn instead of failing until fixed.
 Type-aware lint and full type checking are enabled in that same config.
 
-Only `check:static` opts into task caching. Runtime/integration/browser tests,
+Only `check:static` opts into task caching. It runs the same native formatter and
+lint/type checker as `vp check`, plus the warning ceiling in `vite.config.ts`.
+New focused/duplicate tests and invalid assertions fail lint. Broad throwing
+assertions and complex functions warn while the backlog is reduced; lower the
+ceiling when fixing findings, rather than increasing it to admit a regression.
+
+`gate:*` tasks in `scripts/verification-tasks.ts` declare prerequisites, run
+independent work concurrently, and explicitly disable caching for runtime,
+transport, browser, build and deployment gates. The npm/Bash entry points select
+these native graphs; build/deploy/browser scripts retain direct CLI commands for
+flag compatibility. Runtime/integration/browser tests,
 verification scripts and deployment run fresh by default. Do not enable
 `--cache` for those commands: replayed logs are not fresh recovery evidence.
 The native pre-commit hook runs `vp staged`, using the root staged-file policy.
@@ -69,14 +79,29 @@ filesystem fixtures and external contracts.
 
 A focused test can be selected with, for example,
 `vp test --project unit test/materials-ui.test.ts`.
-Workers tests use separate `router`, `question-recovery` and `attempt` projects;
-select one with `vp test --project attempt`.
-The attempt project covers header redaction, legacy prompt compatibility,
-native model connection and successful execution with the pinned model.
-The remaining attempt scenarios still run through
-`node scripts/test-native-attempt-runtime.mjs` and `check.py`. Both runners use
-the same scripted HTTP services in `test/native-attempt-probe/fixture-services.ts`;
-when migrating a scenario, move its assertions rather than maintaining two copies.
+The `contracts` project runs the Python-backed pinned-schema checks and remains
+part of `vp test` and every app gate. It is separate from the fast unit selection;
+run it alone with `vp test --project contracts`.
+Workers tests use separate `router`, `question-recovery`, `coordinator` and
+`attempt` projects; select one with `vp test --project attempt`.
+Coordinator and attempt projects each collect focused case modules through one
+runtime entry point. This avoids a sequential-file lifecycle failure in the
+installed Cloudflare plugin. Coordinator cases reset durable storage between
+tests; attempt cases use unique objects and reset at suite boundaries. Crash
+cases retain persisted storage across `ctx.abort()` and reacquire stubs.
+List these imported cases with
+`vp test list --project attempt --no-static-parse` or the `coordinator` project;
+Vitest's default static listing only inspects their entry module.
+The coordinator deadman case intentionally observes real work beyond 30 seconds.
+The seven-way execution cases retain the cross-object Git/SQLite isolation check.
+Use `vp test --project coordinator -t "material admission"` for the materials
+cases and `vp run test:browser --grep "native questions"` for focused browser
+feedback. Vite Task forwards arguments directly after the task name.
+
+The integration gate keeps actual HTTP/model/Explorer and Agent WebSocket
+transport smoke tests. Scenario assertions run in Vitest rather than Python or
+one fresh Wrangler harness per case. Both runtime and HTTP fixtures reuse the
+scripted services in `test/native-attempt-probe/fixture-services.ts`.
 The unit gate does not run the separate Playwright browser suite. A passing
 local gate does not establish live human login, browser appearance, paid inference
 or scanner acceptance in a Cloudflare account.

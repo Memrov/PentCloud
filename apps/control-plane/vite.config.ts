@@ -9,7 +9,8 @@ export default defineConfig(({ mode }) => ({
     name: "unit",
     pool: "threads",
     isolate: true,
-    include: ["test/**/*.test.ts"]
+    include: ["test/**/*.test.ts"],
+    exclude: ["test/native-contract-drift.test.ts"]
   },
   plugins:
     mode === "test"

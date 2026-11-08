@@ -1,8 +1,5 @@
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { LogPanel } from "../src/ui/components/log-panel";
 import { sessionLogEntries } from "../src/ui/dashboard/agent-log";
 import type { ChatMessage } from "../src/ui/presentation";
 
@@ -77,34 +74,5 @@ describe("agent log panel", () => {
     ]);
     expect(row?.data?.length).toBe(601);
     expect(row?.data?.endsWith("…")).toBe(true);
-  });
-
-  it("renders rows as a labelled log with history and live timestamps", () => {
-    const html = renderToStaticMarkup(
-      createElement(LogPanel, {
-        title: "Live output",
-        logs: [
-          { id: "1", direction: "out", type: "terminal", data: "ls" },
-          {
-            id: "2",
-            direction: "error",
-            type: "terminal failed",
-            data: "denied",
-            timestamp: Date.UTC(2026, 0, 1)
-          }
-        ],
-        onClear: () => undefined
-      })
-    );
-    expect(html).toContain('role="log"');
-    expect(html).toContain('aria-label="Live output"');
-    expect(html).toContain("history");
-    expect(html).toContain("log-entry-error");
-    expect(html).toContain("denied");
-    expect(
-      renderToStaticMarkup(
-        createElement(LogPanel, { logs: [], emptyText: "Nothing yet" })
-      )
-    ).toContain("Nothing yet");
   });
 });

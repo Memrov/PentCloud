@@ -1,18 +1,14 @@
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
-import {
-  withNativeTestHarness,
-  rpcResult
-} from "./lib/native-test-harness.mjs";
-const root = fileURLToPath(new URL("../apps/control-plane", import.meta.url));
-for (const mode of ["normal", "other-active", "clear-failure"]) {
-  await withNativeTestHarness(
-    {
-      root,
-      workers: [{ configPath: "test/native-coordinator-probe/wrangler.jsonc" }]
-    },
-    async (server) => {
-      const { COORDINATOR } = await server.getWorker().getEnv();
+import { env } from "cloudflare:workers";
+import { reset } from "cloudflare:test";
+import { beforeEach, describe, it } from "vite-plus/test";
+describe("run lifecycle", () => {
+  beforeEach(reset);
+  const COORDINATOR = env.COORDINATOR;
+  const rpcResult = async (value) => await value;
+  it.each(["normal", "other-active", "clear-failure"])(
+    "directDeleteScenario: %s",
+    async (mode) => {
       const result = await rpcResult(
         COORDINATOR.getByName("global").directDeleteScenario(mode)
       );
@@ -50,15 +46,9 @@ for (const mode of ["normal", "other-active", "clear-failure"]) {
       console.log(`native direct deletion ${mode}: passed`);
     }
   );
-}
-for (const mode of ["normal", "retry", "unresolved", "protected"]) {
-  await withNativeTestHarness(
-    {
-      root,
-      workers: [{ configPath: "test/native-coordinator-probe/wrangler.jsonc" }]
-    },
-    async (server) => {
-      const { COORDINATOR } = await server.getWorker().getEnv();
+  it.each(["normal", "retry", "unresolved", "protected"])(
+    "lifecycleScenario: %s",
+    async (mode) => {
       const result = await rpcResult(
         COORDINATOR.getByName("global").lifecycleScenario(mode)
       );
@@ -104,17 +94,10 @@ for (const mode of ["normal", "retry", "unresolved", "protected"]) {
       console.log(`native lifecycle ${mode}: passed`);
     }
   );
-}
-
-for (const mode of ["purge-race", "create-race", "create-race?mode=failure"]) {
-  await withNativeTestHarness(
-    {
-      root,
-      workers: [{ configPath: "test/native-coordinator-probe/wrangler.jsonc" }]
-    },
-    async (server) => {
-      const { COORDINATOR } = await server.getWorker().getEnv(),
-        coordinator = COORDINATOR.getByName("global");
+  it.each(["purge-race", "create-race", "create-race?mode=failure"])(
+    "purgeRaceScenario: %s",
+    async (mode) => {
+      const coordinator = COORDINATOR.getByName("global");
       const result = await rpcResult(
         mode === "purge-race"
           ? coordinator.purgeRaceScenario()
@@ -167,16 +150,9 @@ for (const mode of ["purge-race", "create-race", "create-race?mode=failure"]) {
       console.log(`native lifecycle ${mode}: passed`);
     }
   );
-}
-
-for (const mode of ["same", "objective", "uploads"]) {
-  await withNativeTestHarness(
-    {
-      root,
-      workers: [{ configPath: "test/native-coordinator-probe/wrangler.jsonc" }]
-    },
-    async (server) => {
-      const { COORDINATOR } = await server.getWorker().getEnv();
+  it.each(["same", "objective", "uploads"])(
+    "duplicateCreateScenario: %s",
+    async (mode) => {
       const result = await rpcResult(
         COORDINATOR.getByName("global").duplicateCreateScenario(mode)
       );
@@ -223,16 +199,8 @@ for (const mode of ["same", "objective", "uploads"]) {
       console.log(`native lifecycle duplicate-create ${mode}: passed`);
     }
   );
-}
-
-await withNativeTestHarness(
-  {
-    root,
-    workers: [{ configPath: "test/native-coordinator-probe/wrangler.jsonc" }]
-  },
-  async (server) => {
-    const { COORDINATOR } = await server.getWorker().getEnv(),
-      coordinator = COORDINATOR.getByName("global");
+  it("prepareTrashGate", async () => {
+    const coordinator = COORDINATOR.getByName("global");
     await rpcResult(coordinator.prepareTrashGate());
     const trash = rpcResult(coordinator.trashRun("run-0"));
     await rpcResult(coordinator.waitTrashGate());
@@ -266,16 +234,8 @@ await withNativeTestHarness(
       "interrupted"
     );
     console.log("native lifecycle blocked trash restore revision: passed");
-  }
-);
-
-await withNativeTestHarness(
-  {
-    root,
-    workers: [{ configPath: "test/native-coordinator-probe/wrangler.jsonc" }]
-  },
-  async (server) => {
-    const { COORDINATOR } = await server.getWorker().getEnv();
+  });
+  it("onboardingLifecycle", async () => {
     const result = await rpcResult(
       COORDINATOR.getByName("global").onboardingLifecycle()
     );
@@ -294,5 +254,5 @@ await withNativeTestHarness(
     assert.equal(result.after.quiesced, true);
     assert.deepEqual(result.rows, []);
     console.log("native lifecycle onboarding library/vault cleanup: passed");
-  }
-);
+  });
+});

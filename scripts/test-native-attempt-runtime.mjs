@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { withNativeTestHarness } from "./lib/native-test-harness.mjs";
 
@@ -9,29 +9,13 @@ await withNativeTestHarness(
     workers: [{ configPath: "test/native-attempt-probe/wrangler.jsonc" }]
   },
   async (server, url) => {
-    // Keep the remaining Python assertions against the real workerd fixture;
-    // migrated scenarios run under test:workers (see attempt.runtime.ts).
-    const child = spawn(
-      process.env.PYTHON ?? "python3",
-      [
-        fileURLToPath(
-          new URL(
-            "../apps/control-plane/test/native-attempt-probe/check.py",
-            import.meta.url
-          )
-        ),
-        url.href.replace(/\/$/, "")
-      ],
-      { stdio: "inherit" }
-    );
-    await new Promise((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code, signal) =>
-        code === 0
-          ? resolve()
-          : reject(new Error(`Attempt assertions failed (${signal ?? code})`))
-      );
-    });
+    // Keep one actual HTTP/model round trip; scenario assertions live in Vitest.
+    const model = await server.fetch(new URL("/native-pinned-model", url));
+    const value = await model.json();
+    assert.equal(model.status, 200, JSON.stringify(value));
+    assert.equal(value.result.status, "completed", JSON.stringify(value));
+    assert.equal(value.modelRequests, 1);
+    assert.equal(value.request.authenticated, true);
     // The Explorer remains the platform diagnostic API, without an observer Worker.
     const response = await fetch(
       new URL("/cdn-cgi/local/explorer/api/local/observability/query", url),

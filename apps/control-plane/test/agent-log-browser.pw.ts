@@ -175,6 +175,9 @@ test.describe("run steps live output", () => {
       await expect(page).toHaveURL(
         new RegExp(`/dashboard/runs/${run.id}/jobs/scanner$`)
       );
+      await expect(
+        page.locator(".run-step-node", { hasText: "Searcher 1" })
+      ).toHaveAttribute("aria-current", "true");
       const log = page.getByRole("log", { name: "Live output" });
       await expect(log).toBeVisible();
       await expect(log.locator(".log-entry")).toHaveCount(6);

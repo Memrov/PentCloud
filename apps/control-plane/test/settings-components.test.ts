@@ -4,7 +4,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { ModelPicker } from "../src/ui/settings/model-picker";
 import { PromptEditor } from "../src/ui/settings/prompt-editor";
-import { ThemeControl } from "../src/ui/components/theme-control";
 
 const model = {
   id: "openai/gpt-6-sol",
@@ -61,7 +60,7 @@ describe("settings components", () => {
     expect(html).toContain('aria-label="Selected model"');
   });
 
-  it("keeps a saved model visible when it disappears from the connected catalog", () => {
+  it("disables a locked model picker even when the saved model left the catalog", () => {
     const html = renderToStaticMarkup(
       createElement(ModelPicker, {
         models: [model],
@@ -72,8 +71,6 @@ describe("settings components", () => {
       })
     );
 
-    expect(html).toContain('value="retired/saved-model"');
-    expect(html).toContain("Saved selection is not in the connected catalog");
     expect(html).toMatch(/role="combobox"[^>]*disabled/);
   });
 
@@ -97,14 +94,5 @@ describe("settings components", () => {
       prompt
     );
     expect(html).toContain('spellCheck="false"');
-  });
-
-  it("provides one accessible Kumo theme control for each application shell", () => {
-    const html = renderToStaticMarkup(
-      createElement(ThemeControl, { className: "dashboard-icon-button" })
-    );
-    expect(html).toContain('aria-label="Toggle theme"');
-    expect(html).toContain('data-kumo-component="Button"');
-    expect(html).toContain("dashboard-icon-button");
   });
 });

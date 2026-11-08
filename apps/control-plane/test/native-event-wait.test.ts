@@ -194,6 +194,7 @@ describe("native operation completion", () => {
       },
       abort.signal
     );
+    // oxlint-disable-next-line vitest/valid-expect -- Attached before fake time/abort; awaited below.
     const checked = expect(work).rejects.toBe("cancelled before admission");
     abort.abort("cancelled before admission");
     opened(stream);
@@ -233,6 +234,7 @@ describe("native operation completion", () => {
       },
       abort.signal
     );
+    // oxlint-disable-next-line vitest/valid-expect -- Attached before fake time/abort; awaited below.
     const checked = expect(work).rejects.toBe("cancelled attempt");
     await admission;
     abort.abort("cancelled attempt");
@@ -262,6 +264,7 @@ describe("native operation completion", () => {
       async () => ({ ...receipt, accepted: false }),
       abort.signal
     );
+    // oxlint-disable-next-line vitest/valid-expect -- Attached before fake time/abort; awaited below.
     const checked = expect(work).rejects.toBe("cancelled duplicate");
     await nativeWait;
     abort.abort("cancelled duplicate");
