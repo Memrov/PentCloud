@@ -4,19 +4,30 @@ import { Plugin } from "@opencode/plugin";
 import { Lifecycle } from "agents/lifecycle";
 import { OpenCodeHarness } from "agents/harness/opencode";
 import { ManagedSession } from "../../src/native/managed-session";
+import { SCRIPTED_MODEL_URL } from "./scripted-model";
 
-interface ProbeEnv {
-  PROVIDER_URL: string;
-  ATTEMPTS: DurableObjectNamespace<QuestionRecovery>;
+/** Plain results, so tests do not depend on the SDK's deep form types. */
+export interface QuestionStarted {
+  formID: string;
+  customAnswerAllowed: boolean;
 }
+export interface QuestionRecovered {
+  staleRejected: boolean;
+  replacementFormID?: string;
+  status: string;
+  text: string;
+  pendingForms: number;
+  history: string;
+}
+
 interface ProbeReceipt {
   operationId: string;
   formID: string;
-  mode: string;
+  mode: "continue" | "reask";
 }
 
-/** Real native engine; inference is exclusively a loopback scripted test server. */
-export class QuestionRecovery extends DurableObject<ProbeEnv> {
+/** Real native engine; the test runner answers inference with a scripted model. */
+export class QuestionRecovery extends DurableObject<Cloudflare.Env> {
   readonly plugin = Plugin.define({
     id: "test.question-recovery",
     setup: async (ctx) => {
@@ -51,7 +62,7 @@ export class QuestionRecovery extends DurableObject<ProbeEnv> {
             fixture: {
               package: "@opencode/ai/providers/openai-compatible",
               settings: {
-                baseURL: this.env.PROVIDER_URL,
+                baseURL: SCRIPTED_MODEL_URL,
                 apiKey: "local-scripted-fixture"
               },
               models: {
@@ -90,11 +101,16 @@ export class QuestionRecovery extends DurableObject<ProbeEnv> {
       if (forms.length) return forms[0]!;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    throw new Error("Scripted question did not become pending");
+    throw new Error(
+      `Scripted question did not become pending: ${JSON.stringify({
+        pending: await this.harness.pending(),
+        history: await this.harness.session().history()
+      }).slice(0, 4000)}`
+    );
   }
-  async start(mode: string): Promise<object> {
-    if (mode !== "continue" && mode !== "reask")
-      throw new Error("Unknown probe mode");
+
+  /** Submit a turn and return once its question is pending. */
+  async start(mode: ProbeReceipt["mode"]): Promise<QuestionStarted> {
     await this.lifecycle.start();
     const receipt = await this.harness.submit(
       `RECOVERY_MODE=${mode}. Ask for the missing approach.`,
@@ -107,9 +123,12 @@ export class QuestionRecovery extends DurableObject<ProbeEnv> {
       formID: form.id,
       mode
     } satisfies ProbeReceipt);
-    return { form, history: await this.harness.session().history() };
+    const [field] = form.fields as Array<{ custom?: boolean }>;
+    return { formID: form.id, customAnswerAllowed: field?.custom === true };
   }
-  async afterEviction(): Promise<object> {
+
+  /** After a crash: reply to the lost form, then let the turn finish. */
+  async afterCrash(): Promise<QuestionRecovered> {
     const receipt = await this.ctx.storage.get<ProbeReceipt>("probe-receipt");
     if (!receipt) throw new Error("Missing probe evidence");
     await this.lifecycle.start();
@@ -137,41 +156,18 @@ export class QuestionRecovery extends DurableObject<ProbeEnv> {
     const history = await this.harness.session().history();
     await this.harness.dispose();
     await this.ctx.storage.deleteAlarm();
+    const { status, text } = answer as { status: string; text?: string };
     return {
-      oldFormID: receipt.formID,
       staleRejected,
-      replacement,
-      answer,
-      pending,
-      history
+      ...(replacement ? { replacementFormID: replacement.id } : {}),
+      status,
+      text: text ?? "",
+      pendingForms: pending.length,
+      history: JSON.stringify(history)
     };
-  }
-  async evict() {
-    this.ctx.abort();
   }
 }
 
 export default {
-  async fetch(request: Request, env: ProbeEnv) {
-    const url = new URL(request.url);
-    if (url.pathname === "/health") return new Response("ready");
-    const mode = url.searchParams.get("mode") ?? "continue";
-    const attempt = env.ATTEMPTS.getByName(mode);
-    try {
-      if (url.pathname === "/start")
-        return Response.json(await attempt.start(mode));
-      if (url.pathname === "/after")
-        return Response.json(await attempt.afterEviction());
-      if (url.pathname === "/evict") {
-        await attempt.evict();
-        return new Response("evicted");
-      }
-      return new Response("Not found", { status: 404 });
-    } catch (error) {
-      return Response.json(
-        { error: error instanceof Error ? error.stack : String(error) },
-        { status: 500 }
-      );
-    }
-  }
-};
+  fetch: () => new Response("Not found", { status: 404 })
+} satisfies ExportedHandler;
