@@ -1,0 +1,4 @@
+interface:
+  display_name: "PentCloud development"
+  short_description: "Docs-first development with native PentCloud tools"
+  default_prompt: "Use $pentcloud-development to make the smallest well-supported change in PentCloud and verify the affected behavior."
