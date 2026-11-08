@@ -17,6 +17,7 @@ Native Markdown is loaded directly, without a Go prompt build or runtime rendere
 | `npm run format:check` | Fail if any code is not formatted |
 | `npm run lint` | Type-aware [oxlint](https://oxc.rs/docs/guide/usage/linter), including `no-floating-promises` |
 | `npm run test:watch` | Watch unit tests |
+| `npm run test:workers` | Workers runtime tests: router/API, question recovery and migrated attempt probes |
 | `npm run test:workers:watch` | Watch native Worker tests |
 | `npm run verify` | App checks, Vite production build, compiled stack/map checks and Wrangler dry run |
 | `npm run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
@@ -43,6 +44,14 @@ compatibility date or flags, or upgrading Wrangler, regenerate with
 
 A focused test can be selected with, for example,
 `npm run test:unit -- test/materials-ui.test.ts`.
+Workers tests use separate `router`, `question-recovery` and `attempt` projects;
+select one with `npm run test:workers -- --project attempt`.
+The attempt project covers header redaction, legacy prompt compatibility,
+native model connection and successful execution with the pinned model.
+The remaining attempt scenarios still run through
+`node scripts/test-native-attempt-runtime.mjs` and `check.py`. Both runners use
+the same scripted HTTP services in `test/native-attempt-probe/fixture-services.ts`;
+when migrating a scenario, move its assertions rather than maintaining two copies.
 The unit gate does not run the separate Playwright browser suite. A passing
 local gate does not establish live human login, browser appearance, paid inference
 or scanner acceptance in a Cloudflare account.

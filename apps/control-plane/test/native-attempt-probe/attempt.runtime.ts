@@ -50,10 +50,18 @@ describe("native attempt runtime", () => {
     expect(result).toHaveProperty("empty", true);
   });
 
-  it("keeps the pinned model through native attempt execution", async () => {
-    expect(await attempt().probe("native-pinned-model", origin)).toMatchObject({
+  it("completes native attempt execution with the pinned model", async () => {
+    const result = await attempt().probe("native-pinned-model", origin);
+    expect(result).toMatchObject({
       model: "opencode:fixture-console",
-      modelRequests: 1
+      modelRequests: 1,
+      request: { model: "fixture-console", authenticated: true },
+      result: {
+        status: "completed",
+        model: "opencode:fixture-console",
+        arguments: { result: "OK" }
+      }
     });
+    expect(result).not.toHaveProperty("result.error");
   });
 });

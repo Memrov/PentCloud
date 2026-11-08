@@ -11,7 +11,7 @@ import { recordedWorkPage } from "../../src/native/recorded-work";
 import { redact } from "../../src/native/tool-policy";
 import { digest } from "../../src/native/domain";
 import { type PinnedModel } from "../../src/native/opencode-models";
-import { OpenCodeWorkerd } from "@opencode/sdk/workerd";
+import type { OpenCodeWorkerd } from "@opencode/sdk/workerd";
 import type {
   OpenCodeOperationResult,
   OpenCodeReceipt,
@@ -442,11 +442,39 @@ export class ProbeAttempt extends NativeAttempt {
       });
       return { ok: true, error: null, refs: {} };
     };
-    // No model is run by this fixture. Cancellation still exercises the durable runtime fence.
+    // Cancellation exercises the durable runtime fence; model transport is scripted.
     this.harness.abort = async () => true;
     const setup = this.plugin.setup;
     (this.plugin as { setup: typeof setup }).setup = async (context) => {
       await setup(context);
+      const pinnedModelOrigin = await this.ctx.storage.get<string>(
+        "fixture:pinnedModelOrigin"
+      );
+      if (pinnedModelOrigin) {
+        await context.session.hook("retry", (event) => {
+          event.decision = { retry: false };
+        });
+        await context.session.hook("http.request", async (event) => {
+          const body = (await event.request.clone().json()) as {
+            model: string;
+          };
+          await this.ctx.storage.put("fixture:pinnedModelRequest", {
+            model: body.model,
+            authenticated:
+              event.request.headers.get("authorization") ===
+              "Bearer fixture-model-key"
+          });
+          await this.ctx.storage.put(
+            "fixture:modelRequests",
+            ((await this.ctx.storage.get<number>("fixture:modelRequests")) ??
+              0) + 1
+          );
+          event.request = new Request(
+            pinnedModelOrigin + "/fake-provider",
+            event.request
+          );
+        });
+      }
       if (await this.ctx.storage.get("fixture:holdModel"))
         await context.session.hook("model.request", async (event) => {
           await this.ctx.storage.put("fixture:modelKinds", [
@@ -879,7 +907,15 @@ export class ProbeAttempt extends NativeAttempt {
           }
         })
       });
-      await this.ctx.storage.put("fixture:stopBeforeModel", true);
+      if (kind === "native-pinned-model") {
+        if (!origin) throw new Error("Scripted model origin is required");
+        // The adviser publishes a text answer through the real execution path.
+        input.role = "adviser";
+        input.context.enabledTools = supportedOptionalTools(input.role);
+        await this.ctx.storage.put("fixture:pinnedModelOrigin", origin);
+      } else {
+        await this.ctx.storage.put("fixture:stopBeforeModel", true);
+      }
     }
     if (kind === "finding-contract") input.findingsVersion = 1;
     if (kind === "header-redaction")
@@ -1927,7 +1963,10 @@ export class ProbeAttempt extends NativeAttempt {
       const result = await this.run(input);
       await this.harness.dispose();
       return {
+        result,
         model: result.model,
+        request:
+          (await this.ctx.storage.get("fixture:pinnedModelRequest")) ?? null,
         modelRequests:
           (await this.ctx.storage.get("fixture:modelRequests")) ?? 0
       };
@@ -3844,13 +3883,17 @@ export class ProbeModelTest extends OpenCodeConnectionTest {
   private origin = "";
   protected override create(options: OpenCodeWorkerd.CreateOptions) {
     const owner = this;
-    return OpenCodeWorkerd.create({
+    // Preserve the production handler's dynamic import of the embedded engine.
+    return super.create({
       ...options,
       plugins: [
         ...(options.plugins ?? []),
         Plugin.define({
           id: "fixture.http",
           async setup(ctx) {
+            await ctx.session.hook("retry", (event) => {
+              event.decision = { retry: false };
+            });
             await ctx.session.hook("http.request", async (event) => {
               const request = event.request,
                 body = (await request.clone().json()) as {
