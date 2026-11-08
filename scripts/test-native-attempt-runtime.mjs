@@ -9,7 +9,8 @@ await withNativeTestHarness(
     workers: [{ configPath: "test/native-attempt-probe/wrangler.jsonc" }]
   },
   async (server, url) => {
-    // Keep the complete Python assertion suite against the real workerd fixture.
+    // Keep the remaining Python assertions against the real workerd fixture;
+    // migrated scenarios run under test:workers (see attempt.runtime.ts).
     const child = spawn(
       process.env.PYTHON ?? "python3",
       [
