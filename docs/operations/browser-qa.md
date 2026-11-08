@@ -77,7 +77,7 @@ unrelated policies, tokens or browsers.
 
 ## Coverage limits and interactive testing
 
-Use the official Cloudflare Playwright runner for deployed interactions:
+Use Node Playwright connected to Cloudflare Browser Run for deployed interactions:
 
 ```sh
 npm run qa:ui:interactive -- \
@@ -87,26 +87,24 @@ npm run qa:ui:interactive -- \
   --run-id EXISTING_COMPLETED_RUN
 ```
 
-The root development dependency `@cloudflare/playwright` is pinned independently
-of PentCloud's agent runtime. The command creates a uniquely named disposable QA
-Worker with a native Browser binding, no Durable Object/database/storage, and no
-observability logging. Existing production Workers and Builds sources are not
-modified. Normal `cf` authorization acquires the task-owned browser; the Worker
-connects through its native binding. The session ID is bound to the QA Worker;
-callers cannot substitute an assessment's browser. Its inactivity fallback is
-three minutes; normal cleanup explicitly closes it and verifies native readback.
+Ordinary read-only review uses the installed `playwright` dependency in Node.
+Native `cf` authorization creates a task-owned Browser Run session, and Node
+attaches to its authenticated `/devtools/browser/{session_id}` CDP endpoint.
+Acquisition-time hostname guardrails restrict the session to the selected app;
+the journey separately enforces its exact-origin and read-only request rules.
+The inactivity fallback is three minutes. Normal cleanup closes the connection,
+deletes the owned session if it is still active, and verifies native readback.
 
-This runner requires an existing same-account wildcard Workers development
-Access application. It fails before deploying if that protection is absent.
-It adds an exact-token Service Auth policy there and to the installation's exact
-Access application, sharing one one-hour credential. It preserves existing rules
-and deletes only those policies/token. The standalone QA Worker also checks Cloudflare's trusted native
-`ctx.access` against the development application's audience. Only the
-configured installation can be reviewed. The account lease selects Workers
-Scripts Write, Access Apps/Policies Write and Access Service Tokens Write;
-it is revoked afterward. A supplied
-account token is not replaced or revoked. Native CLI Browser Run authorization
-is required separately, without exporting its cached OAuth grant.
+This mode needs the installation's exact-host Access application. It adds one
+exact-token Service Auth policy and one one-hour service credential, preserving
+existing rules and deleting only its own policy/token. Its account lease selects
+Browser Rendering Write, Access Apps/Policies Write and Access Service Tokens
+Write. It does not deploy a QA Worker, request Workers Scripts Write or need a
+wildcard Workers development Access application. The account lease is revoked
+afterward; a supplied account token is not replaced or revoked. Native CLI
+Browser Run authorization is required separately, without exporting its cached
+OAuth grant. The Worker-based `--target-access` fixture has different requirements
+described below.
 
 The runner captures desktop/phone navigation, target form drafts, Findings and
 report dialogs, settings roles, theme switching and optional existing agent
@@ -133,13 +131,15 @@ detail. The runner separately reports network failure/status metadata. A short
 frame sample is a laboratory observation of the current page, not INP, an active
 streaming acceptance test, Safari/device evidence or a full performance audit.
 
-Readiness uses an authenticated health response matching the unique task ID;
-the POST that runs the browser is never blindly retried. The QA Worker has a
-`QA_RUN_ID` binding checked before deletion. Its URL and nonsecret ownership IDs
-are recorded in the private report. SIGINT/SIGTERM unwind after bounded work;
-hard termination can still leave the Worker/resources. Reconcile only the
-recorded Worker name plus matching `QA_RUN_ID`, session ID and policy/token IDs.
-Never sweep other development Workers, policies or active browsers.
+Before UI assertions, the managed browser reads the protected app's `/health`
+identity. New Service Auth/edge startup failures and bounded retries remain in
+`accessReadiness` and network evidence. This reads configuration only and never
+polls Kali or calls a model. A failure to become ready blocks UI assertions.
+The private report records the owned session and policy/token IDs. SIGINT/SIGTERM
+and the bounded journey timeout close the CDP connection and unwind cleanup;
+a hard termination can still leave resources until reconciliation or expiry.
+Reconcile only the recorded session and policy/token IDs. Ordinary review has no
+QA Worker to delete. Never sweep unrelated policies, tokens or active browsers.
 
 Quick Actions do not prove clicks, typing, focus, scrolling, streaming smoothness,
 console/network health, performance traces, Safari or real-device compatibility.
@@ -167,23 +167,6 @@ Official references: [Access service tokens and strict authentication](https://d
 [Native Workers Playwright](https://developers.cloudflare.com/browser-run/playwright/),
 [Live View CDP links](https://developers.cloudflare.com/browser-run/features/live-view/).
 
-### QA Worker Access context
-
-The disposable QA Worker directly receives the Access-protected request and has
-no Static Assets router. It checks Cloudflare's trusted `ctx.access.aud` against
-the existing development Access application's audience; it does not parse a JWT
-or fetch signing certificates itself. A missing/wrong context is denied, and the
-runner verifies anonymous denial before calling the readonly QA entry point.
-Production PentCloud retains its JWT validation: its Static Assets router does
-not propagate `ctx.access`. See [native Access context and its limitations](https://developers.cloudflare.com/workers/configuration/cloudflare-access/#ctxaccess-limitations).
-The QA account lease does not request Access organization-read permission.
-
-Before UI assertions, the interactive runner waits for the actual managed browser
-to read the protected app's `/health` identity. New Service Auth/edge startup
-failures and bounded retries remain in `accessReadiness` and network evidence.
-This route reads configuration only and never polls Kali or calls a model.
-A failure to become ready blocks UI assertions rather than passing an error page.
-
 ## Target setup fixtures
 
 After building the UI, add `--target-access --fixture-origin https://YOUR-OWNED-TEST-TARGET`
@@ -194,6 +177,35 @@ production stores against a synthetic catalog and your reachable, disposable log
 fixture. Use only a task-owned test host with fake credentials. Responses travel
 through Chromium, not a synthetic response relay. It makes no model
 requests and starts no assessment or production scanner.
+
+Unlike ordinary CDP review, `--target-access` exercises production Worker-only
+Browser capabilities. It retains the pinned `@cloudflare/playwright` binding
+adapter and deploys a uniquely named disposable QA Worker, with no Durable
+Object/database/storage or observability logging. Existing production Workers
+and Builds sources are unchanged. The created browser session ID is bound to
+that Worker; callers cannot substitute an assessment's browser.
+
+This fixture requires an existing same-account wildcard Workers development
+Access application and fails before deployment if it is absent. Its account
+lease selects Workers Scripts Write, Access Apps/Policies Write and Access
+Service Tokens Write. It adds an exact-token Service Auth policy to the
+development app, sharing the ordinary app's one-hour credential. Native `cf`
+Browser Run authorization is still required separately. Both policies, the
+credential and any issued account lease are removed after the fixture.
+
+The standalone QA Worker directly receives the Access-protected request, without
+a Static Assets router. It checks trusted `ctx.access.aud` against the development
+app audience. Missing/wrong context is denied; the runner verifies anonymous
+denial and a `/health` response matching its task ID before the fixture POST.
+That POST is never blindly retried. Production PentCloud retains its JWT
+validation because its Static Assets router does not propagate `ctx.access`.
+See [native Access context and its limitations](https://developers.cloudflare.com/workers/configuration/cloudflare-access/#ctxaccess-limitations).
+
+Cleanup verifies the task's `QA_RUN_ID` binding before deleting its Worker and
+checks that the Worker is absent. If cleanup is interrupted, reconcile only the
+recorded Worker name with that ownership binding, browser session and policy/token
+IDs; do not sweep other development resources. The account lease does not request
+Access organization-read permission.
 
 The native Browser Run checks include login POST/redirect/cookie reuse, binary
 request/response bytes, popup requests, excluded redirects and the Agents SDK CDP

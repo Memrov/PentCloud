@@ -18,13 +18,19 @@ it('keeps forwarding setup behind Access and dispatches native email through RPC
  await worker.email({rawSize:raw.length,to:'codes+abc@auth.example',headers:new Headers({'Authentication-Results':'mx.cloudflare.net; dmarc=pass header.from=owned.example'}),raw:new Response(raw).body,setReject(){throw Error('Unexpected rejection');}} as never,{...bindings,PENTCLOUD_VERIFICATION_EMAIL:'codes@auth.example'} as never);
  expect(JSON.parse(await control().calls())).toMatchObject([{method:'receiveVerificationEmail',args:[{code:'384217',from:'login@owned.example',to:'codes+abc@auth.example'}]}]);
 });
-it("authenticates key writes and does not echo their value",async()=>{
-  const value={id:"key-one",purpose:"api",label:"API",value:"private-api-test-value",revision:null};
-  expect((await call("/onboarding/credential.save",value,false)).status).toBe(401);
+it.each([
+  ["credential.save",{id:"key-one",purpose:"api",label:"API",value:"private-api-test-value",revision:null}],
+  ["credential.save",{id:"model-key",purpose:"model",label:"OpenCode",value:"private-model-test-value",revision:null}],
+  ["credential.revoke",{id:"key-one",revision:1}],
+])("rejects obsolete %s actions before forwarding or storing their payload",async(action,value)=>{
+  expect((await call("/onboarding/"+action,value,false)).status).toBe(401);
   expect(JSON.parse(await control().calls())).toEqual([]);
-  const result=await call("/onboarding/credential.save",value);
-  expect(result.status).toBe(200);expect(await result.text()).not.toContain(value.value);
-  expect(JSON.parse(await control().calls())[0]).toMatchObject({method:"onboardingAction",args:["credential.save",value,"operator"]});
+  const response=await call("/onboarding/"+action,value);
+  expect(response.status).toBe(400);
+  const text=await response.text();
+  expect(text).toContain("Cloudflare secret bindings");
+  if("value" in value)expect(text).not.toContain(value.value);
+  expect(JSON.parse(await control().calls())).toEqual([]);
 });
 it("reads safe setup and dispatches revision-checked explicit analysis activation",async()=>{
   expect((await call("/onboarding")).status).toBe(200);
@@ -38,10 +44,6 @@ it("does not open a model session for discovery inspection or chat routes",async
     expect((await call("/jobs/discovery/"+suffix)).status).toBe(409);
 });
 
-it("refuses OpenCode key writes before sending the value to storage RPC",async()=>{
-  const response=await call("/onboarding/credential.save",{id:"model-key",purpose:"model",label:"OpenCode",value:"never-store-this",revision:null});
-  expect(response.status).toBe(400);expect(await response.text()).toContain("Cloudflare");expect(JSON.parse(await control().calls())).toEqual([]);
-});
 it("authenticates optional source actions and preserves revision/import identity at the RPC boundary",async()=>{
   const value={id:"target-one",revision:3,url:"https://github.com/owner/source",requestId:"import-one"};
   expect((await call("/onboarding/source.import",value,false)).status).toBe(401);

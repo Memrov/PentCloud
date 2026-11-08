@@ -53,6 +53,25 @@ describe("native specialist Markdown launch", () => {
     await expect(renderMarkdownLaunch("coder", {}, "")).rejects.toThrow("empty");
     await expect(renderMarkdownLaunch("coder", [] as unknown as Record<string, unknown>, "x")).rejects.toThrow("object");
   });
+
+  // These semantic checks belonged to the retired generator. They now guard
+  // the canonical Markdown independently of optional skill loading.
+  const rolePolicies = {
+    primary: ["calling `done` once", "PLANNING & REASONING PROTOCOL", "Task Boundaries", "COMPREHENSIVE results", "CUSTOMER INTERACTION PROTOCOL"],
+    adviser: ["Finish by returning the advisory response as text in English", "OPERATIONAL MODES", "ADVISORY COMMUNICATION STYLE", "KNOWLEDGE DISCOVERY PROTOCOL", "DATA INTERPRETATION"],
+    coder: ["calling `code_result` once", "KNOWLEDGE MANAGEMENT", "HISTORICAL CONTEXT RETRIEVAL", "ANONYMIZE", "usage examples"],
+    maintenance: ["calling `maintenance_result` once", "SOFTWARE INSTALLATION PROTOCOL", "dependency", "COMPLETION REQUIREMENTS"],
+    memorist: ["calling `memorist_result` once", "precise", "HISTORICAL CONTEXT RETRIEVAL", "GOOD queries", "BAD queries"],
+    pentester: ["calling `hack_result` once", "KNOWLEDGE MANAGEMENT", "ANONYMIZE", "exploitation details", "HISTORICAL CONTEXT RETRIEVAL"],
+    searcher: ["calling `search_result` once", "CORE CAPABILITIES", "OPERATIONAL PROTOCOLS", "SEARCH RESULT DELIVERY"],
+    reporter: ["calling `report_result` once", "EVALUATION METHODOLOGY", "REPORT FORMULATION CRITERIA", "CRITICAL EVALUATION PRINCIPLES", "12000 characters"],
+  } satisfies Record<keyof typeof specialistSources, string[]>;
+  it.each(Object.entries(rolePolicies))("retains %s completion, language and methodology in its default", (role, requirements) => {
+    const source = specialistSources[role as keyof typeof specialistSources];
+    expect(source).toContain("## LANGUAGE POLICY");
+    for (const requirement of requirements) expect(source).toContain(requirement);
+  });
+
   it.each(["tool-packs", "stock-kali"] as const)("keeps default roles safe and uses the selected %s instructions", async (toolBackend) => {
     const packages = toolBackend === "tool-packs";
     const skill = await pinToolSkill(packages);

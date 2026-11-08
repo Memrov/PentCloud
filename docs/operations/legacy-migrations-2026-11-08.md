@@ -4,6 +4,58 @@ Current new-install behavior is described in [deployment](../deployment.md) and
 [architecture](../architecture.md). This note applies to retained installations
 and records older validation evidence; it does not change deployed resources.
 
+## API-key vault retirement: check before upgrading
+
+This revision removes the application API-key vault's value-management and
+historical-version lookup paths, including the old save/revoke controls. It does
+not migrate or erase existing stored values. Target API authentication now uses
+native Worker Secrets or Secrets Store bindings. The zero-reference inventory
+in the [execution record](native-consolidation-2026-11-08.md#live-migration-evidence)
+covers only the known production and development installations, not copied
+customer deployments. There is no automatic credential migration in this release.
+
+Before updating an existing installation, use read-only operator access to its
+Coordinator storage to inventory **counts and nonsecret references only**:
+
+- Raw `onboarding:value:*` records, including every stored credential version.
+- Every run's `apiAccess`, setup draft's `apiCredential`, and saved target
+  default's `draft.apiCredential`, including retained and interrupted work.
+- The credential IDs/versions, target audiences and execution status needed to
+  explain those references. Never export secret values, full storage rows or
+  credential-bearing logs as migration evidence.
+
+**Do not upgrade while any raw value or legacy reference remains unresolved.**
+Keep the previous deployed revision available for its existing read/revocation
+and recovery behavior while completing these steps:
+
+1. Stop creating legacy saved keys. For future work, configure each target's API
+   binding, scheme, header and original allowed audience using the
+   [native secret setup](../cloudflare-setup.md#target-login-and-api-secrets).
+   Enter the credential through Cloudflare's private controls; do not extract
+   it from Coordinator storage into a migration report.
+2. Finish or explicitly stop and reconcile old executable runs on the previous
+   revision. Preserve their version-pinned credentials until their supported
+   use ends. Update reusable setup/default selections for future runs; do not
+   rewrite immutable run snapshots or silently redirect an old credential ID
+   to a new binding. If retained work must remain resumable, keep the previous
+   revision until a separately reviewed migration preserves that contract.
+3. Use the previous revision's credential revocation and supported lifecycle
+   cleanup after the dependent work is settled. Revocation must deny every old
+   version. Preserve accepted evidence and historical records; do not delete
+   run history merely to make an inventory empty. Unresolved retained references
+   continue to block this upgrade.
+4. Start a fresh run with the new target revision and repeat the explicit
+   protected-endpoint API check. Verify its audience and that authenticated
+   success differs from the anonymous response. Re-inventory the old storage
+   and references before promotion and record the nonsecret result.
+
+After upgrading, historical metadata remains readable, but an old run carrying
+`apiAccess` cannot resume authenticated execution through the removed vault.
+The runtime fails explicitly instead of sending an unauthenticated request.
+An empty export of credential values is not evidence that no live references
+remain. Native bindings and preserved Cloudflare configuration must survive
+the deployment.
+
 ## Shared-Kali compatibility
 
 New installations use eleven native tool packs. Existing shared-Kali installs
