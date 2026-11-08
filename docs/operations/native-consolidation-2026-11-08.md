@@ -88,9 +88,46 @@ The native router fixtures now verify that obsolete credential save/revoke
 requests remain authenticated, reject before forwarding, and never echo values.
 
 All eight regenerated light/dark PNG diagrams were inspected alongside their
-D2/SVG sources. Their EXIF metadata contains only the D2 renderer and version;
-the SVGs contain no external references. Automatic approval review still denied
-uploading the diagrams to the public repository because it requires explicit
-authorization for that public disclosure. The branch remains unpublished.
-The existing implementation bundle was instead copied privately to the owner's
-Mac for local validation, with SHA-256 and Git bundle verification before use.
+D2/SVG sources. Their EXIF metadata contained only the D2 renderer and version;
+the SVGs contain no scripts or external references. The final continuation
+removed those 57 metadata bytes from each PNG and verified that decoded pixel
+bytes are unchanged. This does not replace the required publication approval:
+automatic approval review denied uploading the diagrams to the public
+repository because it requires explicit authorization for that public
+disclosure. The branch remains unpublished. The implementation bundle was
+instead copied privately to the owner's Mac for local validation, with SHA-256
+and Git bundle verification before use.
+
+## Final continuation verification
+
+A fresh complete `npm run verify:full` finished with exit code 0 using Node
+26.12.1 and Go 1.26.5. It passed 442 unit tests, 48 Worker runtime tests, two
+customer tests, 74 Node checks across the scripted groups, the Go checks, and
+the complete Coordinator/material/evidence/attempt/question-recovery suites.
+The production Vite bundle, source-map checks, and Wrangler deployment dry runs
+passed. An earlier run stopped at a stale test expecting the removed credential
+save route to succeed; the corrected regression verifies authenticated
+rejection before forwarding and the complete suite now passes.
+
+The Mac's existing browser log was independently checked against its Playwright
+completion state: 45 cases passed and no failed test IDs remained. Git history
+places that run at `a6b8bec`; all browser source, fixtures, configuration and
+dependency inputs are unchanged through `0a981a3`. Its log SHA-256 is
+`21ec5c4e8a224c5e909378add43ddb4a433ae0192343bc159dd6f37ce02e1ccb`.
+The redundant continuation checkout and downloads were removed without touching
+the validated checkout, toolchain or evidence.
+
+A fresh read-only production Coordinator query returned the same 210 records,
+zero legacy raw secret records/references, and zero active receipts, pending
+publications, input preparations, purge intents or owned projects; it wrote
+zero rows. Production still serves the previously deployed runtime. The native
+Workers Builds connection already uses the current app deploy command and
+retains the optional legacy prompt-build step, so no connection change is
+needed for this release. Recheck live migration and admission state immediately
+before a future promotion.
+
+The live Node/CDP journey remains unverified because the native `cf` CLI/account
+connection is unavailable on the Mac. No live browser session or temporary
+account/Access credential was created in this continuation. Public branch
+publication, hosted CI, merge and deployment remain pending explicit disclosure
+authorization and their applicable release gates.
