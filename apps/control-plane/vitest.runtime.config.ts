@@ -6,7 +6,8 @@ export default defineConfig({
   test: {
     projects: [
       "test/runtime/vitest.config.ts",
-      "test/native-session-recovery-probe/vitest.config.ts"
+      "test/native-session-recovery-probe/vitest.config.ts",
+      "test/native-attempt-probe/vitest.config.ts"
     ]
   }
 });
