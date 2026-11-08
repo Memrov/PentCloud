@@ -24,18 +24,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
+      # Repository policy permits only Memrov/GitHub actions. Use the pinned
+      # project-local Vite+ CLI after the approved Node bootstrap.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          version-file: package.json
           node-version-file: .node-version
-          cache: true
-          run-install: |
-            args: ['--frozen-lockfile']
+          cache: npm
+      - run: npm ci
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: 1.26.5
           cache: false # Standard-library-only Go module, with no go.sum.
-      - run: vp run verify:full
+      - run: npm exec -- vp run verify:full
 
   browser:
     name: Browser fixtures
@@ -45,12 +45,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
+      # Repository policy permits only Memrov/GitHub actions. Use the pinned
+      # project-local Vite+ CLI after the approved Node bootstrap.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          version-file: package.json
           node-version-file: .node-version
-          cache: true
-          run-install: |
-            args: ['--frozen-lockfile']
-      - run: vp exec playwright install --with-deps chromium
-      - run: vp run test:browser
+          cache: npm
+      - run: npm ci
+      - run: npm exec -- vp exec playwright install --with-deps chromium
+      - run: npm exec -- vp run test:browser

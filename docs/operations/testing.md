@@ -91,8 +91,10 @@ Remote QA uses Cloudflare resources and can incur normal platform usage.
 ## Native Builds
 
 GitHub Actions runs the full local gate and isolated browser fixtures on pull
-requests and `main`, without Cloudflare or model credentials. The official CodeQL
-workflow scans GitHub Actions, Go, JavaScript/TypeScript and Python on pull
+requests and `main`, without Cloudflare or model credentials. Repository policy
+allows only Memrov/GitHub actions, so CI retains `actions/setup-node` and
+`npm ci`, then invokes the pinned local CLI with `npm exec -- vp ...`. The
+official CodeQL workflow scans GitHub Actions, Go, JavaScript/TypeScript and Python on pull
 requests (including Dependabot), on `main` pushes and weekly, using the
 security-extended query suite. Dependency review checks new dependencies, and
 Dependabot proposes updates for review. Keep
