@@ -1,0 +1,64 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Based on cloudflare/agents. Run with --type-aware (see `npm run lint`).
+  "plugins": ["react", "jsx-a11y", "typescript"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-unused-expressions": "off",
+    "typescript/no-deprecated": "error",
+    "no-this-alias": "off",
+    "react-hooks/exhaustive-deps": "warn",
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+
+    // Backlog: these rules already had findings when linting was introduced.
+    // They warn instead of failing CI until each is fixed or justified, then
+    // move back to "error".
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-base-to-string": "warn",
+    "typescript/restrict-template-expressions": "warn",
+    "typescript/unbound-method": "warn",
+    "typescript/no-redundant-type-constituents": "warn",
+    // Durable Object RPC stubs always return promises at runtime, but their
+    // types can look non-thenable to the checker, so awaiting them is flagged.
+    "typescript/await-thenable": "warn",
+    "react/refs": "warn",
+    "react/set-state-in-effect": "warn",
+    "react/purity": "warn",
+    "react/immutability": "warn",
+    "react/error-boundaries": "warn",
+    "react/no-children-prop": "warn",
+    "jsx-a11y/prefer-tag-over-role": "warn",
+    "jsx-a11y/no-noninteractive-element-interactions": "warn",
+    "jsx-a11y/control-has-associated-label": "warn",
+    "no-control-regex": "warn",
+    "no-useless-escape": "warn",
+    "no-unsafe-finally": "warn",
+    "no-unsafe-optional-chaining": "warn",
+    "require-yield": "warn"
+  },
+  "overrides": [
+    {
+      // node:test registers tests with un-awaited test(...) calls by design.
+      "files": ["**/*.test.mjs", "scripts/test-*.mjs", "**/*.node.mjs"],
+      "rules": {
+        "typescript/no-floating-promises": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "**/worker-configuration.d.ts",
+    "**/dist/**",
+    "**/dist-customer/**",
+    ".pentcloud-tools/**",
+    "upstream/**"
+  ]
+}
