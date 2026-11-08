@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { verificationTasks } from "./verification-tasks.ts";
 const read = async (path) =>
   JSON.parse(await readFile(new URL("../" + path, import.meta.url), "utf8"));
 test("deployment button has one complete account-independent Worker and all eleven native tool images", async () => {
@@ -34,8 +35,18 @@ test("deployment button has one complete account-independent Worker and all elev
   assert.equal(config.vars.ACCESS_TEAM_DOMAIN, undefined);
   assert.equal(config.secrets, undefined);
   assert.equal(pkg.scripts.build, "node scripts/build-customer.mjs");
-  assert.match(
+  assert.equal(
+    verificationTasks["gate:customer:build"].command,
+    "node scripts/build-customer.mjs"
+  );
+  assert.equal(verificationTasks["gate:customer:build"].cache, false);
+  assert.equal(
     pkg.scripts.deploy,
+    verificationTasks["gate:customer:deploy"].command
+  );
+  assert.equal(verificationTasks["gate:customer:deploy"].cache, false);
+  assert.match(
+    verificationTasks["gate:customer:deploy"].command,
     /--config apps\/control-plane\/dist-customer\/worker\/wrangler.json$/
   );
 });
@@ -110,11 +121,11 @@ test("single-character Worker names meet Artifacts namespace rules without shari
 });
 
 test("app and customer deployments select separate generated Workers and asset directories", async () => {
-  const root = await read("package.json"),
-    app = await read("apps/control-plane/package.json");
+  const app = await read("apps/control-plane/package.json");
   const customerConfig = await read("wrangler.jsonc"),
     appConfig = await read("apps/control-plane/wrangler.jsonc");
-  const customerTarget = root.scripts.deploy.split("--config ")[1];
+  const customerTarget =
+    verificationTasks["gate:customer:deploy"].command.split("--config ")[1];
   const appTarget =
     "apps/control-plane/" + app.scripts.deploy.split("--config ")[1];
   assert.notEqual(
@@ -157,9 +168,8 @@ test("root dry-run fails closed when only app output and its native redirection 
         configPath: "../../apps/control-plane/dist/worker/wrangler.json"
       })
     );
-    const [command, ...args] = (
-      await read("package.json")
-    ).scripts.deploy.split(" ");
+    const [command, ...args] =
+      verificationTasks["gate:customer:deploy"].command.split(" ");
     assert.equal(command, "wrangler");
     const result = spawnSync(
       process.execPath,

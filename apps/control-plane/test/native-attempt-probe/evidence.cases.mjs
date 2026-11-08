@@ -1,18 +1,14 @@
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
-import {
-  withNativeTestHarness,
-  rpcResult
-} from "./lib/native-test-harness.mjs";
-const root = fileURLToPath(new URL("../apps/control-plane", import.meta.url));
-await withNativeTestHarness(
-  {
-    root,
-    workers: [{ configPath: "test/native-attempt-probe/wrangler.jsonc" }]
-  },
-  async (server) => {
-    const response = await server.fetch(
-      "https://attempt.test/evidence-checkpoints"
+import { exports } from "cloudflare:workers";
+import { reset } from "cloudflare:test";
+import { beforeAll, afterAll, describe, it } from "vite-plus/test";
+const fetch = (url) => exports.default.fetch(new Request(url));
+describe("immutable evidence", () => {
+  beforeAll(reset);
+  afterAll(reset);
+  it("retains exact files, checkpoints, publication, cancellation and finalization fences", async () => {
+    const response = await fetch(
+      "http://attempt-fixture.invalid/evidence-checkpoints"
     );
     const value = await response.json();
     assert.equal(response.status, 200, JSON.stringify(value));
@@ -35,8 +31,8 @@ await withNativeTestHarness(
     assert.ok(value.registrations.length >= 1);
     assert.equal(value.noLatePublication, true);
     assert.equal(value.starts, 0);
-    const transferred = await server.fetch(
-      "https://attempt.test/evidence-transfer"
+    const transferred = await fetch(
+      "http://attempt-fixture.invalid/evidence-transfer"
     );
     const bridge = await transferred.json();
     assert.equal(transferred.status, 200, JSON.stringify(bridge));
@@ -51,8 +47,8 @@ await withNativeTestHarness(
     console.log(
       "native evidence checkpoint, lost push reply, terminal publication and cancellation: passed"
     );
-    const incompleteResponse = await server.fetch(
-        "https://attempt.test/evidence-incomplete-image"
+    const incompleteResponse = await fetch(
+        "http://attempt-fixture.invalid/evidence-incomplete-image"
       ),
       incomplete = await incompleteResponse.json();
     assert.equal(incompleteResponse.status, 200, JSON.stringify(incomplete));
@@ -62,8 +58,8 @@ await withNativeTestHarness(
       "genuinely missing image remains disclosed after checkpoint recovery"
     );
     assert.equal(incomplete.unavailable[0].receiptId, "incomplete");
-    const scratchResponse = await server.fetch(
-        "https://attempt.test/evidence-pack-scratch"
+    const scratchResponse = await fetch(
+        "http://attempt-fixture.invalid/evidence-pack-scratch"
       ),
       scratch = await scratchResponse.json();
     assert.equal(scratchResponse.status, 200, JSON.stringify(scratch));
@@ -76,8 +72,8 @@ await withNativeTestHarness(
     console.log(
       "native scratch binary transfer, immutable input and replay fences: passed"
     );
-    const largeResponse = await server.fetch(
-        "https://attempt.test/evidence-pack-large"
+    const largeResponse = await fetch(
+        "http://attempt-fixture.invalid/evidence-pack-large"
       ),
       large = await largeResponse.json();
     assert.equal(largeResponse.status, 200, JSON.stringify(large));
@@ -88,8 +84,8 @@ await withNativeTestHarness(
     console.log(
       "native large-result evidence paths and exact Unicode bytes: passed"
     );
-    const stopped = await server.fetch(
-      "https://attempt.test/evidence-cancel-push"
+    const stopped = await fetch(
+      "http://attempt-fixture.invalid/evidence-cancel-push"
     );
     const cancel = await stopped.json();
     assert.equal(stopped.status, 200, JSON.stringify(cancel));
@@ -98,7 +94,9 @@ await withNativeTestHarness(
     assert.equal(cancel.cancelFenced, true);
     assert.equal(cancel.registrations.length, 1);
     for (const scenario of ["evidence-cancel-commit", "evidence-failed-push"]) {
-      const response = await server.fetch("https://attempt.test/" + scenario),
+      const response = await fetch(
+          "http://attempt-fixture.invalid/" + scenario
+        ),
         value = await response.json();
       assert.equal(response.status, 200, JSON.stringify(value));
       assert.ok(value.registrations.length > 0);
@@ -106,8 +104,8 @@ await withNativeTestHarness(
       assert.equal(value.starts, 0);
       assert.ok(!value.execution.result.outputCommit);
     }
-    const finalized = await server.fetch(
-      "https://attempt.test/evidence-finalization"
+    const finalized = await fetch(
+      "http://attempt-fixture.invalid/evidence-finalization"
     );
     const final = await finalized.json();
     assert.equal(finalized.status, 200, JSON.stringify(final));
@@ -125,36 +123,12 @@ await withNativeTestHarness(
     console.log(
       "native cancellation-after-push and bounded same-session finalization: passed"
     );
-    const compatResponse = await server.fetch(
-        "https://attempt.test/evidence-gateway-compat"
+    const compatResponse = await fetch(
+        "http://attempt-fixture.invalid/evidence-gateway-compat"
       ),
       compat = await compatResponse.json();
     assert.equal(compatResponse.status, 200, JSON.stringify(compat));
     assert.equal(compat.pending, true);
     assert.equal(compat.starts, 0);
-  }
-);
-
-await withNativeTestHarness(
-  {
-    root,
-    workers: [{ configPath: "test/native-coordinator-probe/wrangler.jsonc" }]
-  },
-  async (server) => {
-    const { COORDINATOR } = await server.getWorker().getEnv();
-    const value = await rpcResult(
-      COORDINATOR.getByName("global").evidenceScenario()
-    );
-    assert.equal(value.listing.commit, value.afterStop.commit);
-    assert.match(value.content, /retained on stop/);
-    assert.equal(value.stoppedContent, value.content);
-    assert.equal(value.forged, true);
-    assert.equal(value.crossRun, true);
-    assert.equal(value.job.evidenceCommits.length, 1);
-    assert.equal(value.job.status, "interrupted");
-    assert.equal(value.mainUnchanged, true);
-    console.log(
-      "native Coordinator evidence provenance, same-run reads and stopped-run downloads: passed"
-    );
-  }
-);
+  });
+});

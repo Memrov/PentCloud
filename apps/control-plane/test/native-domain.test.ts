@@ -109,18 +109,18 @@ describe("native domain invariants", () => {
     expect(() => assertCompletion(task, result, run)).not.toThrow();
     expect(() =>
       assertCompletion({ ...task, status: "interrupted" }, result, run)
-    ).toThrow();
+    ).toThrow("409: attempt is no longer active");
     expect(() =>
       assertCompletion(task, result, { ...run, phase: "cancelled" })
-    ).toThrow();
+    ).toThrow("409: attempt is no longer active");
     expect(() =>
       assertCompletion(task, result, { ...run, headCommit: "d".repeat(40) })
-    ).toThrow();
+    ).toThrow("409: completion does not match the accepted input");
     expect(() =>
       assertCompletion(task, { ...result, settingsRevision: "wrong" }, run)
-    ).toThrow();
+    ).toThrow("409: completion changed immutable configuration");
     expect(() =>
       assertCompletion(task, { ...result, id: "other" }, run)
-    ).toThrow();
+    ).toThrow("409: completion does not match the accepted input");
   });
 });

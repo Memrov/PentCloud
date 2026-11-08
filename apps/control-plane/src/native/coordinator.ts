@@ -1,3 +1,7 @@
+import {
+  onboardingLibraryAction,
+  type OnboardingServices
+} from "./onboarding-actions";
 import { readFindings } from "./findings";
 import {
   modelSecretMetadata,
@@ -73,7 +77,6 @@ import {
   platformToken,
   checkProgramAccess
 } from "./bounty-platform";
-import type { BountyPlatform } from "../../../../shared/bounty-connections";
 import { type BrowserAuthState } from "./browser-target-access";
 import { RunBrowserAuth } from "./run-browser-auth";
 import {
@@ -713,7 +716,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   }
   private browserScopes(task: string) {
     const scopes = new Set<string>();
-    for (const match of task.matchAll(/https?:\/\/[^\s<>"'`()\[\]{}]+/g)) {
+    for (const match of task.matchAll(/https?:\/\/[^\s<>"'`()[\]{}]+/g)) {
       try {
         const url = new URL(match[0]);
         if (!url.username && !url.password)
@@ -796,6 +799,56 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return this.onboarding.catalog(route, refresh);
   }
   /** Explicit authenticated application actions, never a raw storage/secret RPC proxy. */
+  private onboardingServices(): OnboardingServices {
+    return {
+      env: this.env,
+      onboarding: this.onboarding,
+      bountyConnections: this.bountyConnections,
+      scopeCatalog: this.scopeCatalog,
+      sources: this.sources,
+      loginChallenges: this.loginChallenges,
+      programAccess: (target) => this.programAccess(target),
+      assertAdmissionOpen: () => this.assertAdmissionOpen(),
+      scheduleVerificationExpiry: () => this.scheduleVerificationExpiry(),
+      pollAgentMail: (key, owner) => this.pollAgentMail(key, owner),
+      assertDefinitionIdle: () => {
+        if (this.definitionBusy)
+          throw new Error("409: Wait for definition storage to finish");
+      },
+      removeTargetDefinition: (id) => this.removeTargetDefinition(id),
+      clearTargetLogin: (id) => this.clearTargetLogin(id)
+    };
+  }
+  private async removeTargetDefinition(id: string) {
+    for (const key of [
+      "onboarding:defaults:" + id,
+      "onboarding:definition:" + id
+    ])
+      this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?", key);
+    await this.workspace.fs.rm("/target-definitions/" + id, {
+      recursive: true,
+      force: true
+    });
+    for (const prefix of [
+      "onboarding:definition-version:" + id + ":",
+      "material:target-definition:" + id + ":"
+    ])
+      this.ctx.storage.sql.exec(
+        "DELETE FROM native_records WHERE substr(key,1,?)=?",
+        prefix.length,
+        prefix
+      );
+  }
+  private clearTargetLogin(id: string) {
+    for (const run of this.list<RunRecord>("run:"))
+      if (run.target?.id === id) this.browserAuth.clear(run.id);
+    const prefix = "target-auth:" + id + ":";
+    this.ctx.storage.sql.exec(
+      "DELETE FROM native_records WHERE substr(key,1,?)=?",
+      prefix.length,
+      prefix
+    );
+  }
   async onboardingAction(
     action: string,
     value: Record<string, unknown>,
@@ -804,343 +857,15 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const revision = typeof value.revision === "number" ? value.revision : null;
     this.assertAdmissionOpen();
     try {
+      const libraryAction = onboardingLibraryAction(action);
+      if (libraryAction)
+        return await libraryAction(this.onboardingServices(), {
+          action,
+          value,
+          revision,
+          actor
+        });
       switch (action) {
-        case "bounty.status":
-          return {
-            connections: await this.bountyConnections.list(),
-            email: {
-              cloudflare: {
-                configured: !!this.env.PENTCLOUD_VERIFICATION_EMAIL,
-                address: this.env.PENTCLOUD_VERIFICATION_EMAIL
-              },
-              agentmail: {
-                configured: !!agentMailAddress(this.env),
-                address: agentMailAddress(this.env)
-              }
-            }
-          };
-        case "bounty.check":
-          return this.bountyConnections.check(
-            String(value.platform) as BountyPlatform
-          );
-        case "bounty.email.check": {
-          if (value.provider !== "agentmail")
-            throw Error(
-              "400: Verify Cloudflare delivery with a forwarding confirmation"
-            );
-          const now = Date.now();
-          await readAgentMail(this.env, {
-            createdAt: now,
-            expiresAt: now + 10000,
-            sender: ""
-          });
-          return { connected: true };
-        }
-        case "scope.names": {
-          const ready = (await this.bountyConnections.list())
-            .filter((c) => c.status === "ready")
-            .map((c) => c.platform);
-          if (!ready.length)
-            throw Error(
-              "409: Connect a platform in Dashboard → Bug bounty first"
-            );
-          const result = await this.scopeCatalog.names();
-          return {
-            ...result,
-            programs: result.programs.filter((p) =>
-              ready.includes(p.platform as BountyPlatform)
-            )
-          };
-        }
-        case "scope.search": {
-          const ready = (await this.bountyConnections.list())
-            .filter((c) => c.status === "ready")
-            .map((c) => c.platform);
-          if (!ready.length)
-            throw Error(
-              "409: Connect a platform in Dashboard → Bug bounty first"
-            );
-          if (value.platform)
-            await this.bountyConnections.require(String(value.platform));
-          return this.scopeCatalog.search(
-            String(value.query ?? ""),
-            typeof value.platform === "string" && value.platform
-              ? value.platform
-              : undefined,
-            ready
-          );
-        }
-        case "scope.preview":
-          await this.bountyConnections.require(
-            String(value.programId).split(":")[0]!
-          );
-          return await this.scopeCatalog.preview(String(value.programId));
-        case "scope.import": {
-          const id = identifier(value.id),
-            target = this.onboarding.target(id);
-          if (target.revision !== revision || target.archived)
-            throw new Error("409: Target changed or archived; reload");
-          await this.bountyConnections.require(
-            String(value.programId).split(":")[0]!
-          );
-          const program = await this.scopeCatalog.import(
-            String(value.programId),
-            target.url
-          );
-          this.assertAdmissionOpen();
-          await this.bountyConnections.require(program.platform);
-          return this.onboarding.saveTargetAccess(
-            id,
-            revision!,
-            target.access ?? { headers: [] },
-            actor,
-            program
-          );
-        }
-        case "scope.detach":
-          return this.onboarding.saveTargetAccess(
-            identifier(value.id),
-            Number(value.revision),
-            this.onboarding.target(identifier(value.id)).access ?? {
-              headers: []
-            },
-            actor,
-            null
-          );
-        case "access.save":
-          return this.onboarding.saveTargetAccess(
-            identifier(value.id),
-            Number(value.revision),
-            value.access,
-            actor
-          );
-        case "access.check":
-          return this.onboarding.checkTargetSecret(
-            identifier(value.id),
-            Number(value.revision),
-            String(value.kind),
-            actor
-          );
-        case "scope.check": {
-          const target = this.onboarding.target(identifier(value.id));
-          if (target.revision !== revision || target.archived)
-            throw Error("409: Target changed; reload");
-          const checked = await this.programAccess(target);
-          const current = this.onboarding.target(target.id);
-          if (current.revision !== revision)
-            throw Error("409: Target changed during program check");
-          return {
-            connected: true,
-            platform: checked?.platform,
-            checkedAt: checked?.checkedAt,
-            authenticated: !!checked
-          };
-        }
-        case "access.email.address":
-        case "access.email.setup":
-        case "access.email.status": {
-          const target = this.onboarding.target(identifier(value.id));
-          if (target.revision !== revision || target.archived)
-            throw Error("409: Target changed; reload");
-          const saved = target.access?.login?.verification,
-            provider =
-              action === "access.email.address"
-                ? (value.provider ??
-                  (saved?.kind === "email" ? saved.provider : undefined) ??
-                  "cloudflare")
-                : saved?.kind === "email"
-                  ? (saved.provider ?? "cloudflare")
-                  : "cloudflare";
-          if (provider !== "cloudflare" && provider !== "agentmail")
-            throw Error("400: Invalid email verification provider");
-          const available = {
-            cloudflare: !!this.env.PENTCLOUD_VERIFICATION_EMAIL,
-            agentmail: !!agentMailAddress(this.env)
-          };
-          if (!available[provider])
-            return { configured: false, provider, available };
-          const address =
-              provider === "agentmail"
-                ? agentMailAddress(this.env)!
-                : await verificationAddress(
-                    this.env.PENTCLOUD_VERIFICATION_EMAIL!,
-                    target.id
-                  ),
-            key = "setup:" + target.id,
-            owner = canonical([target.id, target.revision, provider, address]);
-          if (action === "access.email.setup") {
-            if (target.access?.login?.verification?.kind !== "email")
-              throw Error("409: Save email verification settings first");
-            this.loginChallenges.begin(
-              {
-                key,
-                owner,
-                recipient: address,
-                sender: "",
-                targetURL: target.url,
-                purpose: "setup",
-                provider
-              },
-              crypto.randomUUID()
-            );
-            await this.scheduleVerificationExpiry();
-          }
-          if (provider === "agentmail" && action !== "access.email.address")
-            await this.pollAgentMail(key, owner);
-          const current = this.onboarding.target(target.id);
-          if (current.revision !== target.revision || current.archived)
-            throw Error("409: Target changed; reload");
-          const pending = this.loginChallenges.pending(key, owner),
-            delivery =
-              action === "access.email.status"
-                ? this.loginChallenges.peek(key, owner)
-                : undefined;
-          // Setup confirmation is visible only to the authenticated owner, never an agent tool.
-          return {
-            configured: true,
-            provider,
-            available,
-            address,
-            status: delivery
-              ? "received"
-              : pending
-                ? "waiting"
-                : action === "access.email.status"
-                  ? "expired"
-                  : "idle",
-            ...(pending ? { expiresAt: pending.expiresAt } : {}),
-            ...(action === "access.email.setup" ? { ready: true } : {}),
-            ...(delivery
-              ? {
-                  received: true,
-                  from: delivery.from,
-                  code: delivery.code,
-                  excerpt: delivery.excerpt,
-                  links: delivery.links.filter((url) => {
-                    const h = new URL(url).hostname;
-                    return (
-                      h === "mail.google.com" ||
-                      h === "accounts.google.com" ||
-                      h === "outlook.live.com" ||
-                      h === "account.microsoft.com"
-                    );
-                  })
-                }
-              : { received: false })
-          };
-        }
-        case "access.clearlogin": {
-          const target = this.onboarding.target(identifier(value.id));
-          if (target.revision !== revision)
-            throw new Error("409: Target changed; reload");
-          for (const run of this.list<RunRecord>("run:"))
-            if (run.target?.id === target.id) this.browserAuth.clear(run.id);
-          const prefix = "target-auth:" + target.id + ":";
-          this.ctx.storage.sql.exec(
-            "DELETE FROM native_records WHERE substr(key,1,?)=?",
-            prefix.length,
-            prefix
-          );
-          return { cleared: true };
-        }
-        case "source.list":
-          return await this.sources.list(
-            typeof value.cursor === "string" ? value.cursor : undefined
-          );
-        case "source.attach":
-          return await this.sources.attach(
-            identifier(value.id),
-            Number(value.revision),
-            value.repo,
-            value.branch,
-            actor
-          );
-        case "source.refresh":
-          return await this.sources.refresh(
-            identifier(value.id),
-            Number(value.revision),
-            identifier(value.sourceId),
-            actor
-          );
-        case "source.detach":
-          return this.sources.detach(
-            identifier(value.id),
-            Number(value.revision),
-            identifier(value.sourceId),
-            actor
-          );
-        case "source.import":
-          return await this.sources.importPublic(
-            identifier(value.id),
-            Number(value.revision),
-            value.url,
-            value.branch,
-            identifier(value.requestId),
-            actor,
-            typeof value.replaceId === "string" ? value.replaceId : undefined
-          );
-        case "target.save":
-          return this.onboarding.saveTarget(
-            value as unknown as Parameters<OnboardingStore["saveTarget"]>[0],
-            revision,
-            actor
-          );
-        case "target.archive":
-        case "target.restore":
-        case "target.delete": {
-          const id = identifier(value.id);
-          if (action === "target.delete" && this.definitionBusy)
-            throw new Error("409: Wait for definition storage to finish");
-          const result = this.onboarding.lifecycleTarget(
-            id,
-            revision!,
-            action.split(".")[1] as "archive" | "restore" | "delete",
-            actor
-          );
-          if (action === "target.delete") {
-            for (const key of [
-              "onboarding:defaults:" + id,
-              "onboarding:definition:" + id
-            ])
-              this.ctx.storage.sql.exec(
-                "DELETE FROM native_records WHERE key=?",
-                key
-              );
-            await this.workspace.fs.rm("/target-definitions/" + id, {
-              recursive: true,
-              force: true
-            });
-            for (const prefix of [
-              "onboarding:definition-version:" + id + ":",
-              "material:target-definition:" + id + ":"
-            ])
-              this.ctx.storage.sql.exec(
-                "DELETE FROM native_records WHERE substr(key,1,?)=?",
-                prefix.length,
-                prefix
-              );
-            for (const run of this.list<RunRecord>("run:"))
-              if (run.target?.id === id) this.browserAuth.clear(run.id);
-            const authPrefix = "target-auth:" + id + ":";
-            this.ctx.storage.sql.exec(
-              "DELETE FROM native_records WHERE substr(key,1,?)=?",
-              authPrefix.length,
-              authPrefix
-            );
-          }
-          return result;
-        }
-        case "target.check": {
-          await this.programAccess(
-            this.onboarding.target(identifier(value.id))
-          );
-          return await this.onboarding.checkTarget(
-            identifier(value.id),
-            Number(value.revision),
-            identifier(value.requestId),
-            actor
-          );
-        }
         case "discovery.acknowledge": {
           const id = identifier(value.runId),
             writer = await this.activityWriter(id),
@@ -1161,12 +886,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
           await this.wake();
           return { acknowledged: true };
         }
-        case "model.test":
-          return await this.onboarding.testModel(
-            value.choice as Parameters<OnboardingStore["testModel"]>[0],
-            identifier(value.requestId),
-            actor
-          );
+
         case "setup.save": {
           const id = identifier(value.runId),
             run = this.run(id);

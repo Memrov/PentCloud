@@ -1,4 +1,17 @@
 import {
+  type Proposal,
+  type AttemptState,
+  type RemoteCall,
+  type RemoteIdentityEvidence,
+  type ExecutionSnapshot,
+  profileName,
+  enabledTools,
+  publicJob,
+  immutableInput,
+  executionSnapshot
+} from "./attempt-state";
+export type { RemoteIdentityEvidence } from "./attempt-state";
+import {
   assertPackAccess,
   packFileNames,
   toolPacks,
@@ -14,7 +27,7 @@ import {
 import { readFindings, findingsInstructions } from "./findings";
 import { recordedWorkPage, type RecordedWorkPage } from "./recorded-work";
 import { readModelSecret, plainModelSecretValues } from "./model-secrets";
-import { liveSessionResponse } from "./session-events";
+import { liveSessionResponse, historySessionResponse } from "./session-events";
 import {
   evidenceRoot,
   evidenceManifestPath,
@@ -119,8 +132,7 @@ import {
   isMetasploitControl,
   isMetasploitInspection,
   metasploitOutcome,
-  metasploitOwnershipState,
-  type MetasploitOwnership
+  metasploitOwnershipState
 } from "./remote-control";
 import {
   digest as fingerprint,
@@ -144,11 +156,7 @@ import {
 } from "./preparation";
 import type { MaterialSelection } from "./materials";
 import { assertMarkdownPromptFormat, renderLaunch } from "./prompts";
-import {
-  embeddedToolSkill,
-  pinToolSkill,
-  type PinnedToolSkill
-} from "./skills";
+import { embeddedToolSkill, pinToolSkill } from "./skills";
 import { observe, workspaceObserver } from "./observe";
 import { dynamicWorkerTails } from "./dynamic-worker-tail";
 import { budgetLoader, dynamicWorkerBudgets } from "./runtime-limits";
@@ -156,16 +164,14 @@ import {
   memoryRecovery,
   recoveryPending,
   runtimeVersion,
-  type RuntimeRecovery,
-  type RuntimeVersion
+  type RuntimeRecovery
 } from "./runtime-diagnostics";
 import { knownRuntimeSecrets } from "../../../../shared/runtime-secrets";
 import type {
   AttemptInput,
   AttemptResult,
   CoordinatorAPI,
-  NativeEnv,
-  Status
+  NativeEnv
 } from "./types";
 import type { RemoteTool, ToolboxSession } from "./tools";
 import {
@@ -195,61 +201,6 @@ const IDENTITY = {
   email: "native-attempt@invalid"
 };
 const RESULT_LIMIT = 2 * 1024 * 1024;
-interface Proposal {
-  tool: string;
-  arguments: Record<string, unknown>;
-  status: Status;
-  finishedAt: number;
-  runtimeVersion?: RuntimeVersion | undefined;
-}
-interface AttemptState {
-  toolPacks?: boolean;
-  preparation?: true;
-  promotionPending?: true;
-  evidence?: EvidenceCheckpoint;
-  evidenceRegistered?: string;
-  evidenceFilesDigest?: string;
-  evidencePending?:
-    | { text: string; parentCommit: string; fileDigest: string }
-    | undefined;
-  finalizing?: boolean;
-  input: AttemptInput;
-  fingerprint: string;
-  prompt: string;
-  promptDigest: string;
-  toolSkill?: PinnedToolSkill;
-  status: "running" | "publishing" | "settled";
-  prepared?: boolean;
-  startedAt: number;
-  proposal?: Proposal;
-  outputCommit?: string;
-  result?: AttemptResult;
-  runtimeVersion?: RuntimeVersion | undefined;
-}
-export interface RemoteIdentityEvidence {
-  source: "captured-response" | "host-observation";
-  reference: string;
-  confirmedExactOperation: true;
-}
-interface RemoteCall {
-  state: "started" | "running" | "completed" | "unknown" | "reconciled";
-  name: string;
-  fingerprint: string;
-  arguments?: Record<string, unknown>;
-  startedAt?: number;
-  result?: unknown;
-  remoteId?: string;
-  owned?: MetasploitOwnership;
-  resolution?: {
-    inspectionTool: string;
-    scanId: string;
-    evidenceDigest: string;
-    observedAt: number;
-    outcome: string;
-    source?: "operator-inspection" | "known-operation-inspection";
-    identityEvidence?: RemoteIdentityEvidence;
-  };
-}
 
 /** Keep the native harness's startup/alarm recovery behind the same durable fence. */
 class RecoveryGuardedHarness extends OpenCodeHarness {
@@ -4459,17 +4410,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     });
   }
 
-  async execution(): Promise<{
-    state: "absent" | "running" | "settled" | "cancelled";
-    evidence?: EvidenceCheckpoint;
-    result?: AttemptResult;
-    drained: boolean;
-    unresolvedRemote: number;
-    sessionCleanupPending: boolean;
-    startup?: { stage: string; at: number };
-    recovery?: RuntimeRecovery;
-    runtimeVersion?: RuntimeVersion;
-  }> {
+  async execution(): Promise<ExecutionSnapshot> {
     if (await this.ctx.storage.get<string>("purgedRunId"))
       return {
         state: "absent",
@@ -4531,33 +4472,21 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     );
     const recovery =
       await this.ctx.storage.get<RuntimeRecovery>("platform:recovery");
-    return {
-      state: cancelled
-        ? "cancelled"
-        : !state
-          ? "absent"
-          : state.result
-            ? "settled"
-            : "running",
-      ...(state?.result ? { result: state.result } : {}),
-      ...(state?.evidence ? { evidence: state.evidence } : {}),
-      drained:
-        !this.preparingConversation &&
-        !this.admittingConversation &&
-        !this.running &&
-        !this.publishing &&
-        !this.checkpointing &&
-        !evidencePending &&
-        this.inFlightTools === 0 &&
-        unresolvedRemote === 0 &&
-        !sessionCleanupPending &&
-        !this.retiringToolbox,
+    return executionSnapshot(state, {
+      cancelled: !!cancelled,
       unresolvedRemote,
       sessionCleanupPending,
-      ...(startup ? { startup } : {}),
-      ...(recovery ? { recovery } : {}),
-      ...(state?.runtimeVersion ? { runtimeVersion: state.runtimeVersion } : {})
-    };
+      startup,
+      recovery,
+      preparingConversation: !!this.preparingConversation,
+      admittingConversation: !!this.admittingConversation,
+      running: !!this.running,
+      publishing: !!this.publishing,
+      checkpointing: !!this.checkpointing,
+      evidencePending,
+      inFlightTools: this.inFlightTools,
+      retiringToolbox: !!this.retiringToolbox
+    });
   }
 
   private managedSession() {
@@ -4734,7 +4663,6 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       return new Response("Invalid cursor", { status: 400 });
     const abort = new AbortController();
     this.sessionStreams.add(abort);
-    const encoder = new TextEncoder();
     request.signal.addEventListener("abort", () => abort.abort(), {
       once: true
     });
@@ -4776,128 +4704,18 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
             cursor: 0
           })
         : undefined;
-    const stream = new ReadableStream<Uint8Array>({
-      start: (controller) => {
-        if (snapshot)
-          controller.enqueue(
-            encoder.encode(
-              `event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`
-            )
-          );
-        const pump = async () => {
-          try {
-            for await (const event of session.log({
-              after: cursor,
-              follow: false,
-              signal: abort.signal
-            })) {
-              if (
-                abort.signal.aborted ||
-                (await this.ctx.storage.get<string>("purgedRunId"))
-              )
-                break;
-              if (event.type === "log.synced") continue;
-              controller.enqueue(
-                encoder.encode(
-                  `id: ${event.durable.seq}\nevent: session\ndata: ${JSON.stringify(this.safe(event))}\n\n`
-                )
-              );
-            }
-            if (!abort.signal.aborted)
-              controller.enqueue(encoder.encode("event: end\ndata: {}\n\n"));
-            controller.close();
-          } catch (error) {
-            if (!abort.signal.aborted)
-              controller.error(new Error(this.error(error)));
-          } finally {
-            this.sessionStreams.delete(abort);
-          }
-        };
-        this.ctx.waitUntil(pump());
-      },
-      cancel: () => {
+    return historySessionResponse(session, {
+      cursor,
+      snapshot,
+      abort,
+      safe: (value) => this.safe(value),
+      isPurged: async () =>
+        !!(await this.ctx.storage.get<string>("purgedRunId")),
+      onClose: () => {
         this.sessionStreams.delete(abort);
-        abort.abort();
-      }
-    });
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        "X-Accel-Buffering": "no"
-      }
+      },
+      waitUntil: (work) => this.ctx.waitUntil(work),
+      error: (error) => this.error(error)
     });
   }
-}
-function profileName(input: AttemptInput): string {
-  return input.settings.promptFormat === "markdown"
-    ? `pentcloud-${input.role}`
-    : "build";
-}
-function enabledTools(input: AttemptInput): string[] {
-  if (input.context.enabledTools === undefined) return [];
-  if (
-    !Array.isArray(input.context.enabledTools) ||
-    input.context.enabledTools.some((v) => typeof v !== "string")
-  )
-    throw new Error("Pinned enabledTools must be strings");
-  return input.context.enabledTools as string[];
-}
-function publicJob(state: AttemptState) {
-  return {
-    nativeSession: true,
-    id: state.input.id,
-    run_id: state.input.runId,
-    role: state.input.role,
-    status:
-      state.result?.status ??
-      (state.preparation
-        ? "created"
-        : state.prepared
-          ? "running"
-          : "provisioning"),
-    ...(state.preparation ? { preparingConversation: true } : {}),
-    input_commit: state.input.inputCommit,
-    output_commit: state.result?.outputCommit,
-    prompt_digest: state.promptDigest,
-    settings_revision: state.input.settingsRevision,
-    model: state.input.settings.model,
-    created_at: new Date(state.input.createdAt).toISOString(),
-    started_at: new Date(state.startedAt).toISOString(),
-    ...(state.result
-      ? {
-          finished_at: new Date(state.result.finishedAt).toISOString(),
-          error: state.result.error
-        }
-      : {})
-  };
-}
-
-function immutableInput(input: AttemptInput): AttemptInput {
-  return {
-    ...(input.targetConfig ? { targetConfig: input.targetConfig } : {}),
-    ...(input.findingsVersion
-      ? { findingsVersion: input.findingsVersion }
-      : {}),
-    ...(input.execution ? { execution: input.execution } : {}),
-    ...(input.modelConfig ? { modelConfig: input.modelConfig } : {}),
-    id: input.id,
-    runId: input.runId,
-    role: input.role,
-    tool: input.tool,
-    args: input.args,
-    task: input.task,
-    inputCommit: input.inputCommit,
-    repo: input.repo,
-    remote: input.remote,
-    settingsRevision: input.settingsRevision,
-    settings: input.settings,
-    ...(input.parentJobId ? { parentJobId: input.parentJobId } : {}),
-    depth: input.depth,
-    attempt: input.attempt,
-    logicalThreadId: input.logicalThreadId,
-    ...(input.revisionOf ? { revisionOf: input.revisionOf } : {}),
-    context: input.context,
-    createdAt: input.createdAt
-  };
 }

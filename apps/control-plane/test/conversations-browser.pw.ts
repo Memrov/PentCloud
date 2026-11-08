@@ -1,4 +1,8 @@
-import { test, expect, expect as browserExpect } from "playwright/test";
+import {
+  test,
+  expect,
+  expect as browserExpect
+} from "../../../scripts/browser-qa/fixtures.mts";
 import { SETTINGS_ROLES } from "../src/ui/settings/model";
 
 // Isolated local API fixtures: no production requests, model calls or scanners.
@@ -578,7 +582,13 @@ test.describe("agent conversations and report reader", () => {
           title: "Checks",
           required: true,
           custom: true,
-          options: [{ value: "headers", label: "Headers" }]
+          options: [
+            {
+              value: "headers",
+              label: "Headers",
+              description: "Check response headers"
+            }
+          ]
         },
         {
           key: "limit",
@@ -710,12 +720,29 @@ test.describe("agent conversations and report reader", () => {
       page.getByRole("textbox", { name: "Conditional answer" })
     ).toHaveCount(0);
     await page.getByRole("combobox", { name: "Approach", exact: true }).click();
+    await browserExpect(
+      page.getByRole("option", { name: "Focused", exact: true })
+    ).toBeVisible();
+    await browserExpect(
+      page.getByText("Focused: Keep the supplied scope", { exact: true })
+    ).toBeVisible();
     await page
       .getByRole("option", { name: "Type your own answer", exact: true })
       .click();
     await page
       .getByRole("textbox", { name: "Approach custom answer", exact: true })
       .fill("Review the supplied context");
+    await page.getByRole("combobox", { name: "Checks", exact: true }).click();
+    await browserExpect(
+      page.getByRole("option", { name: "Headers", exact: true })
+    ).toBeVisible();
+    await browserExpect(
+      page.getByText("Headers: Check response headers", { exact: true })
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await browserExpect(
+      page.getByRole("link", { name: "External step", exact: true })
+    ).toHaveCount(0);
     await page
       .getByRole("textbox", { name: "Checks custom choices", exact: true })
       .fill("Authentication");

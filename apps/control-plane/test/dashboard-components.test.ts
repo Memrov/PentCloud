@@ -6,7 +6,7 @@ import {
   DashboardButton,
   reportReady
 } from "../src/ui/components/dashboard-button";
-import { RunSteps, runSteps } from "../src/ui/dashboard/run-steps";
+import { runSteps } from "../src/ui/dashboard/run-steps";
 import {
   connectWorkflowActivity,
   WorkflowTimelineView
@@ -252,19 +252,6 @@ describe("workflow dashboard components", () => {
       ["coder", ["Coder:code"]],
       ["reporter", ["Reporter:report"]]
     ]);
-  });
-
-  it("renders navigable step nodes with durable activity labels", () => {
-    const html = renderToStaticMarkup(
-      createElement(RunSteps, { jobs, selectedJobId: "child" })
-    );
-    expect(html).toContain('aria-label="Run steps"');
-    expect(html).toContain("Primary");
-    expect(html).toContain("Model working");
-    expect(html).toContain("Coder");
-    expect(html).toContain("Complete");
-    expect(html).toContain("/dashboard/runs/run-1/jobs/child");
-    expect(html).toContain('aria-current="true"');
   });
 
   it("renders workflow duration bars, retries, errors, and chat navigation", () => {

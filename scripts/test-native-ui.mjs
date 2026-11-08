@@ -1,4 +1,4 @@
-import { test, expect } from "playwright/test";
+import { test, expect } from "./browser-qa/fixtures.mts";
 import fs from "node:fs/promises";
 import { join } from "node:path";
 

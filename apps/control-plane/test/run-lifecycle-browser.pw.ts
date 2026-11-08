@@ -1,4 +1,8 @@
-import { test, expect, expect as browserExpect } from "playwright/test";
+import {
+  test,
+  expect,
+  expect as browserExpect
+} from "../../../scripts/browser-qa/fixtures.mts";
 
 // Local React browser fixture only. Never calls production, inference or scanners.
 test.describe("run lifecycle in the browser", () => {

@@ -1,4 +1,8 @@
-import { test, expect, expect as browserExpect } from "playwright/test";
+import {
+  test,
+  expect,
+  expect as browserExpect
+} from "../../../scripts/browser-qa/fixtures.mts";
 
 // Real EventSource bytes, with the text-end frame withheld until assertions finish.
 // Local API/model substitutes only; no production target, provider or scanner.

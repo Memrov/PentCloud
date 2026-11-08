@@ -1,3 +1,4 @@
+import { catalogFixture } from "./fixture-services";
 import {
   evidenceBytesHash,
   evidenceManifestPath,
@@ -218,6 +219,33 @@ export class FakeAttempt extends DurableObject<Bindings> {
   }
 }
 export class ProbeCoordinator extends Coordinator {
+  async bountyCheckErrorForTest() {
+    const priorToken = Reflect.get(this.env, "CONTROL_TOKEN");
+    const priorConnections = Reflect.get(this, "bountyConnections");
+    const marker = "private-bounty-rejection";
+    Reflect.set(this.env, "CONTROL_TOKEN", marker);
+    Reflect.set(this, "bountyConnections", {
+      check: async () => {
+        throw new Error(`403: provider rejected ${marker}`);
+      }
+    });
+    try {
+      await this.onboardingAction(
+        "bounty.check",
+        { platform: "hackerone" },
+        "fixture"
+      );
+      throw new Error("Expected provider rejection");
+    } catch (error) {
+      return { error: String(error) };
+    } finally {
+      Reflect.set(this, "bountyConnections", priorConnections);
+      if (priorToken === undefined)
+        Reflect.deleteProperty(this.env, "CONTROL_TOKEN");
+      else Reflect.set(this.env, "CONTROL_TOKEN", priorToken);
+    }
+  }
+
   // Wrangler's Node bridge loses rejected DO RPC messages; keep negative assertions in workerd.
   async rejection(
     method:
@@ -2667,33 +2695,6 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/agents/coordinator/global")
       return env.COORDINATOR.getByName("global").fetch(request);
-    if (url.pathname === "/catalog-upstream") {
-      if (request.headers.has("Authorization"))
-        throw new Error("Public catalogs must not receive a key");
-      if (url.searchParams.has("redirect"))
-        return new Response(null, {
-          status: 302,
-          headers: { Location: "/must-not-follow" }
-        });
-      const route = url.searchParams.get("route");
-      return Response.json({
-        data: [
-          {
-            id: "native-catalog",
-            type: "chat",
-            capabilities: { tools: { supported: true } },
-            api: {
-              "chat-completions": {
-                base_url:
-                  "https://opencode.ai/inference/" +
-                  (route === "go" ? "go/" : "") +
-                  "openai/v1"
-              }
-            }
-          }
-        ]
-      });
-    }
-    return new Response("not found", { status: 404 });
+    return catalogFixture(request);
   }
 };

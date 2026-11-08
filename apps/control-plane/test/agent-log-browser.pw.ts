@@ -1,4 +1,4 @@
-import { test, expect } from "playwright/test";
+import { test, expect } from "../../../scripts/browser-qa/fixtures.mts";
 
 // Isolated local API fixtures: no production requests, model calls or scanners.
 test.describe("run steps live output", () => {
@@ -175,9 +175,20 @@ test.describe("run steps live output", () => {
       await expect(page).toHaveURL(
         new RegExp(`/dashboard/runs/${run.id}/jobs/scanner$`)
       );
+      await expect(
+        page.locator(".run-step-node", { hasText: "Searcher 1" })
+      ).toHaveAttribute("aria-current", "true");
       const log = page.getByRole("log", { name: "Live output" });
       await expect(log).toBeVisible();
       await expect(log.locator(".log-entry")).toHaveCount(6);
+      await expect(log.locator(".log-entry-time")).toHaveText([
+        "history",
+        "history",
+        "history",
+        "history",
+        "history",
+        "history"
+      ]);
       await expect(
         log.getByText('{"command":"nmap -sV target.invalid"}', { exact: true })
       ).toBeVisible();

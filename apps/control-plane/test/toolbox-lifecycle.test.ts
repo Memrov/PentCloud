@@ -129,6 +129,7 @@ it("bounds pending RPC readiness and permits cancellation without another readin
         return new Promise<never>(() => {});
       }
     };
+    // oxlint-disable-next-line vitest/valid-expect -- Attached before fake time/abort; awaited below.
     const pending = expect(
       waitForToolbox(gateway, undefined, { startupWindowMs: 0 })
     ).rejects.toBeInstanceOf(ToolboxPendingError);
@@ -136,6 +137,7 @@ it("bounds pending RPC readiness and permits cancellation without another readin
     await pending;
     expect(calls).toBe(1);
     const controller = new AbortController();
+    // oxlint-disable-next-line vitest/valid-expect -- Attached before fake time/abort; awaited below.
     const aborted = expect(
       waitForToolbox(gateway, "boot-one", { signal: controller.signal })
     ).rejects.toThrow("cancelled");

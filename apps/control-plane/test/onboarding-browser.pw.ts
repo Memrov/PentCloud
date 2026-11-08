@@ -1,4 +1,8 @@
-import { test, expect, expect as browserExpect } from "playwright/test";
+import {
+  test,
+  expect,
+  expect as browserExpect
+} from "../../../scripts/browser-qa/fixtures.mts";
 test.describe("target-first setup in a real browser", () => {
   for (const viewport of [
     { width: 1440, height: 1000 },

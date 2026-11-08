@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { test, expect, expect as browserExpect } from "playwright/test";
+import {
+  test,
+  expect,
+  expect as browserExpect
+} from "../../../scripts/browser-qa/fixtures.mts";
 import type { BrowserContext, Page } from "playwright/test";
 
 // Real local React UI, mocked HTTP/SSE only. No model, scanner, Git or production traffic.

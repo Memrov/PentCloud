@@ -28,7 +28,9 @@ export default defineConfig({
   ],
   test: {
     name: "attempt",
-    include: [path.join(dir, "*.runtime.ts")],
+    include: [path.join(dir, "*.runtime.{ts,mjs}")],
+    fileParallelism: false,
+    maxConcurrency: 7,
     testTimeout: 60_000,
     hookTimeout: 30_000
   }

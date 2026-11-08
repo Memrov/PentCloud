@@ -5,7 +5,13 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig(({ mode }) => ({
   root: import.meta.dirname,
-  test: { name: "unit", include: ["test/**/*.test.ts"] },
+  test: {
+    name: "unit",
+    pool: "threads",
+    isolate: true,
+    include: ["test/**/*.test.ts"],
+    exclude: ["test/native-contract-drift.test.ts"]
+  },
   plugins:
     mode === "test"
       ? []

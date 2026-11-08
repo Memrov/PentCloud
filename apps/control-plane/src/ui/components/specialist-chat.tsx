@@ -1,56 +1,30 @@
-import {
-  Badge,
-  Banner,
-  Button,
-  Collapsible,
-  Empty,
-  InputArea,
-  Loader,
-  Tabs,
-  Text,
-  Tooltip
-} from "@cloudflare/kumo";
-import {
-  ArrowDownIcon,
-  BrainIcon,
-  PaperPlaneRightIcon,
-  StopIcon
-} from "@phosphor-icons/react";
+import { ConversationHeader } from "./conversation-header";
+import { ConversationDetails } from "./conversation-details";
+import { ConversationTranscript } from "./conversation-transcript";
+import { useConversationActions } from "./use-conversation-actions";
+import { useConversationScroll } from "./use-conversation-scroll";
+import { Banner, Button, InputArea, Text } from "@cloudflare/kumo";
+import { ArrowDownIcon, PaperPlaneRightIcon } from "@phosphor-icons/react";
 import {
   useCallback,
   useDeferredValue,
   useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState
 } from "react";
-import { ChatResponse } from "./chat-conversation";
-import { ChatMarkdown } from "./chat-markdown";
-import { ThemeControl } from "./theme-control";
 
 import type { SpecialistChatState } from "../presentation";
 import { useNativeSession } from "../native-stream";
 import { acceptedOutcome, sessionMessagesForJob } from "../session-projection";
-import {
-  APIError,
-  interruptJob,
-  steerJob,
-  reviseJob,
-  cancelRun,
-  type UIJob
-} from "../api";
+import { cancelRun, type UIJob } from "../api";
 import { NativeSessionControls } from "./session-controls";
-import { RuntimeRecoveryNotice } from "./runtime-recovery";
-import { BrowserLiveViewControl } from "./browser-live-view";
+
 import {
   MaterialAttachments,
-  RunFilesPanel,
   dropMaterials,
   pasteMaterials,
   useMaterialDraft
 } from "./materials";
-import { canCorrectMaterialSubmission } from "../materials-api";
 import { chatActivity } from "../chat-activity";
 import { conversations } from "../attempts";
 import { chatTurns } from "../chat-transcript";
@@ -88,7 +62,6 @@ export function SpecialistChat({
 }) {
   const input = draft;
   const setInput = (value: string) => onDraftChange?.(value);
-  const [awayFromBottom, setAwayFromBottom] = useState(false);
   const [needsAnswer, setNeedsAnswer] = useState(false);
   const handleAttention = useCallback(
     (needed: boolean) => {
@@ -97,16 +70,7 @@ export function SpecialistChat({
     },
     [job.id, onAttentionChange]
   );
-  const [pending, setPending] = useState(false);
   const materials = useMaterialDraft(job.runId);
-  const submission = useRef<
-    { instructions: string; requestId: string; uploadIds: string[] } | undefined
-  >(undefined);
-  const [canEditRejectedSubmission, setCanEditRejectedSubmission] =
-    useState(false);
-  const [error, setError] = useState<string>();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const followingBottom = useRef(true);
   const {
     projection,
     connected,
@@ -183,99 +147,28 @@ export function SpecialistChat({
   const composerAvailable =
     !readOnly && (conversing || stopped) && !effectiveJob.recovery?.sealed;
   const filesSelected = materials.files.length > 0;
-  const canSend =
-    composerAvailable && !pending && !!input.trim() && materials.ready;
-
-  useLayoutEffect(() => {
-    followingBottom.current = true;
-  }, [job.id]);
-  useLayoutEffect(() => {
-    const scroll = scrollRef.current;
-    // Projection refreshes must preserve file/history inspection. Follow only
-    // while the operator is near the bottom, including the initial selection.
-    if (scroll && followingBottom.current)
-      scroll.scrollTop = scroll.scrollHeight;
-  }, [messages, job.id]);
-
-  // Streamdown can finish laying out a code block after the message render.
-  // Follow those native size changes only while the reader remains at the bottom.
-  useLayoutEffect(() => {
-    const scroll = scrollRef.current,
-      column = scroll?.firstElementChild;
-    if (!scroll || !column) return;
-    const observer = new ResizeObserver(() => {
-      if (followingBottom.current) scroll.scrollTop = scroll.scrollHeight;
-    });
-    observer.observe(column);
-    observer.observe(scroll);
-    return () => observer.disconnect();
-  }, [job.id]);
-
-  const steer = async () => {
-    const message = input.trim();
-    if (!message || !canSend) return;
-    setPending(true);
-    setError(undefined);
-    setCanEditRejectedSubmission(false);
-    try {
-      if (conversing && !filesSelected && !submission.current)
-        await steerJob(job.id, message);
-      else {
-        submission.current ??= {
-          instructions: message,
-          requestId: crypto.randomUUID(),
-          uploadIds: materials.uploadIds
-        };
-        const queued = await reviseJob(
-          job.id,
-          submission.current.instructions,
-          globalThis.fetch,
-          submission.current
-        );
-        materials.draft.clear();
-        submission.current = undefined;
-        onRevision(queued);
-      }
-      onDraftChange?.("", input);
-    } catch (caught) {
-      const wasRevision = !!submission.current;
-      if (canCorrectMaterialSubmission(caught)) submission.current = undefined;
-      else if (
-        wasRevision &&
-        caught instanceof APIError &&
-        caught.status === 429
-      )
-        setCanEditRejectedSubmission(true);
-      setError(
-        caught instanceof APIError && caught.status === 409 && !wasRevision
-          ? "This agent finished before the message arrived."
-          : caught instanceof Error
-            ? caught.message
-            : "Message could not be sent"
-      );
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const interrupt = async () => {
-    if (!conversing || pending) return;
-    setPending(true);
-    setError(undefined);
-    try {
-      await interruptJob(job.id);
-    } catch (caught) {
-      setError(
-        caught instanceof APIError && caught.status === 409
-          ? "This specialist has already stopped."
-          : caught instanceof Error
-            ? caught.message
-            : "Interrupt failed"
-      );
-    } finally {
-      setPending(false);
-    }
-  };
+  const {
+    pending,
+    error,
+    setError,
+    submission,
+    canEditRejectedSubmission,
+    canSend,
+    steer,
+    interrupt,
+    editRejectedDraft
+  } = useConversationActions({
+    job,
+    input,
+    composerAvailable,
+    conversing,
+    filesSelected,
+    materials,
+    onRevision,
+    onDraftChange
+  });
+  const { scrollRef, awayFromBottom, onScroll, jumpToLatest } =
+    useConversationScroll(job.id, messages);
 
   return (
     <section
@@ -283,231 +176,62 @@ export function SpecialistChat({
       aria-label={`${job.role ?? "Specialist"} chat`}
       aria-busy={!connected && !projection.job && job.inputError === undefined}
     >
-      <header className="chat-header flex items-center justify-between gap-3 border-b border-kumo-line px-4 py-3">
-        <div className="chat-title-block min-w-0 flex-1">
-          <Text as="h1" variant="heading3">
-            {name}
-          </Text>
-          <div
-            className="current-activity flex items-center gap-2"
-            role="status"
-          >
-            {activity.working && <Loader size="sm" />}
-            <Text variant="secondary">
-              {effectiveJob.inputError !== undefined && !nativeFiles
-                ? "Input rejected"
-                : !connected
-                  ? "Reconnecting"
-                  : projection.pendingSpans?.length && activity.working
-                    ? "Restoring response"
-                    : activity.label}
-            </Text>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <ThemeControl />
-          {job.cleanupStatus === "pending" && (
-            <Badge variant="error" className="text-base">
-              Cleanup retrying
-            </Badge>
-          )}
-          {!readOnly &&
-            effectiveJob.nativeSession === true &&
-            running &&
-            !effectiveJob.recovery?.sealed && (
-              <BrowserLiveViewControl key={job.id} jobId={job.id} />
-            )}
-          {!readOnly && conversing && (
-            <Tooltip
-              content="Stop attempt"
-              render={
-                <Button
-                  variant="secondary"
-                  shape="square"
-                  aria-label="Stop attempt"
-                  icon={<StopIcon size={16} />}
-                  disabled={!conversing || pending}
-                  onClick={interrupt}
-                />
-              }
-            />
-          )}
-        </div>
-      </header>
-      <div className="border-b border-kumo-line px-4 py-1">
-        <Collapsible className="conversation-details">
-          <Collapsible.DefaultTrigger>
-            Conversation details
-          </Collapsible.DefaultTrigger>
-          <Collapsible.DefaultPanel className="grid gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="text-base">
-                {job.model ?? "OpenCode Go"}
-              </Badge>
-              <Text variant="secondary">
-                {connected ? "Live projection" : "Reconnecting"}
-              </Text>
-              <Text variant="secondary">{job.id}</Text>
-            </div>
-            <Text>{task || job.task}</Text>
-            {job.archiveStatus === "compacted" && (
-              <Badge variant="secondary">Archive compacted</Badge>
-            )}
-            {job.archiveStatus === "failed" && (
-              <Badge variant="destructive">Archive retrying</Badge>
-            )}
-            <div className="overflow-x-auto">
-              <Tabs
-                variant="underline"
-                value={job.id}
-                onValueChange={onSelect}
-                tabs={attempts.map((a) => ({
-                  value: a.id,
-                  label: `Attempt ${a.attempt ?? 1} · ${a.status}`
-                }))}
-              />
-            </div>
-            {!readOnly && canStopRun && (
-              <Button
-                variant="secondary"
-                disabled={pending}
-                onClick={() =>
-                  void cancelRun(job.runId).catch((e) => setError(String(e)))
-                }
-              >
-                Stop run
-              </Button>
-            )}
-          </Collapsible.DefaultPanel>
-        </Collapsible>
-        {!readOnly && effectiveJob.recovery && (
-          <RuntimeRecoveryNotice
-            key={effectiveJob.recovery.observedAt}
-            recovery={effectiveJob.recovery}
-            scope="attempt"
-            attemptId={job.id}
-            onResumed={() => onRevision()}
-          />
-        )}
-      </div>
+      <ConversationHeader
+        job={job}
+        effectiveJob={effectiveJob}
+        name={name}
+        activity={activity}
+        connected={connected}
+        pendingSpans={projection.pendingSpans}
+        nativeFiles={nativeFiles}
+        running={running}
+        conversing={conversing}
+        readOnly={readOnly}
+        pending={pending}
+        interrupt={interrupt}
+      />
+      <ConversationDetails
+        job={job}
+        attempts={attempts}
+        task={task}
+        connected={connected}
+        readOnly={readOnly}
+        canStopRun={canStopRun}
+        pending={pending}
+        onSelect={onSelect}
+        recovery={effectiveJob.recovery}
+        onResumed={() => onRevision()}
+        onStopRun={() =>
+          void cancelRun(job.runId).catch((e) => setError(String(e)))
+        }
+      />
       <div className="relative min-h-0">
         <div
           className="message-scroll h-full min-h-0 overflow-y-auto"
           ref={scrollRef}
-          onScroll={(event) => {
-            const scroll = event.currentTarget;
-            followingBottom.current =
-              scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop <=
-              48;
-            setAwayFromBottom(!followingBottom.current);
-          }}
+          onScroll={onScroll}
         >
-          <div className="message-column mx-auto grid w-full max-w-3xl gap-4 px-4 py-5">
-            {!connected &&
-              (effectiveJob.inputError === undefined || nativeFiles) && (
-                <Banner
-                  variant="secondary"
-                  role="status"
-                  title="Reconnecting to this conversation"
-                  description="Cloud execution may continue while updates reconnect. Your draft stays here."
-                />
-              )}
-            {effectiveStatus === "waiting" && (
-              <Banner
-                variant="secondary"
-                description={activity.detail}
-                action={
-                  activePeer && onSelectConversation ? (
-                    <Button
-                      variant="ghost"
-                      onClick={() => onSelectConversation(activePeer.job.id)}
-                    >
-                      Open {activePeer.label}
-                    </Button>
-                  ) : undefined
-                }
-              />
-            )}
-            {nativeFiles && (
-              <RunFilesPanel
-                key={`${effectiveJob.id}:${effectiveJob.outputCommit ?? effectiveJob.inputCommit ?? ""}`}
-                runId={job.runId}
-                jobId={job.id}
-              />
-            )}
-            {effectiveJob.inputError !== undefined && (
-              <Banner
-                className="composer-error"
-                variant="error"
-                role="alert"
-                title={
-                  nativeFiles
-                    ? "Assessment input rejected"
-                    : "Input rejected before session start"
-                }
-                description={
-                  <>
-                    <p>{effectiveJob.inputError}</p>
-                    <p>
-                      Correct the instructions or attachments below to queue a
-                      fresh revision.
-                    </p>
-                  </>
-                }
-              />
-            )}
-            {messages.length === 0
-              ? effectiveJob.inputError === undefined && (
-                  <WaitingState status={effectiveStatus} />
-                )
-              : turns.map((turn, index) => (
-                  <ChatResponse
-                    key={turn.id}
-                    turn={turn}
-                    name={name}
-                    active={
-                      conversing &&
-                      projection.busy &&
-                      index === turns.length - 1
-                    }
-                    activity={activity}
-                  />
-                ))}
-            {outcome && (
-              <section aria-label="Accepted outcome" className="grid gap-2">
-                <Text bold>Accepted outcome</Text>
-                <ChatMarkdown>{outcome}</ChatMarkdown>
-              </section>
-            )}
-            {effectiveStatus === "completed" && !outcome && (
-              <Banner
-                variant="secondary"
-                title="Completed"
-                description={
-                  messages.some(
-                    (m) =>
-                      m.role === "assistant" &&
-                      m.parts.some((p) => p.type === "text" && p.text.trim())
-                  )
-                    ? "This attempt has finished. Its accepted files are available above."
-                    : "This attempt completed through tool results without a separate chat summary. Expand Activity for its recorded work, or open Files for accepted deliverables."
-                }
-              />
-            )}
-          </div>
+          <ConversationTranscript
+            job={job}
+            effectiveJob={effectiveJob}
+            messages={messages}
+            turns={turns}
+            name={name}
+            activity={activity}
+            connected={connected}
+            conversing={conversing}
+            busy={projection.busy}
+            outcome={outcome}
+            activePeer={activePeer}
+            onSelectConversation={onSelectConversation}
+          />
         </div>
         {awayFromBottom && (
           <div className="absolute inset-x-0 bottom-3 flex justify-center">
             <Button
               variant="secondary"
               icon={<ArrowDownIcon size={16} />}
-              onClick={() => {
-                followingBottom.current = true;
-                scrollRef.current?.scrollTo({
-                  top: scrollRef.current.scrollHeight
-                });
-                setAwayFromBottom(false);
-              }}
+              onClick={jumpToLatest}
             >
               Jump to latest
             </Button>
@@ -555,7 +279,7 @@ export function SpecialistChat({
                   pasteMaterials(
                     event,
                     materials.draft,
-                    !composerAvailable || pending || !!submission.current
+                    !composerAvailable || pending || !!submission
                   );
               }}
               onDragOver={(event) => {
@@ -570,7 +294,7 @@ export function SpecialistChat({
                   dropMaterials(
                     event,
                     materials.draft,
-                    !composerAvailable || pending || !!submission.current
+                    !composerAvailable || pending || !!submission
                   );
               }}
             >
@@ -579,9 +303,7 @@ export function SpecialistChat({
                   draft={materials.draft}
                   files={materials.files}
                   {...(materials.error ? { error: materials.error } : {})}
-                  disabled={
-                    !composerAvailable || pending || !!submission.current
-                  }
+                  disabled={!composerAvailable || pending || !!submission}
                 />
               )}
               {filesSelected && (
@@ -592,20 +314,13 @@ export function SpecialistChat({
                   Selection does not mean the specialist has read them.
                 </Text>
               )}
-              {submission.current && error && (
+              {submission && error && (
                 <Text variant="secondary">
                   Retry sends the same instructions and files.
                 </Text>
               )}
-              {canEditRejectedSubmission && submission.current && (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    submission.current = undefined;
-                    setCanEditRejectedSubmission(false);
-                    setError(undefined);
-                  }}
-                >
+              {canEditRejectedSubmission && submission && (
+                <Button variant="secondary" onClick={editRejectedDraft}>
                   Edit rejected draft
                 </Button>
               )}
@@ -622,7 +337,7 @@ export function SpecialistChat({
                     void steer();
                   }
                 }}
-                disabled={!composerAvailable || pending || !!submission.current}
+                disabled={!composerAvailable || pending || !!submission}
                 placeholder={
                   preparing
                     ? "Discuss your project while discovery runs…"
@@ -663,18 +378,5 @@ export function SpecialistChat({
         </footer>
       )}
     </section>
-  );
-}
-
-function WaitingState({ status }: { status: string }) {
-  if (status === "completed") return null;
-  return (
-    <Empty
-      icon={status === "running" ? <Loader /> : <BrainIcon size={24} />}
-      title={
-        status === "running" ? "Specialist is working" : "Conversation ready"
-      }
-      description="Session events will appear here as the specialist works."
-    />
   );
 }

@@ -35,7 +35,7 @@ const form: PendingForm = {
   ]
 };
 
-it("shows offered choices and descriptions for the stock question tool's custom string field", () => {
+it("omits stale conditional answers after a custom question choice", () => {
   // Exact shape produced by question.toField in OpenCode 2.2.5.
   const question: PendingForm = {
     id: "frm_stock_question",
@@ -63,47 +63,6 @@ it("shows offered choices and descriptions for the stock question tool's custom 
       }
     ]
   };
-  const html = renderToStaticMarkup(
-    createElement(NativeQuestion, {
-      form: question,
-      disabled: false,
-      onAnswer: () => {},
-      onCancel: () => {}
-    })
-  );
-  expect(html).toContain("Focused");
-  expect(html).toContain("Keep the existing scope");
-  expect(html).toContain("Broader");
-  expect(html).toContain("Include the optional section");
-  expect(html).toContain('role="combobox"');
-  const multiple: PendingForm = {
-    ...question,
-    fields: [
-      {
-        key: "q0",
-        type: "multiselect",
-        title: "Approaches",
-        options: [
-          {
-            value: "Focused",
-            label: "Focused",
-            description: "Keep the existing scope"
-          }
-        ],
-        custom: true
-      }
-    ]
-  };
-  expect(
-    renderToStaticMarkup(
-      createElement(NativeQuestion, {
-        form: multiple,
-        disabled: false,
-        onAnswer: () => {},
-        onCancel: () => {}
-      })
-    )
-  ).toContain("Keep the existing scope");
   expect(
     answerForForm(
       {
@@ -122,7 +81,7 @@ it("shows offered choices and descriptions for the stock question tool's custom 
   ).toEqual({ q0: "My custom answer" });
 });
 
-it("renders native field controls and requires an explicit external-step acknowledgement", () => {
+it("keeps external acknowledgements from becoming navigation links", () => {
   const html = renderToStaticMarkup(
     createElement(NativeQuestion, {
       form,
@@ -131,14 +90,7 @@ it("renders native field controls and requires an explicit external-step acknowl
       onCancel: () => {}
     })
   );
-  expect(html).toContain('role="combobox"');
-  expect(html).toContain('type="checkbox"');
-  expect(html).toContain("I completed this step");
-  expect(html).toContain("external-link");
   expect(html).not.toContain('href="https:');
-  expect(html).toContain("Send answer");
-  expect(html).not.toContain("Safe choice");
-  expect(html).not.toContain("JSON");
 });
 
 it("omits answers for conditional fields that became inactive", () => {

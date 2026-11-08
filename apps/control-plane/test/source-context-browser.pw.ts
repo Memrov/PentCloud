@@ -1,4 +1,8 @@
-import { test, expect, expect as browserExpect } from "playwright/test";
+import {
+  test,
+  expect,
+  expect as browserExpect
+} from "../../../scripts/browser-qa/fixtures.mts";
 test.describe("optional source context in target setup", () => {
   for (const width of [390, 1440])
     test(
