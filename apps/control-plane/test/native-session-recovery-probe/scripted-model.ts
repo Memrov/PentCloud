@@ -14,7 +14,10 @@ export const SCRIPTED_MODEL_URL = "http://scripted-model.invalid/v1";
 
 export async function scriptedModel(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  if (url.origin !== new URL(SCRIPTED_MODEL_URL).origin)
+  if (
+    url.origin !== new URL(SCRIPTED_MODEL_URL).origin ||
+    url.pathname !== "/v1/chat/completions"
+  )
     return new Response("Unexpected outbound request", { status: 502 });
   const input = (await request.json()) as {
     messages?: Array<{ role?: string; content?: unknown }>;

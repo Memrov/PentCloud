@@ -31,8 +31,6 @@ JSON, YAML and generated Worker types are never reformatted. If
 `format:check` still fails right after `npm run format`, run `format` once
 more: oxfmt 0.74 settles a few files on its second pass. Lint rules listed
 as backlog in `.oxlintrc.json` warn instead of failing until they are fixed.
-To skip the one-time formatting commit in `git blame`, run
-`git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
 Each Worker's `worker-configuration.d.ts` holds its bindings and the
 Workers runtime types for its compatibility date and flags, as

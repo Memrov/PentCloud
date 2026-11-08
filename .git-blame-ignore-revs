@@ -1,6 +1,3 @@
-# Mechanical formatting commits. Configure git to skip them in blame:
-#   git config blame.ignoreRevsFile .git-blame-ignore-revs
-# GitHub applies this file automatically.
-
-# Format the repository with oxfmt
-765c3a76bddabcdeb698172dc9a9ef46dfeef587
+# Reserve this file for standalone mechanical formatting commits on main.
+# This branch is squash-merged with semantic changes, so its original
+# formatting commit cannot be ignored separately in main's history.
