@@ -1,0 +1,126 @@
+{
+  "experiment": "standalone-opencode-server-control",
+  "recordedAt": "2026-11-08T04:49:06.522Z",
+  "cliVersion": "opencode v2.2.6",
+  "health": {
+    "version": "2.2.6",
+    "pid": 23323,
+    "hostname": "Darians-Mac-mini.local",
+    "urls": [
+      "http://127.0.0.1:51130"
+    ],
+    "paths": {
+      "tmp": "/private/var/folders/q_/4_0c27414mnd0pxy302y67yw0000gn/T/opencode"
+    },
+    "capabilities": {
+      "persistentPty": true
+    }
+  },
+  "location": {
+    "directory": "/var/folders/q_/4_0c27414mnd0pxy302y67yw0000gn/T/pentcloud-opencode-server-JCkAki/workspace",
+    "project": {
+      "id": "a353f7c48510a1522128aa8992d386c0f46bc287",
+      "directory": "/private/var/folders/q_/4_0c27414mnd0pxy302y67yw0000gn/T/pentcloud-opencode-server-JCkAki/workspace",
+      "canonical": "/private/var/folders/q_/4_0c27414mnd0pxy302y67yw0000gn/T/pentcloud-opencode-server-JCkAki/workspace"
+    }
+  },
+  "embeddedSession": {
+    "found": false,
+    "name": "SessionNotFoundError",
+    "message": "Session not found: ses_root"
+  },
+  "ownSession": {
+    "created": "ses_e4682e1b6ffe6fjz2bMa4jjXlG",
+    "loaded": "ses_e4682e1b6ffe6fjz2bMa4jjXlG",
+    "title": "Standalone server control",
+    "sameSession": true
+  },
+  "cliSessionList": {
+    "exitCode": 0,
+    "stdout": "[\n  {\n    \"id\": \"ses_e4682e1b6ffe6fjz2bMa4jjXlG\",\n    \"title\": \"Standalone server control\",\n    \"updated\": 1794113347176,\n    \"created\": 1794113347176,\n    \"projectId\": \"a353f7c48510a1522128aa8992d386c0f46bc287\",\n    \"directory\": \"/var/folders/q_/4_0c27414mnd0pxy302y67yw0000gn/T/pentcloud-opencode-server-JCkAki/workspace\"\n  }\n]\n",
+    "stderr": ""
+  },
+  "fileList": {
+    "ok": true,
+    "value": {
+      "location": {
+        "directory": "/var/folders/q_/4_0c27414mnd0pxy302y67yw0000gn/T/pentcloud-opencode-server-JCkAki/workspace"
+      },
+      "data": [
+        {
+          "path": "README.md",
+          "type": "file"
+        }
+      ]
+    }
+  },
+  "ptyCreate": {
+    "ok": true,
+    "value": {
+      "location": {
+        "directory": "/var/folders/q_/4_0c27414mnd0pxy302y67yw0000gn/T/pentcloud-opencode-server-JCkAki/workspace"
+      },
+      "data": {
+        "id": "pty_1b97d1ec2001VNGO3wNANTTXa7",
+        "title": "Harmless server control",
+        "command": "/usr/bin/printf",
+        "args": [
+          "pentcloud-server-control"
+        ],
+        "cwd": "/var/folders/q_/4_0c27414mnd0pxy302y67yw0000gn/T/pentcloud-opencode-server-JCkAki/workspace",
+        "status": "running",
+        "pid": 23325
+      }
+    }
+  },
+  "webShell": {
+    "status": 200,
+    "contentType": "text/html",
+    "html": true,
+    "bytes": 9162
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/location",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/session/ses_root",
+      "status": 404
+    },
+    {
+      "method": "POST",
+      "path": "/api/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/session/ses_e4682e1b6ffe6fjz2bMa4jjXlG",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/fs/list",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/pty",
+      "status": 200
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/pty/pty_1b97d1ec2001VNGO3wNANTTXa7",
+      "status": 204
+    }
+  ],
+  "scope": "Separate local OpenCode server; no model prompt, production connection, or migration of PentCloud sessions",
+  "cleanedUp": true
+}

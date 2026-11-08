@@ -1,0 +1,7 @@
+{
+  "name": "pentcloud-opencode-cloud-trial-host",
+  "scheduling_policy": "durable_object",
+  "durable_objects": {"script_name": "pentcloud-opencode-cloud-trial", "class_name": "OpenCodeCloudHost"},
+  "configuration": {"wrangler_ssh": {"enabled": false}},
+  "observability": {"logs": {"enabled": false}}
+}

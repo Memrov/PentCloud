@@ -1,0 +1,234 @@
+{
+  "experiment": "upstream-opencode-terminal",
+  "recordedAt": "2026-11-08T04:41:48.676Z",
+  "versions": {
+    "node": "v26.12.1",
+    "agents": "0.33.0",
+    "sdk": "2.2.6",
+    "plugin": "2.2.6",
+    "client": "2.2.6"
+  },
+  "native": {
+    "health": {
+      "ok": true,
+      "value": {
+        "version": "unknown",
+        "pid": 1,
+        "hostname": "localhost",
+        "urls": [],
+        "paths": {
+          "tmp": "/tmp/opencode/tmp"
+        },
+        "capabilities": {
+          "persistentPty": false
+        }
+      }
+    },
+    "root": {
+      "id": "ses_root",
+      "storedID": "ses_root",
+      "historyCount": 1,
+      "messageTypes": [
+        "agent-switched"
+      ],
+      "nativeHistoryMatches": true
+    },
+    "transport": {
+      "fetch": "undefined",
+      "handler": "undefined",
+      "serverFetch": "undefined"
+    },
+    "ptyList": {
+      "ok": true,
+      "value": {
+        "location": {
+          "directory": "/bundle"
+        },
+        "data": []
+      }
+    },
+    "ptyCreate": {
+      "ok": false,
+      "error": "ClientError: UnexpectedStatus: 500",
+      "details": {
+        "reason": "UnexpectedStatus",
+        "name": "ClientError"
+      }
+    },
+    "fileList": {
+      "ok": false,
+      "error": "ClientError: UnexpectedStatus: 500",
+      "details": {
+        "reason": "UnexpectedStatus",
+        "name": "ClientError"
+      }
+    },
+    "preserved": {
+      "session": true,
+      "history": true,
+      "nativeHistory": true,
+      "workspace": true,
+      "attempt": true
+    },
+    "activity": {
+      "credentialReads": 0,
+      "providerRequests": 0,
+      "scannerCalls": 0,
+      "toolboxInitializations": 0,
+      "toolboxReadinessCalls": 0
+    }
+  },
+  "stockClient": {
+    "serverInfo": {
+      "ok": false,
+      "name": "ClientError",
+      "message": "UnexpectedStatus: 404",
+      "reason": "UnexpectedStatus"
+    },
+    "existingSession": {
+      "ok": false,
+      "name": "ClientError",
+      "message": "UnsupportedContentType: text/plain;charset=UTF-8",
+      "reason": "UnsupportedContentType"
+    }
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/opencode-attach/terminal-trial/api/info",
+      "status": 404,
+      "contentType": "text/plain;charset=UTF-8",
+      "body": "Not implemented"
+    },
+    {
+      "method": "GET",
+      "path": "/opencode-attach/terminal-trial/api/session/ses_root",
+      "status": 404,
+      "contentType": "text/plain;charset=UTF-8",
+      "body": "Not implemented"
+    }
+  ],
+  "cli": {
+    "tested": true,
+    "version": "opencode v2.2.6",
+    "args": [
+      "--server",
+      "<local-worker>/opencode-attach/terminal-trial",
+      "--session",
+      "ses_root"
+    ],
+    "exitCode": 1,
+    "signal": null,
+    "timedOut": false,
+    "output": "Error: Server at http://127.0.0.1:50900/opencode-attach/terminal-trial did not provide a compatible V2 health response: UnexpectedStatus: 404\n    at cli.server-connection.resolve (/$bunfs/root/chunk-ghrtb1qm.js:95:6625)\n    at cli.server-connection.resolve (definition) (/$bunfs/root/chunk-sy8717d3.js:2:472) {\n  [cause]: ClientError: UnexpectedStatus: 404\n      at <anonymous> (/$bunfs/root/chunk-sa2spnnz.js:2:1212) {\n    [cause]: Error: {\"status\":404}\n  }\n}\n"
+  },
+  "documentedHandler": {
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/opencode-docs-attach/terminal-trial/api/info",
+        "status": 200,
+        "body": {
+          "version": "unknown",
+          "pid": 1,
+          "hostname": "localhost",
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp/opencode/tmp"
+          },
+          "capabilities": {
+            "persistentPty": false
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/opencode-docs-attach/terminal-trial/api/session/ses_root",
+        "status": 200,
+        "body": {
+          "version": "unknown",
+          "pid": 1,
+          "hostname": "localhost",
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp/opencode/tmp"
+          },
+          "capabilities": {
+            "persistentPty": false
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/opencode-docs-attach/terminal-trial/api/location",
+        "status": 200,
+        "body": {
+          "version": "unknown",
+          "pid": 1,
+          "hostname": "localhost",
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp/opencode/tmp"
+          },
+          "capabilities": {
+            "persistentPty": false
+          }
+        }
+      }
+    ],
+    "serverInfo": {
+      "httpOk": true,
+      "payloadMatchesEndpoint": true,
+      "value": {
+        "version": "unknown",
+        "pid": 1,
+        "hostname": "localhost",
+        "urls": [],
+        "paths": {
+          "tmp": "/tmp/opencode/tmp"
+        },
+        "capabilities": {
+          "persistentPty": false
+        }
+      }
+    },
+    "existingSession": {
+      "httpOk": true,
+      "payloadMatchesEndpoint": false,
+      "value": null
+    },
+    "location": {
+      "httpOk": true,
+      "payloadMatchesEndpoint": false,
+      "value": {
+        "version": "unknown",
+        "pid": 1,
+        "hostname": "localhost",
+        "urls": [],
+        "paths": {
+          "tmp": "/tmp/opencode/tmp"
+        },
+        "capabilities": {
+          "persistentPty": false
+        }
+      }
+    },
+    "cli": {
+      "tested": true,
+      "version": "opencode v2.2.6",
+      "args": [
+        "--server",
+        "<local-worker>/opencode-docs-attach/terminal-trial",
+        "session",
+        "list",
+        "--format",
+        "json"
+      ],
+      "exitCode": 1,
+      "signal": null,
+      "timedOut": false,
+      "output": "Warning: Server at http://127.0.0.1:50900/opencode-docs-attach/terminal-trial has version unknown; this client is 2.2.6. Continuing anyway.\nundefined is not an object (evaluating 'f.project.id')\n"
+    }
+  },
+  "runtimeErrors": []
+}

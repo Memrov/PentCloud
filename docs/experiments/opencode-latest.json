@@ -1,0 +1,36 @@
+{
+  "checkedAt": "2026-11-08T04:39:57.446Z",
+  "command": "npm view <package>@latest version dist-tags time.modified dist.integrity --json",
+  "packages": [
+    {
+      "package": "@opencode/sdk",
+      "latest": "2.2.6",
+      "distTagLatest": "2.2.6",
+      "registryModified": "2026-11-08T03:51:11.548Z",
+      "integrity": "sha512-8jzZZx/d6KSUXI5NLC1friMPduE0TEz1ysHUVkyxp54X4eXS6quJ7+xAd6v+ngZE+ALCpjycqnlwgdb7lV5Fhg=="
+    },
+    {
+      "package": "@opencode/plugin",
+      "latest": "2.2.6",
+      "distTagLatest": "2.2.6",
+      "registryModified": "2026-11-08T03:51:12.343Z",
+      "integrity": "sha512-PbQD4aN8YJ8w3gM5L9h2msXppxEAUVj8Ejbaj6MMNb+99jPm7/XM+g2ugZomSNs1XXuab2IlrIKDgbiI49VfLw=="
+    },
+    {
+      "package": "@opencode/client",
+      "latest": "2.2.6",
+      "distTagLatest": "2.2.6",
+      "registryModified": "2026-11-08T03:50:55.922Z",
+      "integrity": "sha512-o90b8Z6tk62U3MiRK1g6r7WmNWLzHzIHme75/MCWa9/XmOREMzY4W1N01wAuHwU3J6UH/PlUDNKvLkeX5qCyeA=="
+    },
+    {
+      "package": "@opencode/cli",
+      "latest": "2.2.6",
+      "distTagLatest": "2.2.6",
+      "registryModified": "2026-11-08T03:51:43.917Z",
+      "integrity": "sha512-QTa4MBGUSTlE41juBAMRZxyjZZWXm/qKul1ZJMYKxrrdCyq5Asn3IiyXUXDQDK97A4BZ5LQuyHz86KFp85AzkQ=="
+    }
+  ],
+  "allMatchTrial": true,
+  "note": "Scoped V2 package latest tags. The separately maintained opencode-ai package is a different version line."
+}

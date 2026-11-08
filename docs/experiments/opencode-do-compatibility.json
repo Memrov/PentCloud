@@ -1,0 +1,66 @@
+{
+  "experiment": "opencode-do-read-only-latest-v2-compatibility",
+  "recordedAt": "2026-11-08T05:52:56.073903+00:00",
+  "scope": "Read-only version, health, and session-list compatibility checks; no prompts, inference, session mutations, or archive execution.",
+  "source": {
+    "jarvisRepository": "https://github.com/jarvisAI-droid/opencode-do",
+    "jarvisCommit": "a5be25daa9c3c0e2146654054618f498c1fcb9c6",
+    "originalRepository": "https://github.com/southpolesteve/opencode-do",
+    "originalCommit": "8e6dd548c0b39be5be8a9da475bc26aa921b1291",
+    "liveDemoOrigin": "https://opencode-do.southpolesteve.workers.dev"
+  },
+  "platform": {
+    "system": "Linux",
+    "architecture": "x86_64"
+  },
+  "registry": {
+    "url": "https://registry.npmjs.org/@opencode/cli/latest",
+    "package": "@opencode/cli",
+    "latestVersion": "2.2.6"
+  },
+  "http": [
+    {
+      "method": "GET",
+      "url": "https://opencode-do.southpolesteve.workers.dev/global/health",
+      "status": 200,
+      "contentType": "application/json",
+      "body": "{\"healthy\":true,\"version\":\"0.0.4\"}"
+    },
+    {
+      "method": "GET",
+      "url": "https://opencode-do.southpolesteve.workers.dev/api/info",
+      "status": 404,
+      "contentType": "text/plain; charset=UTF-8",
+      "body": "404 Not Found"
+    }
+  ],
+  "cli": {
+    "package": "@opencode/cli",
+    "versionCommand": [
+      "opencode",
+      "--version"
+    ],
+    "versionExitCode": 0,
+    "versionStdout": "opencode v2.2.6",
+    "versionStderr": "",
+    "installedMatchesLatest": true,
+    "command": [
+      "opencode",
+      "--server",
+      "https://opencode-do.southpolesteve.workers.dev",
+      "session",
+      "list",
+      "--format",
+      "json"
+    ],
+    "exitCode": 1,
+    "stdout": "",
+    "stderr": "Server at https://opencode-do.southpolesteve.workers.dev did not provide a compatible V2 health response: UnexpectedStatus: 404\n"
+  },
+  "interpretation": {
+    "legacyHealthResponds": true,
+    "v2HealthMissing": true,
+    "latestCliRejectsServer": true,
+    "limits": "A responding legacy health endpoint does not establish historical TUI compatibility, deployed commit identity, model execution, cancellation, or eviction recovery."
+  }
+}

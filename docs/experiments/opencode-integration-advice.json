@@ -1,0 +1,788 @@
+{
+  "experiment": "pentcloud-full-server-integration",
+  "recordedAt": "2026-11-08T05:09:15.940Z",
+  "platform": "linux",
+  "architecture": "x64",
+  "scope": "Local Cloudflare workerd; full OpenCode process on the test machine; scripted model; fixture Git transport",
+  "scenarios": [
+    {
+      "scenario": "advice",
+      "provider": [
+        {
+          "path": "/v1/chat/completions",
+          "model": "deepseek-v4-pro",
+          "stream": true,
+          "primary": true,
+          "tools": [
+            "skill"
+          ],
+          "toolResultCount": 0,
+          "hasBaselineToolResult": false
+        },
+        {
+          "path": "/v1/responses",
+          "model": "gpt-6-luna",
+          "stream": true,
+          "primary": false,
+          "tools": [],
+          "toolResultCount": 0,
+          "hasBaselineToolResult": false
+        },
+        {
+          "path": "/v1/chat/completions",
+          "model": "deepseek-v4-pro",
+          "stream": true,
+          "primary": true,
+          "tools": [],
+          "toolResultCount": 0,
+          "hasBaselineToolResult": false
+        }
+      ],
+      "checks": {
+        "cliSeesSameSession": true,
+        "serverFilesystemIsSeparate": true,
+        "scriptedPrimaryExecuted": true,
+        "sessionSurvivedServerRestart": true,
+        "expectedAttemptStatus": true
+      },
+      "prepared": {
+        "id": "job-0",
+        "agent": "pentcloud-adviser",
+        "model": {
+          "providerID": "opencode-go",
+          "id": "deepseek-v4-pro"
+        },
+        "baselineText": "baseline\n"
+      },
+      "cliVersion": "opencode v2.2.6",
+      "health": {
+        "version": "2.2.6",
+        "pid": 64,
+        "hostname": "829b25855fe2",
+        "urls": [
+          "http://127.0.0.1:38431"
+        ],
+        "paths": {
+          "tmp": "/tmp/opencode"
+        },
+        "capabilities": {
+          "persistentPty": true
+        }
+      },
+      "whileRunning": {
+        "coordinator": {
+          "jobs": [
+            {
+              "nativeSession": true,
+              "id": "job-0",
+              "runId": "run-0",
+              "role": "adviser",
+              "tool": "advice",
+              "depth": 0,
+              "status": "running",
+              "revision": 1,
+              "task": "Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+              "model": "opencode-go:deepseek-v4-pro",
+              "reasoningEffort": "default",
+              "settingsRevision": "s",
+              "configurationSource": "settings",
+              "logicalThreadId": "job-0",
+              "attempt": 1,
+              "inputCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "conversationOrder": 1
+            }
+          ],
+          "active": {
+            "id": "job-0",
+            "input": {
+              "id": "job-0",
+              "runId": "run-0",
+              "role": "adviser",
+              "tool": "advice",
+              "args": {
+                "question": "Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+                "message": "Isolated full-server trial"
+              },
+              "task": "Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+              "repo": "probe",
+              "remote": "https://example.invalid/repo.git",
+              "settingsRevision": "s",
+              "settings": {
+                "promptTemplate": "You are PentCloud's adviser. Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+                "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "model": "opencode-go:deepseek-v4-pro",
+                "reasoningEffort": "default",
+                "promptFormat": "markdown"
+              },
+              "depth": 0,
+              "attempt": 1,
+              "logicalThreadId": "job-0",
+              "createdAt": 0,
+              "inputCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "context": {
+                "objective": "Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+                "head_commit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+                "wave": 0,
+                "attempts": [],
+                "evidence": [],
+                "enabledTools": [],
+                "browserAllowedURLs": [
+                  "https://owned.invalid/"
+                ],
+                "target": {
+                  "id": "seed-run-0",
+                  "name": "Owned fixture",
+                  "kind": "website",
+                  "url": "https://owned.invalid/",
+                  "revision": 1,
+                  "objective": "",
+                  "exclusions": ""
+                },
+                "networkReach": {
+                  "url": "https://owned.invalid/",
+                  "scope": "Target is guidance, not universal host confinement"
+                },
+                "apiAuth": "Unauthenticated coverage",
+                "run_id": "run-0"
+              }
+            }
+          },
+          "runs": [
+            {
+              "target": {
+                "id": "seed-run-0",
+                "name": "Owned fixture",
+                "kind": "website",
+                "url": "https://owned.invalid/",
+                "revision": 1,
+                "archived": false,
+                "createdAt": 0,
+                "updatedAt": 0,
+                "updatedBy": "fixture",
+                "objective": "",
+                "exclusions": ""
+              },
+              "id": "run-0",
+              "task": "Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+              "status": "running",
+              "repo": "probe",
+              "remote": "https://example.invalid/repo.git",
+              "inputCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "headCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "settingsRevision": "s",
+              "settings": {
+                "revision": "s",
+                "roles": {
+                  "primary": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "adviser": {
+                    "promptTemplate": "You are PentCloud's adviser. Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default",
+                    "promptFormat": "markdown"
+                  },
+                  "coder": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "maintenance": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "memorist": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "pentester": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "searcher": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  }
+                }
+              },
+              "createdAt": 0,
+              "wave": 0,
+              "phase": "setup",
+              "maxDepth": 4,
+              "maxJobs": 48
+            }
+          ]
+        },
+        "acceptedHead": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+        "attempt": {
+          "execution": {
+            "state": "running",
+            "drained": false,
+            "unresolvedRemote": 0,
+            "sessionCleanupPending": false,
+            "startup": {
+              "stage": "harness.submit.after",
+              "at": 1794114560923,
+              "role": "adviser",
+              "attempt": 1,
+              "prepared": true,
+              "promptCharacters": 2027,
+              "version": {
+                "id": "probe-terminal",
+                "tag": "fixture"
+              }
+            },
+            "runtimeVersion": {
+              "id": "probe-terminal",
+              "tag": "fixture"
+            }
+          },
+          "history": [
+            {
+              "id": "msg_1b98fa190001i8zazedr54xbHN",
+              "time": {
+                "created": 1794114560400
+              },
+              "type": "model-switched",
+              "model": {
+                "id": "deepseek-v4-pro",
+                "providerID": "opencode-go"
+              }
+            },
+            {
+              "id": "msg_job-0",
+              "time": {
+                "created": 1794114560926
+              },
+              "text": "Execute the pinned specialist launch. Native context (immutable input ca9ee06e9a1f866866ea2b8f1ba77f2775750002):\n{\"objective\":\"Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.\",\"head_commit\":\"ca9ee06e9a1f866866ea2b8f1ba77f2775750002\",\"wave\":0,\"attempts\":[],\"evidence\":[],\"enabledTools\":[],\"browserAllowedURLs\":[\"https://owned.invalid/\"],\"target\":{\"id\":\"seed-run-0\",\"name\":\"Owned fixture\",\"kind\":\"website\",\"url\":\"https://owned.invalid/\",\"revision\":1,\"objective\":\"\",\"exclusions\":\"\"},\"networkReach\":{\"url\":\"https://owned.invalid/\",\"scope\":\"Target is guidance, not universal host confinement\"},\"apiAuth\":\"Unauthenticated coverage\",\"run_id\":\"run-0\"}\n\nKali file capabilities: selected materials are imported automatically for Kali-capable roles; their exact paths appear in kaliInputs. Use pentcloud_kali_import/files/export for additional file work. Tool output and screenshots are checkpointed as evidence; use pentcloud_read_evidence with the same-run job/path references supplied in native context. Captured evidence is read only. Do not rerun a scan merely to recreate missing evidence.\n\nTask workspace: /workspace/repo/b49162b6f3c748bf0fc5da42e8b5a39d4a8826144672dd495693d840a322c66a. Use relative file paths and this directory (or an empty cwd) for computer_exec commands.\n\nWorkspace capabilities: every role can use computer_* for Cloudflare files/execution and cloudflare_browser for persistent Chromium. Computer execution offers Worker shell and isolated JavaScript; it is not a Linux desktop. Computer execution and stock Kali MCP scanner tools remain available according to role. Choose the tools appropriate to the task. Finish with your role result tool once.",
+              "type": "user"
+            }
+          ],
+          "session": "ses_root",
+          "opened": {
+            "agent": "pentcloud-adviser",
+            "engine": "remote-full-server"
+          },
+          "mcp": []
+        }
+      },
+      "lastStatus": {
+        "coordinator": {
+          "jobs": [
+            {
+              "nativeSession": true,
+              "id": "job-0",
+              "runId": "run-0",
+              "role": "adviser",
+              "tool": "advice",
+              "depth": 0,
+              "status": "completed",
+              "revision": 2,
+              "task": "Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+              "model": "opencode-go:deepseek-v4-pro",
+              "reasoningEffort": "default",
+              "settingsRevision": "s",
+              "configurationSource": "settings",
+              "logicalThreadId": "job-0",
+              "attempt": 1,
+              "inputCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "outputCommit": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea",
+              "runtime": {
+                "initialized": {
+                  "id": "probe-terminal",
+                  "tag": "fixture"
+                },
+                "terminal": {
+                  "id": "probe-terminal",
+                  "tag": "fixture"
+                }
+              },
+              "conversationOrder": 1
+            }
+          ],
+          "active": null,
+          "runs": [
+            {
+              "target": {
+                "id": "seed-run-0",
+                "name": "Owned fixture",
+                "kind": "website",
+                "url": "https://owned.invalid/",
+                "revision": 1,
+                "archived": false,
+                "createdAt": 0,
+                "updatedAt": 0,
+                "updatedBy": "fixture",
+                "objective": "",
+                "exclusions": ""
+              },
+              "id": "run-0",
+              "task": "Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+              "status": "running",
+              "repo": "probe",
+              "remote": "https://example.invalid/repo.git",
+              "inputCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "headCommit": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea",
+              "settingsRevision": "s",
+              "settings": {
+                "revision": "s",
+                "roles": {
+                  "primary": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "adviser": {
+                    "promptTemplate": "You are PentCloud's adviser. Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default",
+                    "promptFormat": "markdown"
+                  },
+                  "coder": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "maintenance": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "memorist": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "pentester": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "searcher": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  }
+                }
+              },
+              "createdAt": 0,
+              "wave": 0,
+              "phase": "setup",
+              "maxDepth": 4,
+              "maxJobs": 48
+            }
+          ]
+        },
+        "acceptedHead": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea",
+        "receivedCandidate": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea",
+        "attempt": {
+          "execution": {
+            "state": "settled",
+            "result": {
+              "id": "job-0",
+              "runId": "run-0",
+              "status": "completed",
+              "inputCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "promptDigest": "188e6567aa0caca65d0b6393ddec8f279964679cea1166bd8a19bb5e22b15404",
+              "finishedAt": 1794114561025,
+              "model": "opencode-go:deepseek-v4-pro",
+              "settingsRevision": "s",
+              "runtime": {
+                "initialized": {
+                  "id": "probe-terminal",
+                  "tag": "fixture"
+                },
+                "terminal": {
+                  "id": "probe-terminal",
+                  "tag": "fixture"
+                }
+              },
+              "tool": "advice",
+              "arguments": {
+                "result": "PentCloud full-server trial completed: baseline"
+              },
+              "outputCommit": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea"
+            },
+            "drained": true,
+            "unresolvedRemote": 0,
+            "sessionCleanupPending": false,
+            "startup": {
+              "stage": "harness.wait.after",
+              "at": 1794114561024,
+              "role": "adviser",
+              "attempt": 1,
+              "prepared": true,
+              "promptCharacters": 2027,
+              "version": {
+                "id": "probe-terminal",
+                "tag": "fixture"
+              }
+            },
+            "runtimeVersion": {
+              "id": "probe-terminal",
+              "tag": "fixture"
+            }
+          },
+          "history": [
+            {
+              "id": "msg_1b98fa190001i8zazedr54xbHN",
+              "time": {
+                "created": 1794114560400
+              },
+              "type": "model-switched",
+              "model": {
+                "id": "deepseek-v4-pro",
+                "providerID": "opencode-go"
+              }
+            },
+            {
+              "id": "msg_job-0",
+              "time": {
+                "created": 1794114560926
+              },
+              "text": "Execute the pinned specialist launch. Native context (immutable input ca9ee06e9a1f866866ea2b8f1ba77f2775750002):\n{\"objective\":\"Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.\",\"head_commit\":\"ca9ee06e9a1f866866ea2b8f1ba77f2775750002\",\"wave\":0,\"attempts\":[],\"evidence\":[],\"enabledTools\":[],\"browserAllowedURLs\":[\"https://owned.invalid/\"],\"target\":{\"id\":\"seed-run-0\",\"name\":\"Owned fixture\",\"kind\":\"website\",\"url\":\"https://owned.invalid/\",\"revision\":1,\"objective\":\"\",\"exclusions\":\"\"},\"networkReach\":{\"url\":\"https://owned.invalid/\",\"scope\":\"Target is guidance, not universal host confinement\"},\"apiAuth\":\"Unauthenticated coverage\",\"run_id\":\"run-0\"}\n\nKali file capabilities: selected materials are imported automatically for Kali-capable roles; their exact paths appear in kaliInputs. Use pentcloud_kali_import/files/export for additional file work. Tool output and screenshots are checkpointed as evidence; use pentcloud_read_evidence with the same-run job/path references supplied in native context. Captured evidence is read only. Do not rerun a scan merely to recreate missing evidence.\n\nTask workspace: /workspace/repo/b49162b6f3c748bf0fc5da42e8b5a39d4a8826144672dd495693d840a322c66a. Use relative file paths and this directory (or an empty cwd) for computer_exec commands.\n\nWorkspace capabilities: every role can use computer_* for Cloudflare files/execution and cloudflare_browser for persistent Chromium. Computer execution offers Worker shell and isolated JavaScript; it is not a Linux desktop. Computer execution and stock Kali MCP scanner tools remain available according to role. Choose the tools appropriate to the task. Finish with your role result tool once.",
+              "type": "user"
+            },
+            {
+              "id": "msg_1b98fa3a9001gfnXCgttb4g0QG",
+              "time": {
+                "created": 1794114560941,
+                "streamed": 1794114560999,
+                "completed": 1794114561000
+              },
+              "type": "assistant",
+              "agent": "pentcloud-adviser",
+              "model": {
+                "id": "deepseek-v4-pro",
+                "providerID": "opencode-go",
+                "variant": "default"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "PentCloud full-server trial completed: baseline"
+                }
+              ],
+              "finish": "stop",
+              "rawFinish": "stop",
+              "cost": 0,
+              "tokens": {
+                "input": 0,
+                "output": 0,
+                "reasoning": 0,
+                "cache": {
+                  "read": 0,
+                  "write": 0
+                }
+              }
+            },
+            {
+              "id": "msg_1b98fa3eb001VHOKOQA2YumVfx",
+              "time": {
+                "created": 1794114561003
+              },
+              "type": "idle",
+              "outcome": "succeeded"
+            }
+          ],
+          "recordedWork": {
+            "format": "json-fragment",
+            "offset": 0,
+            "totalCharacters": 854,
+            "text": "{\n  \"job_id\": \"job-0\",\n  \"run_id\": \"run-0\",\n  \"status\": \"settled\",\n  \"result\": {\n    \"id\": \"job-0\",\n    \"runId\": \"run-0\",\n    \"status\": \"completed\",\n    \"inputCommit\": \"ca9ee06e9a1f866866ea2b8f1ba77f2775750002\",\n    \"promptDigest\": \"188e6567aa0caca65d0b6393ddec8f279964679cea1166bd8a19bb5e22b15404\",\n    \"finishedAt\": 1794114561025,\n    \"model\": \"opencode-go:deepseek-v4-pro\",\n    \"settingsRevision\": \"s\",\n    \"runtime\": {\n      \"initialized\": {\n        \"id\": \"probe-terminal\",\n        \"tag\": \"fixture\"\n      },\n      \"terminal\": {\n        \"id\": \"probe-terminal\",\n        \"tag\": \"fixture\"\n      }\n    },\n    \"tool\": \"advice\",\n    \"arguments\": {\n      \"result\": \"PentCloud full-server trial completed: baseline\"\n    },\n    \"outputCommit\": \"ef539ace0e2fbea34a491db77fae8dbd98bb6fea\"\n  },\n  \"historyAvailable\": false,\n  \"messages\": [],\n  \"remoteCalls\": []\n}"
+          },
+          "session": "ses_root",
+          "opened": {
+            "agent": "pentcloud-adviser",
+            "engine": "remote-full-server"
+          },
+          "mcp": []
+        }
+      },
+      "finished": {
+        "coordinator": {
+          "jobs": [
+            {
+              "nativeSession": true,
+              "id": "job-0",
+              "runId": "run-0",
+              "role": "adviser",
+              "tool": "advice",
+              "depth": 0,
+              "status": "completed",
+              "revision": 2,
+              "task": "Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+              "model": "opencode-go:deepseek-v4-pro",
+              "reasoningEffort": "default",
+              "settingsRevision": "s",
+              "configurationSource": "settings",
+              "logicalThreadId": "job-0",
+              "attempt": 1,
+              "inputCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "outputCommit": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea",
+              "runtime": {
+                "initialized": {
+                  "id": "probe-terminal",
+                  "tag": "fixture"
+                },
+                "terminal": {
+                  "id": "probe-terminal",
+                  "tag": "fixture"
+                }
+              },
+              "conversationOrder": 1
+            }
+          ],
+          "active": null,
+          "runs": [
+            {
+              "target": {
+                "id": "seed-run-0",
+                "name": "Owned fixture",
+                "kind": "website",
+                "url": "https://owned.invalid/",
+                "revision": 1,
+                "archived": false,
+                "createdAt": 0,
+                "updatedAt": 0,
+                "updatedBy": "fixture",
+                "objective": "",
+                "exclusions": ""
+              },
+              "id": "run-0",
+              "task": "Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+              "status": "running",
+              "repo": "probe",
+              "remote": "https://example.invalid/repo.git",
+              "inputCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "headCommit": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea",
+              "settingsRevision": "s",
+              "settings": {
+                "revision": "s",
+                "roles": {
+                  "primary": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "adviser": {
+                    "promptTemplate": "You are PentCloud's adviser. Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default",
+                    "promptFormat": "markdown"
+                  },
+                  "coder": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "maintenance": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "memorist": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "pentester": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "searcher": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  }
+                }
+              },
+              "createdAt": 0,
+              "wave": 0,
+              "phase": "setup",
+              "maxDepth": 4,
+              "maxJobs": 48
+            }
+          ]
+        },
+        "acceptedHead": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea",
+        "receivedCandidate": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea",
+        "attempt": {
+          "execution": {
+            "state": "settled",
+            "result": {
+              "id": "job-0",
+              "runId": "run-0",
+              "status": "completed",
+              "inputCommit": "ca9ee06e9a1f866866ea2b8f1ba77f2775750002",
+              "promptDigest": "188e6567aa0caca65d0b6393ddec8f279964679cea1166bd8a19bb5e22b15404",
+              "finishedAt": 1794114561025,
+              "model": "opencode-go:deepseek-v4-pro",
+              "settingsRevision": "s",
+              "runtime": {
+                "initialized": {
+                  "id": "probe-terminal",
+                  "tag": "fixture"
+                },
+                "terminal": {
+                  "id": "probe-terminal",
+                  "tag": "fixture"
+                }
+              },
+              "tool": "advice",
+              "arguments": {
+                "result": "PentCloud full-server trial completed: baseline"
+              },
+              "outputCommit": "ef539ace0e2fbea34a491db77fae8dbd98bb6fea"
+            },
+            "drained": true,
+            "unresolvedRemote": 0,
+            "sessionCleanupPending": false,
+            "startup": {
+              "stage": "harness.wait.after",
+              "at": 1794114561024,
+              "role": "adviser",
+              "attempt": 1,
+              "prepared": true,
+              "promptCharacters": 2027,
+              "version": {
+                "id": "probe-terminal",
+                "tag": "fixture"
+              }
+            },
+            "runtimeVersion": {
+              "id": "probe-terminal",
+              "tag": "fixture"
+            }
+          },
+          "history": [
+            {
+              "id": "msg_1b98fa190001i8zazedr54xbHN",
+              "time": {
+                "created": 1794114560400
+              },
+              "type": "model-switched",
+              "model": {
+                "id": "deepseek-v4-pro",
+                "providerID": "opencode-go"
+              }
+            },
+            {
+              "id": "msg_job-0",
+              "time": {
+                "created": 1794114560926
+              },
+              "text": "Execute the pinned specialist launch. Native context (immutable input ca9ee06e9a1f866866ea2b8f1ba77f2775750002):\n{\"objective\":\"Give a short plain-text assessment of this isolated PentCloud compatibility trial. Do not use tools.\",\"head_commit\":\"ca9ee06e9a1f866866ea2b8f1ba77f2775750002\",\"wave\":0,\"attempts\":[],\"evidence\":[],\"enabledTools\":[],\"browserAllowedURLs\":[\"https://owned.invalid/\"],\"target\":{\"id\":\"seed-run-0\",\"name\":\"Owned fixture\",\"kind\":\"website\",\"url\":\"https://owned.invalid/\",\"revision\":1,\"objective\":\"\",\"exclusions\":\"\"},\"networkReach\":{\"url\":\"https://owned.invalid/\",\"scope\":\"Target is guidance, not universal host confinement\"},\"apiAuth\":\"Unauthenticated coverage\",\"run_id\":\"run-0\"}\n\nKali file capabilities: selected materials are imported automatically for Kali-capable roles; their exact paths appear in kaliInputs. Use pentcloud_kali_import/files/export for additional file work. Tool output and screenshots are checkpointed as evidence; use pentcloud_read_evidence with the same-run job/path references supplied in native context. Captured evidence is read only. Do not rerun a scan merely to recreate missing evidence.\n\nTask workspace: /workspace/repo/b49162b6f3c748bf0fc5da42e8b5a39d4a8826144672dd495693d840a322c66a. Use relative file paths and this directory (or an empty cwd) for computer_exec commands.\n\nWorkspace capabilities: every role can use computer_* for Cloudflare files/execution and cloudflare_browser for persistent Chromium. Computer execution offers Worker shell and isolated JavaScript; it is not a Linux desktop. Computer execution and stock Kali MCP scanner tools remain available according to role. Choose the tools appropriate to the task. Finish with your role result tool once.",
+              "type": "user"
+            },
+            {
+              "id": "msg_1b98fa3a9001gfnXCgttb4g0QG",
+              "time": {
+                "created": 1794114560941,
+                "streamed": 1794114560999,
+                "completed": 1794114561000
+              },
+              "type": "assistant",
+              "agent": "pentcloud-adviser",
+              "model": {
+                "id": "deepseek-v4-pro",
+                "providerID": "opencode-go",
+                "variant": "default"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "PentCloud full-server trial completed: baseline"
+                }
+              ],
+              "finish": "stop",
+              "rawFinish": "stop",
+              "cost": 0,
+              "tokens": {
+                "input": 0,
+                "output": 0,
+                "reasoning": 0,
+                "cache": {
+                  "read": 0,
+                  "write": 0
+                }
+              }
+            },
+            {
+              "id": "msg_1b98fa3eb001VHOKOQA2YumVfx",
+              "time": {
+                "created": 1794114561003
+              },
+              "type": "idle",
+              "outcome": "succeeded"
+            }
+          ],
+          "recordedWork": {
+            "format": "json-fragment",
+            "offset": 0,
+            "totalCharacters": 854,
+            "text": "{\n  \"job_id\": \"job-0\",\n  \"run_id\": \"run-0\",\n  \"status\": \"settled\",\n  \"result\": {\n    \"id\": \"job-0\",\n    \"runId\": \"run-0\",\n    \"status\": \"completed\",\n    \"inputCommit\": \"ca9ee06e9a1f866866ea2b8f1ba77f2775750002\",\n    \"promptDigest\": \"188e6567aa0caca65d0b6393ddec8f279964679cea1166bd8a19bb5e22b15404\",\n    \"finishedAt\": 1794114561025,\n    \"model\": \"opencode-go:deepseek-v4-pro\",\n    \"settingsRevision\": \"s\",\n    \"runtime\": {\n      \"initialized\": {\n        \"id\": \"probe-terminal\",\n        \"tag\": \"fixture\"\n      },\n      \"terminal\": {\n        \"id\": \"probe-terminal\",\n        \"tag\": \"fixture\"\n      }\n    },\n    \"tool\": \"advice\",\n    \"arguments\": {\n      \"result\": \"PentCloud full-server trial completed: baseline\"\n    },\n    \"outputCommit\": \"ef539ace0e2fbea34a491db77fae8dbd98bb6fea\"\n  },\n  \"historyAvailable\": false,\n  \"messages\": [],\n  \"remoteCalls\": []\n}"
+          },
+          "session": "ses_root",
+          "opened": {
+            "agent": "pentcloud-adviser",
+            "engine": "remote-full-server"
+          },
+          "mcp": []
+        }
+      },
+      "nativeSession": {
+        "id": "ses_root",
+        "title": "PentCloud full-server trial completed: baseline"
+      },
+      "cliSessionList": {
+        "exitCode": 0,
+        "stdout": "[\n  {\n    \"id\": \"ses_root\",\n    \"title\": \"PentCloud full-server trial completed: baseline\",\n    \"updated\": 1794114561007,\n    \"created\": 1794114560382,\n    \"projectId\": \"a12a1c4db2cde55ab82e0fe6b54a1033233d8d24\",\n    \"directory\": \"/tmp/pentcloud-opencode-integration-7OLUny/workspace\"\n  }\n]\n",
+        "stderr": ""
+      },
+      "detach": {
+        "session": "ses_root",
+        "before": 4,
+        "after": 4,
+        "preserved": true
+      },
+      "restart": {
+        "beforeMessages": 4,
+        "afterMessages": 4,
+        "unchanged": true
+      },
+      "nativeFileRead": "Separate full-server filesystem; not the PentCloud Durable Object workspace.\n",
+      "runtimeErrors": [],
+      "ok": true,
+      "cleanedUp": true
+    }
+  ]
+}

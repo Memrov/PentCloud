@@ -37,6 +37,7 @@ import type { ExecWorkspaceLike } from "@cloudflare/computer/tools/core";
 import { browserTool } from "agents/browser/ai-sdk";
 import { openCodeTool, type CloudflareTool } from "./cloudflare-tools";
 import { OpenCodeHarness } from "agents/harness/opencode";
+import type { OpenCodeWorkerd } from "@opencode/sdk/workerd";
 import { submitAndWaitForOperation } from "./native-event-wait";
 import { assertSearchBinding, managedBrowser, managedWebSearch, nativeSearchOptions } from "./managed-retrieval";
 import { DEFAULT_SEARCH_PROVIDER } from "../../../../shared/search-providers";
@@ -550,6 +551,10 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       await this.startup("plugin.setup.after", state);
     },
   });
+  protected async createOpenCode(options: OpenCodeWorkerd.CreateOptions): Promise<OpenCodeWorkerd.Interface> {
+    const {OpenCodeWorkerd}=await import("@opencode/sdk/workerd");
+    return OpenCodeWorkerd.create(options);
+  }
   readonly harness = new RecoveryGuardedHarness({
     opencode: async ({ storage }) => {
       await this.assertPlatformRecoveryOpen();
@@ -563,8 +568,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       const model=this.selectedModel(state.input),apiKey=readOnly?undefined:await this.selectedModelKey(state.input);
       // Load the embedded engine only for an authorized native session, not at
       // Worker startup (which has its own platform CPU limit).
-      const {OpenCodeWorkerd}=await import("@opencode/sdk/workerd");
-      const runtime = await OpenCodeWorkerd.create({
+      const runtime = await this.createOpenCode({
         storage,
         // This attempt pins one explicitly configured model. Loading and
         // normalizing the entire bundled models.dev catalog exceeds edge memory.

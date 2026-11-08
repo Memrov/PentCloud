@@ -1,0 +1,19 @@
+{
+  "main_module": "worker.js",
+  "compatibility_date": "2026-11-08",
+  "compatibility_flags": ["nodejs_compat", "enable_request_signal"],
+  "bindings": [
+    {"name": "COORDINATOR", "type": "durable_object_namespace", "class_name": "ServerCoordinator"},
+    {"name": "ATTEMPTS", "type": "durable_object_namespace", "class_name": "CloudServerAttempt"},
+    {"name": "OPENCODE_SERVER", "type": "durable_object_namespace", "class_name": "OpenCodeCloudHost"},
+    {"name": "LOADER", "type": "worker_loader"}
+  ],
+  "containers": [{"name": "pentcloud-opencode-cloud-trial-host", "class_name": "OpenCodeCloudHost"}],
+  "exports": {
+    "ServerCoordinator": {"type": "durable-object", "storage": "sqlite"},
+    "CloudServerAttempt": {"type": "durable-object", "storage": "sqlite"},
+    "OpenCodeCloudHost": {"type": "durable-object", "storage": "sqlite", "container": "pentcloud-opencode-cloud-trial-host"}
+  },
+  "keep_bindings": ["secret_text"],
+  "observability": {"enabled": false}
+}

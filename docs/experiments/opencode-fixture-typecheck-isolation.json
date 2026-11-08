@@ -1,0 +1,50 @@
+{
+  "recordedAt": "2026-11-08T06:07:04.973608+00:00",
+  "nodeVersion": "v26.12.1",
+  "checks": [
+    {
+      "name": "normal app with fixture dependencies unavailable",
+      "command": [
+        "npm",
+        "run",
+        "typecheck",
+        "--workspace",
+        "@pentagi-artifacts/control-plane"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> @pentagi-artifacts/control-plane@0.1.0 typecheck\n> tsc --noEmit\n\n",
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n",
+      "fixtureDependenciesAvailable": false
+    },
+    {
+      "name": "optional fixtures with their dependencies restored",
+      "command": [
+        "npm",
+        "--prefix",
+        "apps/control-plane/test/native-opencode-server-probe",
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 1,
+      "stdout": "\n> pentcloud-native-opencode-server-probe@0.0.0 typecheck\n> tsc --noEmit -p tsconfig.json\n\n../../src/native/attempt.ts(201,36): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(202,18): error TS2339: Property 'LOADER' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(206,45): error TS2339: Property 'LOADER' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(206,110): error TS2741: Property 'CF_VERSION_METADATA' is missing in type 'NativeEnv' but required in type 'Pick<NativeEnv, \"CF_VERSION_METADATA\">'.\n../../src/native/attempt.ts(211,71): error TS2339: Property 'TargetEgress' does not exist on type 'Exports'.\n../../src/native/attempt.ts(215,45): error TS2339: Property 'LOADER' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(215,115): error TS2741: Property 'CF_VERSION_METADATA' is missing in type 'NativeEnv' but required in type 'Pick<NativeEnv, \"CF_VERSION_METADATA\">'.\n../../src/native/attempt.ts(245,71): error TS2339: Property 'BROWSER' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(251,96): error TS2339: Property 'BROWSER' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(267,65): error TS2339: Property 'BROWSER' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(387,171): error TS2339: Property 'LOADER' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(644,21): error TS2339: Property 'COORDINATOR' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(1192,39): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(1232,56): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(1340,39): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(2395,69): error TS2339: Property 'AI' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(2405,17): error TS2339: Property 'AI' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(2406,17): error TS2339: Property 'AI_GATEWAY_ID' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(2438,35): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(2445,43): error TS7006: Parameter 'a' implicitly has an 'any' type.\n../../src/native/attempt.ts(2445,46): error TS7006: Parameter 'b' implicitly has an 'any' type.\n../../src/native/attempt.ts(2549,43): error TS2339: Property 'AI' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(2558,39): error TS2339: Property 'AI_GATEWAY_ID' does not exist on type 'NativeEnv'.\n../../src/native/attempt.ts(2726,76): error TS2339: Property 'BROWSER' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(120,36): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(126,18): error TS2339: Property 'AI' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(127,43): error TS2339: Property 'AI' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(145,33): error TS2339: Property 'MODEL_TESTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(151,24): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(351,21): error TS2339: Property 'ATTEMPTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(621,44): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(786,31): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(1347,31): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(1359,31): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(1388,30): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(1496,33): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(1549,31): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(1557,40): error TS7006: Parameter 'a' implicitly has an 'any' type.\n../../src/native/coordinator.ts(1557,42): error TS7006: Parameter 'b' implicitly has an 'any' type.\n../../src/native/coordinator.ts(1580,31): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(1629,35): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(1663,30): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(1962,33): error TS2339: Property 'ARTIFACTS' does not exist on type 'NativeEnv'.\n../../src/native/coordinator.ts(2371,16): error TS2339: Property 'ATTEMPTS' does not exist on type 'NativeEnv'.\n../../src/native/dynamic-worker-tail.ts(28,24): error TS2344: Type '\"CF_VERSION_METADATA\"' does not satisfy the constraint '\"AGENTMAIL_API_KEY\" | \"ARTIFACTS_NAMESPACE\" | \"LEGACY_STATE_COMMIT\" | \"OPENCODE_BYOK_PROVIDERS\" | \"OPENCODE_GO_API_KEY\" | \"PENTCLOUD_AGENTMAIL_INBOX\" | \"PENTCLOUD_HACKERONE_API_TOKEN\" | ... 4 more ... | \"TOOL_PACKS\"'.\n../../src/native/dynamic-worker-tail.ts(32,32): error TS2339: Property 'NativeDynamicWorkerTail' does not exist on type 'Exports'.\n../../src/native/target-egress.ts(9,29): error TS2339: Property 'ATTEMPTS' does not exist on type 'NativeEnv'.\n../../src/native/target-egress.ts(9,51): error TS2339: Property 'ATTEMPTS' does not exist on type 'NativeEnv'.\n../native-attempt-probe/worker.ts(466,30): error TS2339: Property 'COORDINATOR' does not exist on type 'NativeEnv'.\n../native-attempt-probe/worker.ts(1228,32): error TS2339: Property 'CF_VERSION_METADATA' does not exist on type 'NativeEnv'.\n../native-coordinator-probe/worker.ts(384,44): error TS2339: Property 'ATTEMPTS' does not exist on type 'NativeEnv'.\n../native-coordinator-probe/worker.ts(416,28): error TS2339: Property 'ATTEMPTS' does not exist on type 'NativeEnv'.\n../native-coordinator-probe/worker.ts(497,23): error TS2339: Property 'ATTEMPTS' does not exist on type 'NativeEnv'.\n",
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n",
+      "fixtureDependenciesAvailable": true
+    },
+    {
+      "name": "optional fixtures with app ambient and generated Worker declarations",
+      "command": [
+        "npm",
+        "--prefix",
+        "apps/control-plane/test/native-opencode-server-probe",
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> pentcloud-native-opencode-server-probe@0.0.0 typecheck\n> tsc --noEmit -p tsconfig.json\n\n",
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n",
+      "fixtureDependenciesAvailable": true
+    }
+  ],
+  "fixtureDependenciesRestored": true,
+  "finalFixtureExitCode": 0
+}

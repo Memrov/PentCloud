@@ -329,6 +329,12 @@ export class ProbeAttempt extends NativeAttempt {
     };
   }
   async configurePreparation(origin:string,question=false,failure:string|null=null){await this.ctx.storage.put("fixture:scriptedOrigin",origin);await this.ctx.storage.put("fixture:question",question);if(failure)await this.ctx.storage.put("fixture:promotionFailure",failure);}
+  /** The Cloudflare SDK docs' fetch example, using this attempt's existing host. */
+  async documentedOpenCodeFetch(): Promise<Response> {
+    await this.lifecycle.start();
+    const native = await this.harness.opencode();
+    return Response.json(await native.server.info());
+  }
   async probe(kind: string, origin?: string) {
     const id = "local-attempt";
     await this.workspace.fs.mkdir(this.directory, { recursive: true });
@@ -954,6 +960,83 @@ export class ProbeAttempt extends NativeAttempt {
       checks.providerTools = await this.ctx.storage.get("fixture:providerTools");
       await this.harness.dispose();
       await this.ctx.storage.deleteAlarm();
+    } else if (kind === "sdk-opencode-terminal") {
+      // Use the production settled-session path: opening a completed agent must
+      // not need a model credential or start inference/scanners.
+      const state = (await this.ctx.storage.get<Record<string, unknown>>("attempt"))!;
+      await this.ctx.storage.put("attempt", {...state, status: "settled"});
+      let credentialReads = 0, providerRequests = 0;
+      Object.assign(this.env, {OPENCODE_GO_API_KEY: {get: async () => {
+        credentialReads++;
+        throw new Error("LOCAL_TERMINAL_PROBE_MUST_NOT_READ_MODEL_CREDENTIAL");
+      }}});
+      const setup = this.plugin.setup;
+      (this.plugin as {setup: typeof setup}).setup = async context => {
+        await setup(context);
+        await context.session.hook("http.request", async () => {
+          providerRequests++;
+          throw new Error("LOCAL_TERMINAL_PROBE_MUST_NOT_CALL_PROVIDER");
+        });
+      };
+      await this.lifecycle.start();
+      const native = await this.harness.opencode();
+      const sessionID = this.harness.session().id;
+      try {
+        const created = await native.sessions.create({id: sessionID, title: "OpenCode attachment trial"});
+        // A documented metadata event gives the real transcript a durable
+        // record without submitting a prompt or fabricating assistant output.
+        await native.sessions.switchAgent({sessionID, agent: "pentcloud-primary"});
+        const location = {directory: created.location.directory};
+        const snapshot = async () => ({
+          session: await native.sessions.get({sessionID}),
+          history: await this.harness.session().history(),
+          nativeHistory: await native.sessions.context({sessionID}),
+          workspace: await this.workspace.fs.readFile(`${this.directory}/README.md`, "utf8"),
+          attempt: await this.ctx.storage.get("attempt"),
+        });
+        const capture = async (operation: () => Promise<unknown>) => {
+          try { return {ok: true, value: await operation()}; }
+          catch (error) { return {ok: false, error: String(error), details: JSON.parse(JSON.stringify(error)) as unknown}; }
+        };
+        const before = await snapshot();
+        checks.health = await capture(() => native.server.info());
+        checks.root = {
+          id: sessionID,
+          storedID: before.session.id,
+          title: before.session.title,
+          historyCount: before.history.length,
+          messageTypes: before.history.map(message => message.type),
+          nativeHistoryMatches: JSON.stringify(before.history) === JSON.stringify(before.nativeHistory),
+        };
+        checks.transport = {
+          fetch: typeof Reflect.get(native, "fetch"),
+          handler: typeof Reflect.get(native, "handler"),
+          serverFetch: typeof Reflect.get(native.server, "fetch"),
+        };
+        checks.ptyList = await capture(() => native.pty.list({location}));
+        checks.ptyCreate = await capture(() => native.pty.create({
+          location, command: "printf", args: ["pentcloud-terminal-probe"],
+          cwd: this.directory, title: "Harmless attachment probe",
+        }));
+        checks.fileList = await capture(() => native.file.list({location, path: this.directory}));
+        const after = await snapshot();
+        checks.preserved = {
+          session: JSON.stringify(before.session) === JSON.stringify(after.session),
+          history: JSON.stringify(before.history) === JSON.stringify(after.history),
+          nativeHistory: JSON.stringify(before.nativeHistory) === JSON.stringify(after.nativeHistory),
+          workspace: before.workspace === after.workspace,
+          attempt: JSON.stringify(before.attempt) === JSON.stringify(after.attempt),
+        };
+        checks.activity = {
+          credentialReads, providerRequests,
+          scannerCalls: await this.ctx.storage.get("fixture:toolCalls") ?? 0,
+          toolboxInitializations: await this.ctx.storage.get("fixture:initializes") ?? 0,
+          toolboxReadinessCalls: await this.ctx.storage.get("fixture:readies") ?? 0,
+        };
+      } finally {
+        await this.harness.dispose();
+        await this.ctx.storage.deleteAlarm();
+      }
     } else if (kind === "sdk-managed-session") {
       await this.lifecycle.start();
       const native = await this.harness.opencode();
@@ -1997,6 +2080,28 @@ export default {
     env: { ATTEMPTS: DurableObjectNamespace<ProbeAttempt>; MODEL_TESTS:DurableObjectNamespace<ProbeModelTest> },
   ) {
     const url = new URL(request.url);
+    const documentedAttachment = url.pathname.match(/^\/opencode-docs-attach\/([^/]+)(\/.*)?$/);
+    if (documentedAttachment) {
+      try {
+        // The documented example ignores the request path and returns server
+        // information. Preserve that behavior rather than inventing a router.
+        return await env.ATTEMPTS.getByName(decodeURIComponent(documentedAttachment[1]!)).documentedOpenCodeFetch();
+      } catch (error) {
+        return Response.json({error: error instanceof Error ? error.stack : String(error)}, {status: 500});
+      }
+    }
+    const attachment = url.pathname.match(/^\/opencode-attach\/([^/]+)(\/.*)?$/);
+    if (attachment) {
+      const forwarded = new URL(url);
+      forwarded.pathname = attachment[2] ?? "/";
+      try {
+        // Attempt the stock HTTP attachment against the existing object. No
+        // protocol facade, substitute host, or fetch override is installed.
+        return await env.ATTEMPTS.getByName(decodeURIComponent(attachment[1]!)).fetch(new Request(forwarded, request));
+      } catch (error) {
+        return Response.json({error: error instanceof Error ? error.stack : String(error)}, {status: 500});
+      }
+    }
     const kind = url.pathname.slice(1);
     if(kind==="curl-fixture")return Response.json({method:request.method,header:request.headers.get("X-Curl-Fixture"),body:await request.text()},{status:207});
     if(kind==="fake-provider"){

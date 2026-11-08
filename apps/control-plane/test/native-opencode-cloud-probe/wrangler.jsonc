@@ -1,0 +1,32 @@
+{
+  "name": "pentcloud-opencode-cloud-trial",
+  "main": "worker.ts",
+  "compatibility_date": "2026-11-08",
+  "compatibility_flags": ["nodejs_compat", "enable_request_signal"],
+  "alias": {
+    "@modelcontextprotocol/server": "../native-opencode-server-probe/node_modules/@modelcontextprotocol/server/dist/index.mjs",
+    "@modelcontextprotocol/server/_shims": "../native-opencode-server-probe/node_modules/@modelcontextprotocol/server/dist/shimsWorkerd.mjs"
+  },
+  "worker_loaders": [{"binding": "LOADER"}],
+  "durable_objects": {"bindings": [
+    {"name": "COORDINATOR", "class_name": "ServerCoordinator"},
+    {"name": "ATTEMPTS", "class_name": "CloudServerAttempt"},
+    {"name": "OPENCODE_SERVER", "class_name": "OpenCodeCloudHost"}
+  ]},
+  "exports": {
+    "ServerCoordinator": {"type": "durable-object", "storage": "sqlite"},
+    "CloudServerAttempt": {"type": "durable-object", "storage": "sqlite"},
+    "OpenCodeCloudHost": {"type": "durable-object", "storage": "sqlite", "container": "pentcloud-opencode-cloud-trial-host"}
+  },
+  "containers": [{
+    "name": "pentcloud-opencode-cloud-trial-host",
+    "class_name": "OpenCodeCloudHost",
+    "scheduling_policy": "durable_object",
+    "ssh": {"enabled": false},
+    "observability": {"logs": {"enabled": false}}
+  }],
+  "rules": [{"type": "Text", "globs": ["**/*.tmpl", "**/*.tmpl?raw", "**/*.md?raw"], "fallthrough": true}],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {"enabled": false}
+}

@@ -1,0 +1,287 @@
+{
+  "experiment": "pentcloud-full-server-integration",
+  "recordedAt": "2026-11-08T05:10:43.231Z",
+  "platform": "linux",
+  "architecture": "x64",
+  "scope": "Local Cloudflare workerd; full OpenCode process on the test machine; scripted model; fixture Git transport",
+  "scenarios": [
+    {
+      "scenario": "tool",
+      "provider": [
+        {
+          "path": "/v1/chat/completions",
+          "model": "deepseek-v4-pro",
+          "stream": true,
+          "primary": true,
+          "tools": [
+            "pentcloud_computer_read",
+            "skill"
+          ],
+          "toolResultCount": 0,
+          "hasBaselineToolResult": false,
+          "cancelledBeforeResponse": true
+        },
+        {
+          "path": "/v1/responses",
+          "model": "gpt-6-luna",
+          "stream": true,
+          "primary": false,
+          "tools": [],
+          "toolResultCount": 0,
+          "hasBaselineToolResult": false
+        },
+        {
+          "path": "/v1/chat/completions",
+          "model": "deepseek-v4-pro",
+          "stream": true,
+          "primary": true,
+          "tools": [],
+          "toolResultCount": 0,
+          "hasBaselineToolResult": false
+        }
+      ],
+      "checks": {},
+      "prepared": {
+        "id": "job-0",
+        "agent": "pentcloud-adviser",
+        "model": {
+          "providerID": "opencode-go",
+          "id": "deepseek-v4-pro"
+        },
+        "baselineText": "baseline\n"
+      },
+      "cliVersion": "opencode v2.2.6",
+      "health": {
+        "version": "2.2.6",
+        "pid": 68,
+        "hostname": "829b25855fe2",
+        "urls": [
+          "http://127.0.0.1:33839"
+        ],
+        "paths": {
+          "tmp": "/tmp/opencode"
+        },
+        "capabilities": {
+          "persistentPty": true
+        }
+      },
+      "whileRunning": {
+        "coordinator": {
+          "jobs": [
+            {
+              "nativeSession": true,
+              "id": "job-0",
+              "runId": "run-0",
+              "role": "adviser",
+              "tool": "advice",
+              "depth": 0,
+              "status": "running",
+              "revision": 1,
+              "task": "Read README.md using the PentCloud computer_read MCP tool, then give a short plain-text summary.",
+              "model": "opencode-go:deepseek-v4-pro",
+              "reasoningEffort": "default",
+              "settingsRevision": "s",
+              "configurationSource": "settings",
+              "logicalThreadId": "job-0",
+              "attempt": 1,
+              "inputCommit": "457960da4f697f4486614000055ff3d9ab40e7c9",
+              "conversationOrder": 1
+            }
+          ],
+          "active": {
+            "id": "job-0",
+            "input": {
+              "id": "job-0",
+              "runId": "run-0",
+              "role": "adviser",
+              "tool": "advice",
+              "args": {
+                "question": "Read README.md using the PentCloud computer_read MCP tool, then give a short plain-text summary.",
+                "message": "Isolated full-server trial"
+              },
+              "task": "Read README.md using the PentCloud computer_read MCP tool, then give a short plain-text summary.",
+              "repo": "probe",
+              "remote": "https://example.invalid/repo.git",
+              "settingsRevision": "s",
+              "settings": {
+                "promptTemplate": "You are PentCloud's adviser. Read README.md using the PentCloud computer_read MCP tool, then give a short plain-text summary.",
+                "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "model": "opencode-go:deepseek-v4-pro",
+                "reasoningEffort": "default",
+                "promptFormat": "markdown"
+              },
+              "depth": 0,
+              "attempt": 1,
+              "logicalThreadId": "job-0",
+              "createdAt": 0,
+              "inputCommit": "457960da4f697f4486614000055ff3d9ab40e7c9",
+              "context": {
+                "objective": "Read README.md using the PentCloud computer_read MCP tool, then give a short plain-text summary.",
+                "head_commit": "457960da4f697f4486614000055ff3d9ab40e7c9",
+                "wave": 0,
+                "attempts": [],
+                "evidence": [],
+                "enabledTools": [],
+                "browserAllowedURLs": [
+                  "https://owned.invalid/"
+                ],
+                "target": {
+                  "id": "seed-run-0",
+                  "name": "Owned fixture",
+                  "kind": "website",
+                  "url": "https://owned.invalid/",
+                  "revision": 1,
+                  "objective": "",
+                  "exclusions": ""
+                },
+                "networkReach": {
+                  "url": "https://owned.invalid/",
+                  "scope": "Target is guidance, not universal host confinement"
+                },
+                "apiAuth": "Unauthenticated coverage",
+                "run_id": "run-0"
+              }
+            }
+          },
+          "runs": [
+            {
+              "target": {
+                "id": "seed-run-0",
+                "name": "Owned fixture",
+                "kind": "website",
+                "url": "https://owned.invalid/",
+                "revision": 1,
+                "archived": false,
+                "createdAt": 0,
+                "updatedAt": 0,
+                "updatedBy": "fixture",
+                "objective": "",
+                "exclusions": ""
+              },
+              "id": "run-0",
+              "task": "Read README.md using the PentCloud computer_read MCP tool, then give a short plain-text summary.",
+              "status": "running",
+              "repo": "probe",
+              "remote": "https://example.invalid/repo.git",
+              "inputCommit": "457960da4f697f4486614000055ff3d9ab40e7c9",
+              "headCommit": "457960da4f697f4486614000055ff3d9ab40e7c9",
+              "settingsRevision": "s",
+              "settings": {
+                "revision": "s",
+                "roles": {
+                  "primary": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "adviser": {
+                    "promptTemplate": "You are PentCloud's adviser. Read README.md using the PentCloud computer_read MCP tool, then give a short plain-text summary.",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default",
+                    "promptFormat": "markdown"
+                  },
+                  "coder": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "maintenance": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "memorist": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "pentester": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  },
+                  "searcher": {
+                    "promptTemplate": "probe",
+                    "upstreamPromptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "model": "opencode-go:deepseek-v4-pro",
+                    "reasoningEffort": "default"
+                  }
+                }
+              },
+              "createdAt": 0,
+              "wave": 0,
+              "phase": "setup",
+              "maxDepth": 4,
+              "maxJobs": 48
+            }
+          ]
+        },
+        "acceptedHead": "457960da4f697f4486614000055ff3d9ab40e7c9",
+        "attempt": {
+          "execution": {
+            "state": "running",
+            "drained": false,
+            "unresolvedRemote": 0,
+            "sessionCleanupPending": false,
+            "startup": {
+              "stage": "harness.submit.after",
+              "at": 1794114648556,
+              "role": "adviser",
+              "attempt": 1,
+              "prepared": true,
+              "promptCharacters": 2019,
+              "version": {
+                "id": "probe-terminal",
+                "tag": "fixture"
+              }
+            },
+            "runtimeVersion": {
+              "id": "probe-terminal",
+              "tag": "fixture"
+            }
+          },
+          "history": [
+            {
+              "id": "msg_1b990f750001T23uftIbHJyQVw",
+              "time": {
+                "created": 1794114647888
+              },
+              "type": "model-switched",
+              "model": {
+                "id": "deepseek-v4-pro",
+                "providerID": "opencode-go"
+              }
+            },
+            {
+              "id": "msg_job-0",
+              "time": {
+                "created": 1794114648619
+              },
+              "text": "Execute the pinned specialist launch. Native context (immutable input 457960da4f697f4486614000055ff3d9ab40e7c9):\n{\"objective\":\"Read README.md using the PentCloud computer_read MCP tool, then give a short plain-text summary.\",\"head_commit\":\"457960da4f697f4486614000055ff3d9ab40e7c9\",\"wave\":0,\"attempts\":[],\"evidence\":[],\"enabledTools\":[],\"browserAllowedURLs\":[\"https://owned.invalid/\"],\"target\":{\"id\":\"seed-run-0\",\"name\":\"Owned fixture\",\"kind\":\"website\",\"url\":\"https://owned.invalid/\",\"revision\":1,\"objective\":\"\",\"exclusions\":\"\"},\"networkReach\":{\"url\":\"https://owned.invalid/\",\"scope\":\"Target is guidance, not universal host confinement\"},\"apiAuth\":\"Unauthenticated coverage\",\"run_id\":\"run-0\"}\n\nKali file capabilities: selected materials are imported automatically for Kali-capable roles; their exact paths appear in kaliInputs. Use pentcloud_kali_import/files/export for additional file work. Tool output and screenshots are checkpointed as evidence; use pentcloud_read_evidence with the same-run job/path references supplied in native context. Captured evidence is read only. Do not rerun a scan merely to recreate missing evidence.\n\nTask workspace: /workspace/repo/b49162b6f3c748bf0fc5da42e8b5a39d4a8826144672dd495693d840a322c66a. Use relative file paths and this directory (or an empty cwd) for computer_exec commands.\n\nWorkspace capabilities: every role can use computer_* for Cloudflare files/execution and cloudflare_browser for persistent Chromium. Computer execution offers Worker shell and isolated JavaScript; it is not a Linux desktop. Computer execution and stock Kali MCP scanner tools remain available according to role. Choose the tools appropriate to the task. Finish with your role result tool once.",
+              "type": "user"
+            }
+          ],
+          "session": "ses_root",
+          "opened": {
+            "agent": "pentcloud-adviser",
+            "engine": "remote-full-server"
+          },
+          "mcp": []
+        }
+      },
+      "ok": false,
+      "error": {
+        "name": "Error",
+        "message": "browserType.launch: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /usr/bin/chromium --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,AvoidCorsURLLoaderRestartOnRedirect,Translate,AutoDeElevate,OptimizationHints,NetworkTimeServiceQuerying,AimEnabled,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-JSuJeV --remote-debugging-pipe --no-startup-window\n<launched> pid=88\n[pid=88][err] /usr/bin/chromium: 9: [: 5225713664: unexpected operator\n[pid=88][err] [88:88:1107/221048.983908:FATAL:chrome/browser/process_singleton_posix.cc:297] Check failed: . socket() failed: Operation not permitted (1)\n[pid=88][err] [1107/221048.984579:ERROR:third_party/crashpad/crashpad/util/linux/scoped_ptrace_attach.cc:27] ptrace: Operation not permitted (1)\nCall log:\n  - <launching> /usr/bin/chromium --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,AvoidCorsURLLoaderRestartOnRedirect,Translate,AutoDeElevate,OptimizationHints,NetworkTimeServiceQuerying,AimEnabled,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-JSuJeV --remote-debugging-pipe --no-startup-window\n  - <launched> pid=88\n  - [pid=88][err] /usr/bin/chromium: 9: [: 5225713664: unexpected operator\n  - [pid=88][err] [88:88:1107/221048.983908:FATAL:chrome/browser/process_singleton_posix.cc:297] Check failed: . socket() failed: Operation not permitted (1)\n  - [pid=88][err] [1107/221048.984579:ERROR:third_party/crashpad/crashpad/util/linux/scoped_ptrace_attach.cc:27] ptrace: Operation not permitted (1)\n  - [pid=88] <gracefully close start>\n  - [pid=88] <kill>\n  - [pid=88] <will force kill>\n  - [pid=88] <process did exit: exitCode=null, signal=SIGABRT>\n  - [pid=88] starting temporary directories cleanup\n  - [pid=88] finished temporary directories cleanup\n  - [pid=88] <gracefully close end>\n"
+      },
+      "serverLog": "server listening on http://127.0.0.1:33839\n",
+      "cleanedUp": true
+    }
+  ]
+}

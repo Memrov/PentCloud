@@ -1,0 +1,12 @@
+{
+  "name": "pentcloud-native-opencode-server-probe",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0"
+  }
+}

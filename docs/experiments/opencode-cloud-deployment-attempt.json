@@ -1,0 +1,120 @@
+{
+  "recordedAt": "2026-11-08T05:45:18Z",
+  "outcome": "blocked_before_container_boot",
+  "localIntegration": "passed separately; see opencode-integration-local.json",
+  "localNativeWebUi": "passed separately; see opencode-integration-macos-ui.json",
+  "latestOpenCodeVersionUsedByFixture": "2.2.6",
+  "deployment": {
+    "worker": "pentcloud-opencode-cloud-trial",
+    "workerTag": "9614c3771da74d7a83ab84f172c8ef30",
+    "url": "https://pentcloud-opencode-cloud-trial.vettix-drops.workers.dev",
+    "upload": {
+      "success": true,
+      "startupTimeMs": 612,
+      "moduleCount": 11,
+      "compressedPayloadBytes": 4947409,
+      "sha256": "0e48962a603415b77673b550b957a61e2894734bd41dbad726dfee882996eedc"
+    },
+    "containerApplication": {
+      "name": "pentcloud-opencode-cloud-trial-host",
+      "id": "bb24846b673141318bf8232c35c3d20f",
+      "createdAt": "2026-11-08T05:42:06.892999936Z",
+      "schedulingPolicy": "durable_object",
+      "lastObservedInstances": {
+        "active": 0,
+        "starting": 0
+      }
+    }
+  },
+  "uploadAttempts": [
+    {
+      "method": "individual-Worker temporary account API token",
+      "httpStatus": 400,
+      "error": "OAuth tokens cannot create account tokens with granular resource scopes",
+      "tokenIssued": false,
+      "scopeBroadened": false
+    },
+    {
+      "method": "direct compressed connector argument",
+      "httpStatus": 413,
+      "limitBytes": 4194304,
+      "error": "Payload Too Large: Request body must not exceed 4194304 bytes"
+    },
+    {
+      "method": "connector fetch to trial workers.dev URL",
+      "httpStatus": 403,
+      "error": "Forbidden: requests to pentcloud-opencode-cloud-trial.vettix-drops.workers.dev are not allowed",
+      "retriedThroughProxy": false
+    },
+    {
+      "method": "native Cloudflare Durable Object SQL query API",
+      "success": true,
+      "namespaceId": "bb24846b673141318bf8232c35c3d20f",
+      "objectName": "upload-stage",
+      "table": "trial_bundle_upload",
+      "parts": 101,
+      "maxPartCharacters": 65536,
+      "expiryMinutes": 30,
+      "extraServicesCreated": false
+    }
+  ],
+  "blocker": {
+    "pythonRequest": {
+      "httpStatus": 403,
+      "body": "error code: 1010"
+    },
+    "nodeRequest": {
+      "httpStatus": 403,
+      "pageTitle": "Error ・ Cloudflare Access",
+      "message": "Forbidden. You don't have permission to view this. Please contact your system administrator."
+    },
+    "accessApplication": {
+      "id": "eb92219a-5af8-43d5-a2d1-8aa4fc5c11d2",
+      "name": "Workers dev sessions — Wrangler service token only",
+      "domain": "*.vettix-drops.workers.dev",
+      "createdAt": "2026-10-15T04:27:07Z",
+      "changed": false
+    },
+    "stage": "request rejected by existing Access policy before Worker boot handler",
+    "cloudContainerStarted": false,
+    "cloudOpenCodeServerStarted": false,
+    "cloudProviderRequests": 0,
+    "paidInferenceOrTargetActivity": false,
+    "cloudUiAndRuntimeVerified": false,
+    "cloudStopServerVerified": false
+  },
+  "cleanup": {
+    "stagingTableDropSuccess": true,
+    "containerApplicationDeleteSuccess": true,
+    "workerDeleteSuccess": true,
+    "durableObjectNamespaces": [
+      {
+        "binding": "ATTEMPTS",
+        "id": "d8730d024b0a4fea8c8d9b85f450b90f",
+        "absent": true
+      },
+      {
+        "binding": "COORDINATOR",
+        "id": "c01a98fc29804cda91e998afd290c9bf",
+        "absent": true
+      },
+      {
+        "binding": "OPENCODE_SERVER",
+        "id": "bb24846b673141318bf8232c35c3d20f",
+        "absent": true
+      }
+    ],
+    "verifiedRemaining": {
+      "applications": 0,
+      "workers": 0,
+      "namespaces": 0
+    },
+    "temporaryCredentialFilesRemoved": true,
+    "temporaryApiTokenNeverIssued": true,
+    "productionResourcesOrAccessPolicyChanged": false
+  },
+  "validation": {
+    "controlPlaneTypecheck": "passed",
+    "wranglerMinifiedDryRun": "passed"
+  }
+}

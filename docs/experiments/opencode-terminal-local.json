@@ -1,0 +1,208 @@
+{
+  "experiment": "upstream-opencode-terminal",
+  "recordedAt": "2026-11-08T04:41:42.948Z",
+  "versions": {
+    "node": "v26.12.1",
+    "agents": "0.33.0",
+    "sdk": "2.2.6",
+    "plugin": "2.2.6",
+    "client": "2.2.6"
+  },
+  "native": {
+    "health": {
+      "ok": true,
+      "value": {
+        "version": "unknown",
+        "pid": 1,
+        "hostname": "localhost",
+        "urls": [],
+        "paths": {
+          "tmp": "/tmp/opencode/tmp"
+        },
+        "capabilities": {
+          "persistentPty": false
+        }
+      }
+    },
+    "root": {
+      "id": "ses_root",
+      "storedID": "ses_root",
+      "historyCount": 1,
+      "messageTypes": [
+        "agent-switched"
+      ],
+      "nativeHistoryMatches": true
+    },
+    "transport": {
+      "fetch": "undefined",
+      "handler": "undefined",
+      "serverFetch": "undefined"
+    },
+    "ptyList": {
+      "ok": true,
+      "value": {
+        "location": {
+          "directory": "/bundle"
+        },
+        "data": []
+      }
+    },
+    "ptyCreate": {
+      "ok": false,
+      "error": "ClientError: UnexpectedStatus: 500",
+      "details": {
+        "reason": "UnexpectedStatus",
+        "name": "ClientError"
+      }
+    },
+    "fileList": {
+      "ok": false,
+      "error": "ClientError: UnexpectedStatus: 500",
+      "details": {
+        "reason": "UnexpectedStatus",
+        "name": "ClientError"
+      }
+    },
+    "preserved": {
+      "session": true,
+      "history": true,
+      "nativeHistory": true,
+      "workspace": true,
+      "attempt": true
+    },
+    "activity": {
+      "credentialReads": 0,
+      "providerRequests": 0,
+      "scannerCalls": 0,
+      "toolboxInitializations": 0,
+      "toolboxReadinessCalls": 0
+    }
+  },
+  "stockClient": {
+    "serverInfo": {
+      "ok": false,
+      "name": "ClientError",
+      "message": "UnexpectedStatus: 404",
+      "reason": "UnexpectedStatus"
+    },
+    "existingSession": {
+      "ok": false,
+      "name": "ClientError",
+      "message": "UnsupportedContentType: text/plain;charset=UTF-8",
+      "reason": "UnsupportedContentType"
+    }
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/opencode-attach/terminal-trial/api/info",
+      "status": 404,
+      "contentType": "text/plain;charset=UTF-8",
+      "body": "Not implemented"
+    },
+    {
+      "method": "GET",
+      "path": "/opencode-attach/terminal-trial/api/session/ses_root",
+      "status": 404,
+      "contentType": "text/plain;charset=UTF-8",
+      "body": "Not implemented"
+    }
+  ],
+  "cli": {
+    "tested": false,
+    "reason": "Pass --cli /absolute/path/to/opencode for a real terminal-client attempt"
+  },
+  "documentedHandler": {
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/opencode-docs-attach/terminal-trial/api/info",
+        "status": 200,
+        "body": {
+          "version": "unknown",
+          "pid": 1,
+          "hostname": "localhost",
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp/opencode/tmp"
+          },
+          "capabilities": {
+            "persistentPty": false
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/opencode-docs-attach/terminal-trial/api/session/ses_root",
+        "status": 200,
+        "body": {
+          "version": "unknown",
+          "pid": 1,
+          "hostname": "localhost",
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp/opencode/tmp"
+          },
+          "capabilities": {
+            "persistentPty": false
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/opencode-docs-attach/terminal-trial/api/location",
+        "status": 200,
+        "body": {
+          "version": "unknown",
+          "pid": 1,
+          "hostname": "localhost",
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp/opencode/tmp"
+          },
+          "capabilities": {
+            "persistentPty": false
+          }
+        }
+      }
+    ],
+    "serverInfo": {
+      "httpOk": true,
+      "payloadMatchesEndpoint": true,
+      "value": {
+        "version": "unknown",
+        "pid": 1,
+        "hostname": "localhost",
+        "urls": [],
+        "paths": {
+          "tmp": "/tmp/opencode/tmp"
+        },
+        "capabilities": {
+          "persistentPty": false
+        }
+      }
+    },
+    "existingSession": {
+      "httpOk": true,
+      "payloadMatchesEndpoint": false,
+      "value": null
+    },
+    "location": {
+      "httpOk": true,
+      "payloadMatchesEndpoint": false,
+      "value": {
+        "version": "unknown",
+        "pid": 1,
+        "hostname": "localhost",
+        "urls": [],
+        "paths": {
+          "tmp": "/tmp/opencode/tmp"
+        },
+        "capabilities": {
+          "persistentPty": false
+        }
+      }
+    }
+  },
+  "runtimeErrors": []
+}

@@ -20,5 +20,10 @@
     "test/**/*.ts",
     "vite.config.ts",
     "worker-configuration.d.ts"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "test/native-opencode-server-probe",
+    "test/native-opencode-cloud-probe"
   ]
 }
