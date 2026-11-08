@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 // No paid model/network requests: emulate only the embedded SDK boundary.
 const calls = vi.hoisted(() => ({
   options: undefined as any,

@@ -1,4 +1,4 @@
-import type { Plugin } from "vite";
+import type { Plugin } from "vite-plus";
 
 export const emptyOpenCodeModelsSnapshot: Plugin = {
   // OpenCode inlines an 8 MB models.dev snapshot as one string literal,

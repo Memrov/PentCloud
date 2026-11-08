@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { readAgentMail } from "../../src/native/agentmail-verification";
 it("constructs provider requests in workerd without following redirects", async () => {
   const now = Date.now();

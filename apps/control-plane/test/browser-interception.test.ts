@@ -1,4 +1,4 @@
-import { it, expect, vi } from "vitest";
+import { it, expect, vi } from "vite-plus/test";
 const fixture = vi.hoisted(() => ({
   listeners: new Map<string, () => void>(),
   root: new Map<string, (value: unknown) => unknown>(),

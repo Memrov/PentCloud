@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { discoveryOutcome } from "../src/native/discovery";
 const envelope = (status: string, http_status: unknown = 200) => ({
   content: [

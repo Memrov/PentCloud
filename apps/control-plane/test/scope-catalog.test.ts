@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect } from "vite-plus/test";
 import { ScopeCatalog } from "../src/native/scope-catalog";
 it("reports safe upstream status without returning error bodies", async () => {
   const catalog = new ScopeCatalog({

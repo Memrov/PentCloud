@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { journalAPIRequest } from "../src/native/api-operation";
 function storage() {
   const records = new Map<string, unknown>();

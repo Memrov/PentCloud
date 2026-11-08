@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { BountyConnections } from "../../src/native/bounty-platform";
 it("checks a native secret binding in workerd and gates rotated credentials without returning them", async () => {
   const records = new Map<string, unknown>();

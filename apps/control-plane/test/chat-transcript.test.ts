@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { chatTurns } from "../src/ui/chat-transcript";
 import type { ChatMessage } from "../src/ui/presentation";
 it("keeps native launch/finalization instructions in activity and shows the saved customer objective once", () => {

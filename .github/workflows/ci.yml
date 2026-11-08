@@ -24,16 +24,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
         with:
-          node-version: 26.12.1
-          cache: npm
+          version-file: package.json
+          node-version-file: .node-version
+          cache: true
+          run-install: |
+            args: ['--frozen-lockfile']
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: 1.26.5
           cache: false # Standard-library-only Go module, with no go.sum.
-      - run: npm ci
-      - run: npm run verify:full
+      - run: vp run verify:full
 
   browser:
     name: Browser fixtures
@@ -43,10 +45,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
         with:
-          node-version: 26.12.1
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
+          version-file: package.json
+          node-version-file: .node-version
+          cache: true
+          run-install: |
+            args: ['--frozen-lockfile']
+      - run: vp exec playwright install --with-deps chromium
+      - run: vp run test:browser

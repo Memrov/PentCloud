@@ -7,30 +7,50 @@ external model/scanner services.
 
 Use Node 26.12.1 or a compatible later 26.x and Python 3.11+. The full gate also
 uses Go 1.26.5 to verify preserved import hashes and contract catalogs.
-Run `npm ci` after checkout or a lockfile change; gates reuse those dependencies.
+The workspace uses [Vite+](https://viteplus.dev/guide/) 1.5.0 with npm pinned in
+`package.json`. Install the global CLI with the official installer at
+<https://viteplus.dev/guide/global-cli>, then run `vp install --frozen-lockfile`
+after checkout or a lockfile change. The CLI selects Node from `.node-version`.
+Without the global CLI, use `npm ci` and `npm exec -- vp <command>`; existing
+npm scripts remain available. Gates reuse the installed dependencies.
+Agent instructions are committed in the root `AGENTS.md`, and upstream CLI
+documentation is bundled at `node_modules/vite-plus/docs`.
+
+`vp <name>` invokes a built-in command; `vp run <name>` invokes a project script
+or configured task. In particular, `vp check` runs static checks, while
+`vp run check` also runs the existing app validation gate. Use `vp run build`
+for the customer build and its output validation.
 Native Markdown is loaded directly, without a Go prompt build or runtime renderer.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run check` | Formatting, lint, app types, native Markdown policy and unit/native API checks |
-| `npm run format` | Format code with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) (80 columns, Cloudflare's style) |
-| `npm run format:check` | Fail if any code is not formatted |
-| `npm run lint` | Type-aware [oxlint](https://oxc.rs/docs/guide/usage/linter), including `no-floating-promises` |
-| `npm run test:watch` | Watch unit tests |
-| `npm run test:workers` | Workers runtime tests: router/API, question recovery and migrated attempt probes |
-| `npm run test:workers:watch` | Watch native Worker tests |
-| `npm run verify` | App checks, Vite production build, compiled stack/map checks and Wrangler dry run |
-| `npm run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
-| `npm run verify:full` | Both Worker gates, import/contract integrity, auth, lifecycle, Git publication and recovery checks |
-| `npm run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
-| `npm run test:browser` | Playwright UI fixtures; install Chromium with `npm exec -- playwright install chromium` |
+| `vp check` | Formatting, type-aware lint, and TypeScript checks |
+| `vp run check:static` | Cached static checks with automatic input tracking |
+| `vp run check` | Static checks, generated type freshness, unit, Workers and customer checks |
+| `vp fmt` / `vp fmt --check` | Format code or check formatting (80 columns, Cloudflare's style) |
+| `vp lint` | Type-aware lint and type checks, including `no-floating-promises` |
+| `vp test` | All unit and Workers runtime projects |
+| `vp run test:watch` | Watch unit tests |
+| `vp run test:workers` | Router/API, question recovery and migrated attempt probes |
+| `vp run test:workers:watch` | Watch native Worker tests |
+| `vp run test:customer` | Customer Worker runtime checks |
+| `vp run verify` | App checks, production build, compiled stack/map checks and Wrangler dry run |
+| `vp run verify:gateway` | Gateway types, bundle, file-transfer and lifecycle tests |
+| `vp run verify:full` | Both Worker gates, import/contract integrity, auth, lifecycle, Git publication and recovery checks |
+| `vp run test:integration` | Whole-Worker Coordinator/Attempt and evidence fixtures |
+| `vp run test:browser` | Playwright UI fixtures; install Chromium with `vp exec playwright install chromium` |
 
-Every verify gate runs `format:check` and `lint` first. Formatting covers
+Every verify gate runs the shared static check task first. Formatting covers
 TypeScript, JavaScript and CSS only; Markdown (including specialist prompts),
-JSON, YAML and generated Worker types are never reformatted. If
-`format:check` still fails right after `npm run format`, run `format` once
-more: oxfmt 0.74 settles a few files on its second pass. Lint rules listed
-as backlog in `.oxlintrc.json` warn instead of failing until they are fixed.
+JSON, YAML and generated Worker types are excluded. Lint rules listed as
+backlog in the root `vite.config.ts` warn instead of failing until fixed.
+Type-aware lint and full type checking are enabled in that same config.
+
+Only `check:static` opts into task caching. Runtime/integration/browser tests,
+verification scripts and deployment run fresh by default. Do not enable
+`--cache` for those commands: replayed logs are not fresh recovery evidence.
+The native pre-commit hook runs `vp staged`, using the root staged-file policy.
+Use `vp hooks status` or `vp env doctor` to inspect local setup.
 
 Each Worker's `worker-configuration.d.ts` holds its bindings and the
 Workers runtime types for its compatibility date and flags, as
@@ -41,9 +61,9 @@ compatibility date or flags, or upgrading Wrangler, regenerate with
 `npm run types --workspace <workspace>` and commit the result.
 
 A focused test can be selected with, for example,
-`npm run test:unit -- test/materials-ui.test.ts`.
+`vp test --project unit test/materials-ui.test.ts`.
 Workers tests use separate `router`, `question-recovery` and `attempt` projects;
-select one with `npm run test:workers -- --project attempt`.
+select one with `vp test --project attempt`.
 The attempt project covers header redaction, legacy prompt compatibility,
 native model connection and successful execution with the pinned model.
 The remaining attempt scenarios still run through
@@ -112,7 +132,7 @@ The pinned [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/vi
 uses one `worker` environment. The app build emits assets and generated config
 under `apps/control-plane/dist/`; the customer build uses the separate sibling
 `apps/control-plane/dist-customer/`. Customer mode selects the root source config
-with `vite build --mode customer`; the ordinary app build selects the app source
+with `vp build --mode customer`; the ordinary app build selects the app source
 config and retains its gateway binding. Root `npm run deploy` explicitly uses
 `apps/control-plane/dist-customer/worker/wrangler.json`; app deployment uses
 `dist/worker/wrangler.json` from the app workspace. Building either target leaves

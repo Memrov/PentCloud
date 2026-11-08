@@ -26,13 +26,15 @@ export default defineConfig({
     screenshot: "only-on-failure"
   },
   // An explicitly supplied local server remains available for the native UI smoke.
-  webServer: process.env.PENTCLOUD_UI_BASE_URL
-    ? undefined
+  ...(process.env.PENTCLOUD_UI_BASE_URL
+    ? {}
     : {
-        command:
-          "vite build --config scripts/browser-qa/ui-fixture.config.mts --mode browser-fixture && vite preview --config scripts/browser-qa/ui-fixture.config.mts --mode browser-fixture",
-        url: url.origin,
-        reuseExistingServer: false,
-        timeout: 120_000
-      }
+        webServer: {
+          command:
+            "vp build --config scripts/browser-qa/ui-fixture.config.mts --mode browser-fixture && vp preview --config scripts/browser-qa/ui-fixture.config.mts --mode browser-fixture",
+          url: url.origin,
+          reuseExistingServer: false,
+          timeout: 120_000
+        }
+      })
 });

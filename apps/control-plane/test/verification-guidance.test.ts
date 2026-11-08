@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { verificationGuidance } from "../../../shared/verification-guidance";
 it("uses the imported platform identity without replacing the program registration rules", () => {
   expect(verificationGuidance("hackerone").alias).toContain(

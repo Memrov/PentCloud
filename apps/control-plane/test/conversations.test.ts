@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import { conversations, preferredConversation } from "../src/ui/attempts";
 import { parseJob, type UIJob } from "../src/ui/api";
 

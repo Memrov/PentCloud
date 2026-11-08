@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { RunHubState } from "../src/ui/presentation";
 import { mergeRunHubJobs } from "../src/ui/run-hub-state";

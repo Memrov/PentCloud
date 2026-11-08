@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import canary, {
   runBrowserLiveViewCanary
 } from "../native-browser-live-view-canary/worker";

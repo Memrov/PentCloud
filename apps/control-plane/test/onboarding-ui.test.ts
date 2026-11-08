@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { canActivate } from "../src/ui/onboarding/api";
 import { reconcileFormRevision } from "../src/ui/onboarding/form-revision";
 describe("onboarding UI readiness", () => {

@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { ChatMarkdown } from "../src/ui/components/chat-markdown";
 import { targetHeaders } from "../src/native/target-headers";
 import { hostedUIResponse } from "../src/native/ui-response";
