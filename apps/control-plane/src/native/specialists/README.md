@@ -1,17 +1,20 @@
 # Agent prompt sources
 
-These runtime defaults adapt PentAGI's specialist guidance to Cloudflare Computer,
-OpenCode and the shared Kali toolbox. Eight role files supply the always-loaded
-role guidance; tools.md supplies the bundled pentcloud-tools skill.
-The original upstream/internal Go templates remain unchanged.
+Edit these Markdown files directly. They are the canonical defaults loaded by
+OpenCode; there is no prompt generator. The eight role files keep methodology,
+completion, language, scope, cancellation and receipt rules always loaded.
+They do not promise a particular scanner backend.
 
-Regenerate from the repository root with Go 1.26.5:
+The runtime selects the `pentcloud-tools` skill from trusted installation bindings:
+`tool-packs.md` for bounded native tool packs, or `tools.md` for legacy stock Kali.
+Only advertised tools and their schemas grant capabilities. Detailed procedures
+belong in the applicable skill; mandatory safety rules stay in every role.
 
-    go run ./scripts/native-specialists
-    go run ./scripts/native-specialists -check
-    go test ./scripts/native-specialists ./internal/contracts
+The [original PentAGI prompts and frozen adaptation record](../../../../../upstream/pentagi/README.md)
+retain attribution, source hashes and the former generator's paragraph mapping.
+Future upstream updates require an explicit reviewed Markdown change; importing
+the reference snapshot does not regenerate these defaults.
 
-provenance.json records original paragraphs, explicit runtime adaptations and
-source/output hashes. Tests verify the original template hashes, deterministic
-output and retained role/procedure obligations. Go templates are build-time
-provenance only; new settings and launches require explicit Markdown instructions.
+Native launch tests cover both backends and always-loaded policies. Saved role
+settings and existing attempts keep their original bytes and digests. Reset a
+saved role to its default in settings to adopt these instructions for future runs.

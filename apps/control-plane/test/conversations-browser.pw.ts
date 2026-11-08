@@ -1,17 +1,11 @@
-import {fileURLToPath} from 'node:url';
-import {afterAll,beforeAll,describe,expect,it} from 'vitest';
-import {chromium,type Browser} from 'playwright';
-import {expect as browserExpect} from 'playwright/test';
-import {createServer,type ViteDevServer} from 'vite';
+import {test, expect, expect as browserExpect} from 'playwright/test';
 import {SETTINGS_ROLES} from '../src/ui/settings/model';
 
 // Isolated local API fixtures: no production requests, model calls or scanners.
-describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversations and report reader',()=>{
- let server:ViteDevServer,browser:Browser,origin:string;
- beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL('../',import.meta.url)),mode:'browser-fixture',server:{host:'127.0.0.1',port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!;browser=await chromium.launch({channel:'chrome',headless:true});},30000);
- afterAll(async()=>{await browser?.close();await server?.close();});
- it.each([{width:1440,height:1000},{width:390,height:844}])('isolates agent chats, retains navigation and reads the accepted report at $width px',async viewport=>{
-  const context=await browser.newContext({viewport});
+test.describe('agent conversations and report reader',()=>{
+ for(const viewport of [{width:1440,height:1000},{width:390,height:844}])test(`isolates agent chats, retains navigation and reads the accepted report at ${viewport.width} px`,async({context,page,baseURL})=>{
+  const origin=baseURL!;
+  await page.setViewportSize(viewport);
   const commit='b'.repeat(40),run={id:'run-conversations',status:'running',baselineRepo:'repo',inputCommit:'a'.repeat(40),maxDepth:4,maxJobs:32};
   const make=(id:string,role:string,order:number,patch={})=>({id,runId:run.id,role,task:role==='searcher'?`Search task ${order}`:'Coordinate assessment',conversationOrder:order,status:'created',revision:1,nativeSession:true,...patch});
   const jobs=[make('p','primary',1,{status:'waiting'}),make('s1','searcher',2,{status:'completed'}),make('s2','searcher',3,{status:'waiting'}),make('s3','searcher',4),make('report','reporter',5,{status:'completed',outputCommit:commit}),make('s1-retry','searcher',2,{logicalThreadId:'s1',attempt:2,revisionOf:'s1',status:'running'})];
@@ -20,7 +14,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
   let releaseRevision:()=>void=()=>{};
   const revisionGate=new Promise<void>(resolve=>{releaseRevision=resolve;});
   await context.routeWebSocket('**/agents/coordinator/global*',socket=>{socket.send(JSON.stringify({type:'cf_agent_identity',name:'global',agent:'coordinator',stateFollows:true}));socket.send(JSON.stringify({type:'cf_agent_state',state:{revision:1,runs:[run],jobs}}));});
-  const page=await context.newPage();const outside:string[]=[];
+  const outside:string[]=[];
   await page.route('https://evidence.invalid/**',route=>{outside.push(route.request().url());return route.abort();});
   await page.route('**/v1/ui/**',route=>{
    const request=route.request(),url=new URL(request.url()),path=url.pathname;calls.push({path,method:request.method()});
@@ -36,7 +30,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    if(path.endsWith('/session-controls'))return json({session:'session',canReply:true,forms:[],permissions:[],usage:{stats:{steps:1,tokens:{input:5,output:3},cost:0,tools:{mode:'summary',totals:{calls:1,failed:0}}},limits:null,limitsStatus:'not-connected'}});
    return route.fulfill({status:404,contentType:'application/json',body:'{"error":"Unknown local fixture route"}'});
   });
-  try{
+
    await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}?run=${run.id}&job=s1-retry`);
    await browserExpect(page.getByRole('heading',{name:'Searcher 1',exact:true})).toBeVisible();
    if(viewport.width<760)expect((await page.locator('.workspace').boundingBox())?.width).toBeGreaterThanOrEqual(viewport.width-1);
@@ -70,7 +64,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    await browserExpect(page.getByRole('textbox',{name:'Message Searcher 2',exact:true})).toHaveValue('Keep this newer draft');
    await browserExpect(page.getByRole('heading',{name:'Searcher 2',exact:true})).toBeVisible();
    expect(new URL(page.url()).searchParams.get('job')).toBe('s2');
-   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}dashboard/runs/${run.id}`);
+   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}/dashboard/runs/${run.id}`);
    await page.locator('.run-management').getByRole('button',{name:'Open report',exact:true}).click();
    const dialog=page.getByRole('dialog');
    await browserExpect(dialog.getByRole('heading',{name:'Assessment deliverable',exact:true})).toBeVisible();
@@ -83,15 +77,16 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    await browserExpect(page.locator('.assessment-document')).toHaveCSS('visibility','visible');
    await page.emulateMedia({media:'screen'});
    await dialog.getByRole('button',{name:'Close report',exact:true}).click();
-   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}dashboard?run=${run.id}&job=s2`);
+   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}/dashboard?run=${run.id}&job=s2`);
    await page.getByRole('link',{name:'Open chats',exact:true}).click();
    await browserExpect(page.getByRole('heading',{name:'Searcher 2',exact:true})).toBeVisible();
    expect(outside).toEqual([]);
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-  }finally{await context.close();}
- },30000);
- it.each([{width:1440,height:1000},{width:390,height:844}])('uses native settings controls at $width px',async viewport=>{
-  const context=await browser.newContext({viewport}),page=await context.newPage(),errors:string[]=[];
+
+ });
+ for(const viewport of [{width:1440,height:1000},{width:390,height:844}])test(`uses native settings controls at ${viewport.width} px`,async({context,page,baseURL})=>{
+  const origin=baseURL!;
+  await page.setViewportSize(viewport);const errors:string[]=[];
   const roles=Object.fromEntries(SETTINGS_ROLES.map(role=>[role.id,{promptFormat:'markdown',promptTemplate:`Instructions for ${role.label}`,upstreamPromptDigest:'a'.repeat(64),model:'opencode-go:fixture',reasoningEffort:'default'}]));
   const model={id:'opencode-go:fixture',name:'Fixture model',provider:'opencode-go',inputModalities:['text'],outputModalities:['text'],supportedParameters:['tools'],reasoningEfforts:['default']};
   page.on('pageerror',error=>errors.push(error.message));
@@ -102,8 +97,8 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    if(path.endsWith('/runtime-diagnostics'))return json({coordinator:{},backlog:{waiting:0,oldestWaitingMs:0}});
    return json({});
   });
-  try{
-   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}settings`);
+
+   await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}/settings`);
    await browserExpect(page.getByRole('heading',{name:'Prompts and models',exact:true})).toBeVisible();
    if(viewport.width<721){await page.getByRole('combobox',{name:'Agent',exact:true}).click();await page.getByRole('option',{name:'Coder',exact:true}).click();}else await page.getByRole('button',{name:'Coder',exact:true}).click();
    await browserExpect(page.getByRole('textbox',{name:'Coder prompt template',exact:true})).toHaveValue('Instructions for Coder');
@@ -116,10 +111,11 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
    await browserExpect(page.locator('vite-error-overlay')).toHaveCount(0);expect(errors).toEqual([]);
    if(process.env.PENTCLOUD_CAPTURE_UI){await page.locator(".settings-scroll").evaluate(el=>el.scrollTop=0);await browserExpect(viewport.width<721?page.getByRole("combobox",{name:"Agent",exact:true}):page.getByRole("button",{name:"Coder",exact:true})).toBeInViewport();await page.screenshot({path:`${process.env.PENTCLOUD_CAPTURE_UI}/pentcloud-settings-${viewport.width}.png`});}
-  }finally{await context.close();}
- },30000);
- it('keeps native questions, required fields, custom choices and permissions working with Kumo',async()=>{
-  const context=await browser.newContext({viewport:{width:390,height:844}});
+
+ });
+ test('keeps native questions, required fields, custom choices and permissions working with Kumo',async({context,page,baseURL})=>{
+  const origin=baseURL!;
+  await page.setViewportSize({width:390,height:844});
   await context.grantPermissions(['clipboard-read','clipboard-write']);
   const run={id:'run-questions',status:'running',baselineRepo:'fixture',inputCommit:'a'.repeat(40),maxDepth:4,maxJobs:32};
   const job={id:'questions',runId:run.id,role:'primary',task:'Local question fixture',status:'running',revision:1,nativeSession:true};
@@ -133,7 +129,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
   ]};
   const replies:Array<{path:string;body:unknown}>=[];let answered=false,permitted=false;
   await context.routeWebSocket('**/agents/coordinator/global*',socket=>{socket.send(JSON.stringify({type:'cf_agent_identity',name:'global',agent:'coordinator',stateFollows:true}));socket.send(JSON.stringify({type:'cf_agent_state',state:{revision:1,runs:[run],jobs:[job]}}));});
-  const page=await context.newPage(),errors:string[]=[];
+  const errors:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(message.type()==='error'||message.type()==='warning')errors.push(message.text());});
   await page.route('**/v1/ui/**',route=>{
@@ -145,7 +141,7 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    if(path.endsWith('/session-controls'))return json({session:'ses_root',canReply:true,forms:answered?[]:[form],permissions:permitted?[]:[{id:'perm_fixture',sessionID:'ses_root',action:'fixture',resources:['local fixture']}],usage:{stats:{steps:1,tokens:{input:1,output:1},cost:0,tools:{mode:'summary',totals:{calls:0,failed:0}}},limits:null,limitsStatus:'not-connected'}});
    return json({ok:true});
   });
-  try{
+
    await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(`${origin}?run=${run.id}&job=${job.id}`);
    await browserExpect(page.getByText('Assessment choices',{exact:true})).toBeVisible();
    await page.getByRole('button',{name:'Copy Code',exact:true}).click();
@@ -169,6 +165,6 @@ describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER!=='1')('agent conversati
    await browserExpect.poll(()=>replies.length).toBe(2);
    expect(replies[1]).toEqual({path:'/v1/ui/jobs/questions/permissions/perm_fixture/reply',body:{session:'ses_root',decision:'once'}});
    expect(errors).toEqual([]);
-  }finally{await context.close();}
- },30000);
+
+ });
 });

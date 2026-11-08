@@ -42,13 +42,13 @@ returned `nextOffset` with the same job ID to continue. This reuses native histo
 and existing storage, not a copied transcript ledger. Known model secrets remain
 redacted. Another run, the active reporter itself, unsettled source work and
 purged state are rejected. Reads do not resume inference, open a browser or boot
-Kali. Discovery/pre-inference failures without a native conversation are marked
+a scanner. Discovery/pre-inference failures without a native conversation are marked
 `historyAvailable: false` rather than given a synthetic transcript.
 
 Use existing `pentcloud_read_evidence` for captured files, including verified
 checkpoints from failed jobs. Accepted Git contains the working reports, source
 and request/response files. Binary evidence stays in the existing download/file
-paths. Unrecorded or expired Kali scratch cannot be recovered by this reader;
+paths. Unrecorded or expired scanner scratch cannot be recovered by this reader;
 missing evidence and unreviewed coverage must be disclosed. The reporter should
 cross-check claims, document disagreements and distinguish confirmed findings
 from hypotheses rather than copying an earlier success declaration.
@@ -101,12 +101,12 @@ reporter thread/attempt and accepted output commit. Read the exact index path
 at that commit; check the reporter's `findingsVersion`, required fields and
 referenced files. Do not rerun a scanner to repair presentation. Unpublished
 workspace files are not accepted Git evidence. Keep incomplete reporting explicit.
-See [debugging](debugging.md) and [Kali evidence](kali-evidence.md).
+See [debugging](debugging.md) and [legacy Kali evidence](kali-evidence.md).
 
 `test/findings.test.ts` validates the schema and file references; the native
 Coordinator/Attempt fixtures exercise immutable reads, legacy behavior, repairable
-pre-publication errors and committed version provenance. `test/findings-browser.test.ts`
+pre-publication errors and committed version provenance. `test/findings-browser.pw.ts`
 uses controlled local target/run data on desktop and 390px phone, including zero/one/thirty findings and exact 20/21-row page boundaries, pagination, target separation, detail/report access and explicit
-legacy/error/empty/partial states. Run with `PENTCLOUD_MATERIALS_BROWSER=1 npm exec
---workspace @pentagi-artifacts/control-plane -- vitest run test/findings-browser.test.ts`.
+legacy/error/empty/partial states. Run with
+`npm run test:browser -- apps/control-plane/test/findings-browser.pw.ts`.
 No production inference or scan is needed for these checks.

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import {fileURLToPath} from "node:url";
-import {withNativeTestHarness} from "./lib/native-test-harness.mjs";
+import {withNativeTestHarness, rpcResult} from "./lib/native-test-harness.mjs";
 const root=fileURLToPath(new URL("../apps/control-plane",import.meta.url));
 for(const mode of ["normal","other-active","clear-failure"]){
   await withNativeTestHarness({root,workers:[{configPath:"test/native-coordinator-probe/wrangler.jsonc"}]},async server=>{
-    const response=await server.fetch(`https://coordinator.test/direct-delete-scenario?mode=${mode}`),result=await response.json();
-    assert.equal(response.status,200,JSON.stringify(result));
+    const {COORDINATOR}=await server.getWorker().getEnv();
+    const result=await rpcResult(COORDINATOR.getByName("global").directDeleteScenario(mode));
     const records=result.before.records;
     if(mode==="normal"){
       assert.equal(result.error,undefined,"confirmed deletion works directly from Recent runs");
@@ -28,9 +28,8 @@ for(const mode of ["normal","other-active","clear-failure"]){
 }
 for(const mode of ["normal","retry","unresolved","protected"]){
   await withNativeTestHarness({root,workers:[{configPath:"test/native-coordinator-probe/wrangler.jsonc"}]},async server=>{
-    const response=await server.fetch(`https://coordinator.test/lifecycle-scenario?mode=${mode}`);
-    const result=await response.json();
-    assert.equal(response.status,200,JSON.stringify(result));
+    const {COORDINATOR}=await server.getWorker().getEnv();
+    const result=await rpcResult(COORDINATOR.getByName("global").lifecycleScenario(mode));
     assert.equal(result.archived.run.lifecycle,"archived");
     assert.equal(result.hidden.runs.length,0);
     assert.equal(result.visible.runs.length,1);
@@ -60,8 +59,8 @@ for(const mode of ["normal","retry","unresolved","protected"]){
 
 for(const mode of ["purge-race","create-race","create-race?mode=failure"]){
   await withNativeTestHarness({root,workers:[{configPath:"test/native-coordinator-probe/wrangler.jsonc"}]},async server=>{
-    const response=await server.fetch(`https://coordinator.test/${mode}`),result=await response.json();
-    assert.equal(response.status,200,JSON.stringify(result));
+    const {COORDINATOR}=await server.getWorker().getEnv(),coordinator=COORDINATOR.getByName("global");
+    const result=await rpcResult(mode==="purge-race"?coordinator.purgeRaceScenario():coordinator.createRaceScenario(mode.includes("failure")?"failure":"normal"));
     if(mode==="purge-race"){
       assert.match(result.outcome.error,/409:.*changed/);
       const before=result.before.records,after=result.after.records;
@@ -94,8 +93,8 @@ for(const mode of ["purge-race","create-race","create-race?mode=failure"]){
 
 for(const mode of ["same","objective","uploads"]){
   await withNativeTestHarness({root,workers:[{configPath:"test/native-coordinator-probe/wrangler.jsonc"}]},async server=>{
-    const response=await server.fetch(`https://coordinator.test/duplicate-create?mode=${mode}`),result=await response.json();
-    assert.equal(response.status,200,JSON.stringify(result));
+    const {COORDINATOR}=await server.getWorker().getEnv();
+    const result=await rpcResult(COORDINATOR.getByName("global").duplicateCreateScenario(mode));
     assert.equal(result.faster.run.id,"duplicate-create");
     if(mode==="same"){
       assert.equal(result.duplicate.run.id,result.faster.run.id);
@@ -122,18 +121,18 @@ for(const mode of ["same","objective","uploads"]){
 }
 
 await withNativeTestHarness({root,workers:[{configPath:"test/native-coordinator-probe/wrangler.jsonc"}]},async server=>{
-  const call=async path=>{const response=await server.fetch(`https://coordinator.test/${path}`);const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));return result;};
-  await call("trash-gate-setup");
-  const trash=call("trash-gate-trash");
-  await call("trash-gate-wait");
-  const marked=await call("snapshot");
+  const {COORDINATOR}=await server.getWorker().getEnv(),coordinator=COORDINATOR.getByName("global");
+  await rpcResult(coordinator.prepareTrashGate());
+  const trash=rpcResult(coordinator.trashRun("run-0"));
+  await rpcResult(coordinator.waitTrashGate());
+  const marked=await rpcResult(coordinator.snapshot());
   assert.equal(marked.records.find(row=>row.key==="run:run-0").value.phase,"cancelled");
   assert.equal(marked.records.find(row=>row.key==="job:job-0").value.status,"interrupted");
-  await call("trash-gate-restore");
-  const revision=await call("revise?id=job-0&instructions=New%20revision&request=trash-race");
-  await call("trash-gate-release");
+  await rpcResult(coordinator.restoreRun("run-0"));
+  const revision=await rpcResult(coordinator.revisionForTest("job-0","New revision","trash-race"));
+  await rpcResult(coordinator.releaseTrashGate());
   await trash;
-  const after=await call("snapshot");
+  const after=await rpcResult(coordinator.snapshot());
   assert.equal(after.records.find(row=>row.key==="run:run-0").value.lifecycle,"active");
   assert.equal(after.records.find(row=>row.key==="run:run-0").value.phase,"specialists");
   assert.notEqual(after.records.find(row=>row.key===`job:${revision.job.id}`).value.status,"interrupted");
@@ -141,13 +140,14 @@ await withNativeTestHarness({root,workers:[{configPath:"test/native-coordinator-
 });
 
 await withNativeTestHarness({root,workers:[{configPath:"test/native-coordinator-probe/wrangler.jsonc"}]},async server=>{
-  const response=await server.fetch("https://coordinator.test/onboarding-lifecycle"),result=await response.json();
-  assert.equal(response.status,200,JSON.stringify(result));
+  const {COORDINATOR}=await server.getWorker().getEnv();
+  const result=await rpcResult(COORDINATOR.getByName("global").onboardingLifecycle());
   assert.equal(result.before.safeToUninstall,false);
   assert.equal(result.before.onboarding.targets,1);
   assert.equal(result.before.onboarding.credentials,1);
   assert.match(result.retained,/409:/);
   assert.equal(result.secretExported,false);
+  assert.equal(result.credential.id,"library-key");assert.equal(result.credential.missing,true,"historical credential metadata stays exportable without restoring its vault");
   assert.equal(result.after.safeToUninstall,true);
   assert.equal(result.after.quiesced,true);
   assert.deepEqual(result.rows,[]);

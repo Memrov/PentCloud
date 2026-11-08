@@ -138,6 +138,12 @@ export class FakeAttempt extends DurableObject<Bindings> {
   async inputReady(){return !!await this.ctx.storage.get("input");}
 }
 export class ProbeCoordinator extends Coordinator {
+  // Wrangler's Node bridge loses rejected DO RPC messages; keep negative assertions in workerd.
+  async rejection(method: "rearmPlatformRecovery" | "reconcileToolOutcome" | "delegationForTest" | "revisionForTest" | "acceptPrepared" | "createRun" | "invalidSettings", args: unknown[]) {
+    try { await Reflect.apply(Reflect.get(this, method), this, args); }
+    catch (error) { return {error: String(error)}; }
+    throw new Error("Expected probe call to reject");
+  }
   async streamRestartScenario(seed: boolean, after?: string) {
     const internal=this as unknown as {activityWriter(id:string):Promise<import("agents/streams").StreamWriter>;activity(writer:import("agents/streams").StreamWriter,id:string,type:string):void};
     if(seed){
@@ -189,11 +195,11 @@ export class ProbeCoordinator extends Coordinator {
     const late=internal.activityWriter("run-0").then(()=>"unexpected writer",error=>String(error));await reached;
     const live=await this.stream("run-0",new Request("https://probe/workflow-events?protocol=2"));const reader=live.body!.getReader();let liveText="";
     while(!liveText.includes("event: up-to-date")){const part=await reader.read();liveText+=new TextDecoder().decode(part.value);}
-    const cleanup=this as unknown as {collectCredentialVersions():void},collect=cleanup.collectCredentialVersions.bind(this);
-    cleanup.collectCredentialVersions=()=>{throw new Error("injected purge commit rollback");};
+    const store=this as unknown as {put(key:string,value:unknown):void},put=store.put.bind(this);
+    store.put=(key,value)=>{put(key,value);if(key==="purged:run:run-0")throw new Error("injected purge commit rollback");};
     let purgeFailure="";try{await this.purgeRun("run-0","run-0");}catch(error){purgeFailure=String(error);}
     const failedPurge={state:(await this.streams.status(writer.streamId))?.state,tombstones:this.ctx.storage.sql.exec("SELECT key FROM native_records WHERE key='purged:run:run-0'").toArray().length};
-    cleanup.collectCredentialVersions=collect;
+    store.put=put;
     await this.purgeRun("run-0","run-0");release();const lateResult=await late;
     let tail="";for(;;){const part=await reader.read();if(part.done)break;tail+=new TextDecoder().decode(part.value);}
     this.streams.open=open;
@@ -314,12 +320,12 @@ export class ProbeCoordinator extends Coordinator {
   }
   async onboardingLifecycle(){
     await this.onboardingAction("target.save",{id:"library-target",kind:"api",name:"Owned API",url:"https://owned.invalid/v1/",revision:null},"fixture");
-    await this.onboardingAction("credential.save",{id:"library-key",purpose:"api",targetId:"library-target",scheme:"bearer",header:"Authorization",label:"API",value:"never-export-this-value",revision:null},"fixture");
+    this.write("onboarding:credential:library-key",{id:"library-key",purpose:"api",targetId:"library-target",audienceURL:"https://owned.invalid/v1/",targetRevision:1,scheme:"bearer",header:"Authorization",label:"API",version:1,revoked:false,missing:true,updatedAt:0,updatedBy:"fixture"});
     const before=await this.lifecycleStatus(),exported=await this.onboardingExport();
     let retained="";try{await this.prepareUninstall();}catch(error){retained=String(error);}
     const after=await this.prepareUninstall(true);
     const rows=this.ctx.storage.sql.exec<{key:string}>("SELECT key FROM native_records WHERE key LIKE 'onboarding:%'").toArray();
-    return {before,retained,after,rows,secretExported:JSON.stringify(exported).includes("never-export-this-value")};
+    return {before,retained,after,rows,credential:exported.credentials.find(credential=>credential.id==="library-key"),secretExported:exported.credentials.some(credential=>"value" in credential)};
   }
   async findingsScenario(){
     await this.seed(1,"coder",false);
@@ -1065,189 +1071,17 @@ export class ProbeCoordinator extends Coordinator {
     return { fired: true };
   }
 }
+// Keep only the actual WebSocket and upstream HTTP boundaries; test controls use native RPC.
 export default {
   async fetch(request: Request, env: Bindings) {
-    const url = new URL(request.url),
-      coordinator = env.COORDINATOR.getByName("global");
-    try {
-      if(url.pathname==='/bounty-gate-scenario')return Response.json(await coordinator.bountyGateScenario());
-      if (url.pathname === "/agents/coordinator/global")
-        return coordinator.fetch(request);
-      if(url.pathname==="/catalog-upstream"){
-        if(request.headers.has("Authorization"))throw new Error("Public catalogs must not receive a key");
-        if(url.searchParams.has("redirect"))return new Response(null,{status:302,headers:{Location:"/must-not-follow"}});
-        const route=url.searchParams.get("route");return Response.json({data:[{id:"native-catalog",type:"chat",capabilities:{tools:{supported:true}},api:{"chat-completions":{base_url:"https://opencode.ai/inference/"+(route==="go"?"go/":"")+"openai/v1"}}}]});
-      }
-      if(url.pathname==="/catalog-runtime")return Response.json(await coordinator.catalogRuntime(url.searchParams.get("origin")!,url.searchParams.has("redirect")));
-      if (url.pathname === "/early-chat") return Response.json(await coordinator.earlyChatScenario(url.searchParams.get("stop")==="true",url.searchParams.get("terminal")==="true",url.searchParams.get("queued-rejected")==="true",url.searchParams.get("rejected-primary")==="true"));
-      if (url.pathname === "/mismatched-discovery") return Response.json(await coordinator.mismatchedDiscovery());
-      if(url.pathname==="/onboarding-lifecycle")return Response.json(await coordinator.onboardingLifecycle());
-      if (url.pathname === "/findings-scenario")return Response.json(await coordinator.findingsScenario());
-      if (url.pathname === "/materials-scenario")return Response.json(await coordinator.materialScenario(url.searchParams.get("mode")??"initial"));
-      if (url.pathname === "/create")
-        return Response.json(
-          await coordinator.createRun({
-            run_id: url.searchParams.get("id")!,
-            task: url.searchParams.get("task") ?? "probe",
-          }),
-        );
-      if (url.pathname === "/rpc-failure") { await env.ATTEMPTS.getByName(url.searchParams.get("id")!).failRPC(url.searchParams.get("enabled") === "true"); return Response.json({configured: true}); }
-      if (url.pathname === "/platform-memory") {
-        if (url.searchParams.get("scope") === "coordinator") await coordinator.onAlarmMemoryLimit({ sealed: true });
-        else await env.ATTEMPTS.getByName("job-0").platformMemory(true, Number(url.searchParams.get("unresolved") ?? 1));
-        return Response.json(await coordinator.diagnostics());
-      }
-      if (url.pathname === "/platform-diagnostics") return Response.json(await coordinator.diagnostics());
-      if (url.pathname === "/recovery-after-reset") return Response.json(await coordinator.recoveryAfterReset());
-      if (url.pathname === "/native-memory-handoff") return Response.json(await coordinator.nativeMemoryHandoff());
-      if (url.pathname === "/readonly-queue") return Response.json(await coordinator.readonlyQueueScenario());
-      if (url.pathname === "/stream-restart") return Response.json(await coordinator.streamRestartScenario(url.searchParams.has("seed"),url.searchParams.get("after")??undefined));
-      if (url.pathname === "/native-streams") return Response.json(await coordinator.nativeStreamsScenario());
-      if (url.pathname === "/native-wake") return Response.json(await coordinator.nativeWakeScenario());
-      if (url.pathname === "/platform-schedules") return Response.json(await coordinator.platformRecoverySchedules());
-      if (url.pathname === "/platform-backoff") { await coordinator.onAlarmMemoryLimit({ sealed: false, nextTime: Date.now() + 60000 }); return Response.json(await coordinator.diagnostics()); }
-      if (url.pathname === "/end-platform-backoff") return Response.json(await coordinator.endPlatformBackoff());
-      if (url.pathname === "/platform-rearm") return Response.json(await coordinator.rearmPlatformRecovery({ scope: url.searchParams.get("scope") === "attempt" ? "attempt" : "coordinator", observedAt: Number(url.searchParams.get("at")), ...(url.searchParams.get("id") ? { attemptId: url.searchParams.get("id")! } : {}) }));
-      if(url.pathname==="/browser-auth-lifecycle")return Response.json(await coordinator.browserAuthLifecycle());
-      if (url.pathname === "/seed")
-        return Response.json(
-          await coordinator.seed(
-            Number(url.searchParams.get("count") ?? 2),
-            url.searchParams.get("role") === "primary" ? "primary" : "coder",
-            url.searchParams.get("notify") !== "false",
-          ),
-        );
-      if (url.pathname === "/abort") {
-        await coordinator.abortForTest();
-        return new Response("aborted");
-      }
-      if (url.pathname === "/fire")
-        return Response.json(await coordinator.fire());
-      if (url.pathname === "/invalid-settings")
-        return Response.json(
-          await coordinator.invalidSettings(url.searchParams.get("kind")!),
-        );
-      if (url.pathname === "/initialization-head")
-        return Response.json({
-          head: await coordinator.initializationHead(
-            url.searchParams.get("id")!,
-          ),
-        });
-      if (url.pathname === "/limit")
-        return Response.json(
-          await coordinator.limit(
-            url.searchParams.get("run")!,
-            Number(url.searchParams.get("max")),
-          ),
-        );
-      if (url.pathname === "/prepare")
-        return Response.json(
-          await coordinator.prepareCandidate(
-            url.searchParams.get("id")!,
-            JSON.parse(url.searchParams.get("record") ?? "{}"),
-          ),
-        );
-      if (url.pathname === "/accept")
-        return Response.json(
-          await coordinator.acceptPrepared(
-            url.searchParams.get("id")!,
-            JSON.parse(url.searchParams.get("changes") ?? "{}"),
-          ),
-        );
-      if (url.pathname === "/block-projection")
-        return Response.json(
-          await coordinator.projectionBlock(
-            url.searchParams.get("value") === "true",
-          ),
-        );
-      if (url.pathname === "/main")
-        return Response.json({
-          head: await coordinator.mainHead(url.searchParams.get("run")!),
-        });
-      if (url.pathname === "/finish") {
-        const value = (await request.json()) as AttemptResult;
-        await env.ATTEMPTS.getByName(value.id).finish(value);
-        return Response.json({ finished: true });
-      }
-      if (url.pathname === "/target")
-        return Response.json(
-          await coordinator.stoppedTarget(
-            url.searchParams.get("id")!,
-            url.searchParams.get("run")!,
-          ),
-        );
-      if (url.pathname === "/terminalize")
-        return Response.json(
-          await coordinator.terminalize(url.searchParams.get("id")!),
-        );
-      if (url.pathname === "/advance-twice")
-        return Response.json(await coordinator.advanceTwice());
-      if (url.pathname === "/delegate")
-        return Response.json(
-          await coordinator.delegationForTest(
-            url.searchParams.get("parent")!,
-            url.searchParams.get("tool")!,
-            JSON.parse(url.searchParams.get("args")!),
-          ),
-        );
-      if (url.pathname === "/revise")
-        return Response.json(
-          await coordinator.revisionForTest(
-            url.searchParams.get("id")!,
-            url.searchParams.get("instructions")!,
-            url.searchParams.get("request")!,
-          ),
-        );
-      if (url.pathname === "/evidence-scenario")return Response.json(await coordinator.evidenceScenario());
-      if (url.pathname === "/recorded-work-scenario")return Response.json(await coordinator.recordedWorkScenario());
-      if (url.pathname === "/snapshot")
-        return Response.json(await coordinator.snapshot());
-      if (url.pathname === "/duplicate-create")return Response.json(await coordinator.duplicateCreateScenario(url.searchParams.get("mode") ?? "same"));
-      if (url.pathname === "/trash-gate-setup") { await coordinator.prepareTrashGate(); return Response.json({ok:true}); }
-      if (url.pathname === "/trash-gate-wait") { await coordinator.waitTrashGate(); return Response.json({ok:true}); }
-      if (url.pathname === "/trash-gate-release") { await coordinator.releaseTrashGate(); return Response.json({ok:true}); }
-      if (url.pathname === "/trash-gate-trash") return Response.json(await coordinator.trashRun("run-0"));
-      if (url.pathname === "/trash-gate-restore") return Response.json(await coordinator.restoreRun("run-0"));
-      if (url.pathname === "/purge-race")return Response.json(await coordinator.purgeRaceScenario());
-      if (url.pathname === "/create-race")return Response.json(await coordinator.createRaceScenario(url.searchParams.get("mode") ?? "normal"));
-      if (url.pathname === "/direct-delete-scenario")return Response.json(await coordinator.directDeleteScenario(url.searchParams.get("mode") ?? "normal"));
-      if (url.pathname === "/lifecycle-scenario")
-        return Response.json(await coordinator.lifecycleScenario(url.searchParams.get("mode") ?? "normal"));
-      if (url.pathname === "/reconciled")
-        return Response.json(
-          await coordinator.reconcileToolOutcome(url.searchParams.get("id")!),
-        );
-      if (url.pathname === "/recover")
-        return Response.json(await coordinator.recoverNow());
-      if (url.pathname === "/repeat")
-        return Response.json(
-          await coordinator.repeatDelivery(url.searchParams.get("id")!),
-        );
-      if (url.pathname === "/cancel")
-        return Response.json(
-          await coordinator.cancelRun(url.searchParams.get("run")!),
-        );
-      if (url.pathname === "/interrupt")
-        return Response.json(
-          await coordinator.interrupt(url.searchParams.get("id")!),
-        );
-      if (url.pathname === "/attempt")
-        return Response.json(
-          await env.ATTEMPTS.getByName(url.searchParams.get("id")!).inspect(),
-        );
-      if (url.pathname === "/release") {
-        await env.ATTEMPTS.getByName(url.searchParams.get("id")!).release();
-        return Response.json({ released: true });
-      }
-      return new Response("not found", { status: 404 });
-    } catch (error) {
-      return Response.json(
-        {
-          error: String(error),
-          cause: error instanceof Error ? String(error.cause) : "",
-        },
-        { status: 500 },
-      );
+    const url = new URL(request.url);
+    if (url.pathname === "/agents/coordinator/global")
+      return env.COORDINATOR.getByName("global").fetch(request);
+    if(url.pathname==="/catalog-upstream"){
+      if(request.headers.has("Authorization"))throw new Error("Public catalogs must not receive a key");
+      if(url.searchParams.has("redirect"))return new Response(null,{status:302,headers:{Location:"/must-not-follow"}});
+      const route=url.searchParams.get("route");return Response.json({data:[{id:"native-catalog",type:"chat",capabilities:{tools:{supported:true}},api:{"chat-completions":{base_url:"https://opencode.ai/inference/"+(route==="go"?"go/":"")+"openai/v1"}}}]});
     }
+    return new Response("not found", { status: 404 });
   },
 };

@@ -5,7 +5,7 @@ description: Native Computer, Browser, Git memory and installed bounded scanner 
 
 # PentCloud tool procedures
 
-Linux scanners use `pentcloud_tool` and the installed bounded profiles. Kali tools are unavailable in this installation. Kali references in specialist methodology describe desired checks, not installed capabilities. Read the advertised schemas, select a supported equivalent or report missing coverage. Do not install Kali, scanner binaries, images, packages or another agent runtime.
+Linux scanners use `pentcloud_tool` and the installed bounded profiles. Kali tools are unavailable in this installation. Read the advertised schemas, select a supported equivalent or report missing coverage. Do not install Kali, scanner binaries, images, packages or another agent runtime.
 
 Use the `pentcloud_tool` description for exact pack/request forms. Request files by existing task repository paths or absolute `/workspace/scratch/` paths through `files`; do not pass inline bytes, arbitrary shell, flags, external templates or downloads. For binary inputs, use the advertised isolated JavaScript file capability. Task ownership and role permissions apply to every call. Each pack offers bounded coverage; disclose unsupported, failed, truncated or timed-out checks.
 

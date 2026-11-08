@@ -550,13 +550,10 @@ export class Coordinator extends DurableObject<NativeEnv> {
             for(const prefix of ["onboarding:definition-version:"+id+":","material:target-definition:"+id+":"])this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",prefix.length,prefix);
             for(const run of this.list<RunRecord>("run:"))if(run.target?.id===id)this.browserAuth.clear(run.id);
             const authPrefix="target-auth:"+id+":";this.ctx.storage.sql.exec("DELETE FROM native_records WHERE substr(key,1,?)=?",authPrefix.length,authPrefix);
-            this.collectCredentialVersions();
           }
           return result;
         }
         case "target.check":{await this.programAccess(this.onboarding.target(identifier(value.id)));return await this.onboarding.checkTarget(identifier(value.id),Number(value.revision),identifier(value.requestId),actor);}
-        case "credential.save":{const result=this.onboarding.saveCredential(value as unknown as Parameters<OnboardingStore["saveCredential"]>[0],revision,actor);this.collectCredentialVersions();return result;}
-        case "credential.revoke":return this.onboarding.revokeCredential(identifier(value.id),Number(value.revision),actor);
         case "discovery.acknowledge":{
           const id=identifier(value.runId),writer=await this.activityWriter(id),run=this.run(id);this.assertMutable(id);
           if(!run.activation||run.phase==="cancelled"||!run.discoveryDrained||this.activeReceipt()?.input.runId===id)throw new Error("409: Wait for discovery execution and remote outcomes to drain");
@@ -601,27 +598,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return {...(receipt?receipt:{}),...(run&&root?{accepted:{run:publicRun(run),rootJob:publicJob(root)}}:{})};
   }
   async onboardingExport(){return {...this.onboarding.exportData(),definitions:this.list<TargetDefinition>("onboarding:definition:"),runReferences:this.list<RunRecord>("run:").map(r=>({id:r.id,targetId:r.target?.id,repo:r.repo,headCommit:r.headCommit}))};}
-  private collectCredentialVersions(){
-    const refs=new Set<string>();
-    const add=(id:string,version:number)=>refs.add(id+":"+version);
-    for(const run of this.list<RunRecord>("run:")){
-      for(const m of Object.values(run.modelsByRole??{}))add(m.credentialId,m.credentialVersion);
-      if(run.apiAccess)add(run.apiAccess.id,run.apiAccess.version);
-      const draft=this.onboarding.draft(run.id);
-      for(const choice of [draft.profile?.default,...Object.values(draft.profile?.overrides??{})])if(choice)add(choice.credentialId,choice.credentialVersion);
-      if(draft.apiCredential)add(draft.apiCredential.id,draft.apiCredential.version);
-    }
-    for(const {draft} of this.list<{draft:SetupDraft}>("onboarding:defaults:")){
-      for(const choice of [draft.profile?.default,...Object.values(draft.profile?.overrides??{})])if(choice)add(choice.credentialId,choice.credentialVersion);
-      if(draft.apiCredential)add(draft.apiCredential.id,draft.apiCredential.version);
-    }
-    const targetIds=new Set(this.onboarding.targets().map(t=>t.id));
-    for(const c of this.onboarding.credentials()){
-      const retired=c.purpose==="api"&&!targetIds.has(c.targetId!)&&![...refs].some(ref=>ref.startsWith(c.id+":"));
-      for(let v=1;v<=(retired?c.version:c.version-1);v++)if(!refs.has(c.id+":"+v))this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?","onboarding:value:"+c.id+":"+v);
-      if(retired)this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?","onboarding:credential:"+c.id);
-    }
-  }
+
   /** Called by the active Attempt via service RPC only; never exposed by Worker routes. */
   async assertConversation(id:string):Promise<void> {
     await this.start();const job=this.job(id),run=this.run(job.runId);this.assertMutable(run.id);
@@ -694,7 +671,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
     await this.assertActive(id);const run=this.run(this.job(id).runId);
     if(!run.target||run.target.kind!=="api")throw new Error("403: This run has no API target");
     if(run.boundAPIAccess&&run.target.access?.api){const config=run.target.access.api,value=await readTargetSecret(this.env,config.binding);this.targetSecretRedactions.push(value);const credential=config.scheme==="bearer"?"Bearer "+value:value;if(!run.boundAPIFingerprint||await digest(credential)!==run.boundAPIFingerprint)throw new Error("409: Cloudflare API secret changed; test it and start a new run");await this.assertActive(id);return {targetURL:config.url,header:config.header,value:credential};}
-    return run.apiAccess?this.onboarding.apiConfig(run.target,run.apiAccess):{targetURL:run.target.url};
+    if(run.apiAccess)throw new Error("409: Legacy API-key storage is retired; configure a Cloudflare binding and start a new run");
+    return {targetURL:run.target.url};
   }
   private readonly browserAuth=new RunBrowserAuth({get:key=>this.get(key),put:(key,value)=>this.put(key,value),remove:key=>this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key)});
   private readonly emailWaiters=new Map<string,Set<()=>void>>();
@@ -773,8 +751,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       boundAPIAccess:!draft.publicAPI&&!!run.target.access?.api,
       ...(apiProof?.credentialFingerprint?{boundAPIFingerprint:apiProof.credentialFingerprint}:{}),
       ...(definition?{definition}:{}),
-      settingsRevision:await digest({settings:run.settings,modelsByRole,target:run.target,definition,apiAccess:draft.publicAPI?null:draft.apiCredential}),
-      ...(!draft.publicAPI&&draft.apiCredential?{apiAccess:draft.apiCredential}:{}),
+      settingsRevision:await digest({settings:run.settings,modelsByRole,target:run.target,definition,publicAPI:draft.publicAPI}),
       ...(acknowledgeFailure&&run.discoveryDrained?{discoveryAcknowledged:true}:{}),
       activation:{requestId,draftRevision:expectedRevision}};
     const acceptedIds=new Set(run.materials?.files.map(file=>file.id)??[]);
@@ -826,7 +803,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     if(requester.role!=="reporter")throw new Error("403: Recorded work requires the active reporter");
     if(!sourceId){
       const catalog={run_id:requester.runId,acceptedCommit:this.run(requester.runId).headCommit,attempts:this.jobs(requester.runId).filter(j=>j.id!==requesterId).map(j=>({job_id:j.id,role:j.role,status:j.status,createdAt:j.createdAt,startedAt:j.startedAt,finishedAt:j.finishedAt,input_commit:j.inputCommit,output_commit:j.outputCommit,error:j.inputError??j.terminal?.error,result_tool:j.terminal?.tool,evidence:j.evidence,files:j.evidenceFiles??[],unavailable:j.evidenceUnavailable??[]}))};
-      return recordedWorkPage(redact(catalog,[...knownRuntimeSecrets(this.env),...plainModelSecretValues(this.env),...this.onboarding.secretValues()]),offset);
+      return recordedWorkPage(redact(catalog,[...knownRuntimeSecrets(this.env),...plainModelSecretValues(this.env)]),offset);
     }
     const source=this.job(sourceId);
     assertRecordedWorkAccess(requester,source);
@@ -1096,7 +1073,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
   }
   private safe(value: string) {
     let text = value;
-    for (const secret of [...knownRuntimeSecrets(this.env), ...plainModelSecretValues(this.env), ...this.onboarding.secretValues(),...this.targetSecretRedactions])
+    for (const secret of [...knownRuntimeSecrets(this.env), ...plainModelSecretValues(this.env),...this.targetSecretRedactions])
       if (secret) text = text.split(secret).join("[redacted]");
     return text.slice(0, 2000);
   }
@@ -1360,7 +1337,6 @@ export class Coordinator extends DurableObject<NativeEnv> {
       this.ctx.storage.sql.exec("DELETE FROM native_activity WHERE run_id=?",id);
       this.put(`purged:run:${id}`,{id});
       for(const key of ["onboarding:setup:"+id,"onboarding:api-proof:"+id,"onboarding:creation:"+id])this.ctx.storage.sql.exec("DELETE FROM native_records WHERE key=?",key);
-      this.collectCredentialVersions();
     }});
     await this.publish();return {runId:id,deleted:true};
   }

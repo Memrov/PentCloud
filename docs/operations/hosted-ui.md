@@ -9,7 +9,7 @@ No local connector, Tunnel, new credential service or extra datastore is needed.
 
 The intended path is browser → Access → PentCloud Worker/private services →
 cloud tools → target. Cloudflare can see operator IP and identity. Browser Run,
-Kali and managed HTTP retrieval execute in the cloud. This is not a claim of
+tool Containers and managed HTTP retrieval execute in the cloud. This is not a claim of
 anonymous or fixed egress, complete network auditing or engagement host confinement.
 See [network and data risks](../../SECURITY.md#network-and-data-risks).
 
@@ -49,11 +49,11 @@ response bounds, cancellation and mutation receipts remain.
 | API test | Separate anonymous/authenticated requests; only selected target key added |
 | Native API request tool | Clean headers plus selected target key; redirects not followed |
 | Managed HTTP reader | Cleans SDK headers on every hop; passes a URL, not an inherited operator Request |
-| Cloudflare Chromium / Kali | Private cloud execution; no operator request/cookie/header object supplied to those tools |
+| Cloudflare Chromium / tool Containers | Private cloud execution; no operator request/cookie/header object supplied to those tools |
 | OpenCode / research / conversion | Native model/conversion bindings and versioned per-role search providers; no operator HTTP headers supplied |
 
-This is identity containment, not a new hostname allowlist. Preserve stock tool
-schemas, the prepared Kali image and professional egress caveat. User-supplied
+This is identity containment, not a new hostname allowlist. Preserve installed tool
+schemas, image identities and the professional egress caveat. User-supplied
 data or agent-created requests may themselves contain identifying information;
 these controls do not remove arbitrary identity embedded in content.
 
@@ -69,7 +69,7 @@ the app before running that browser case. Existing file/history cases remain.
 Use [authentication](authentication.md) for sign-in. Keep hostname-based Access
 and signed assertion verification. Worker-level Access currently rejects
 WebSocket upgrades. Live checks should verify denied unauthenticated access,
-current bindings and deployed headers without model/scanner work or polling Kali.
+current bindings and deployed headers without model/scanner work or health polling.
 A local fixture does not prove human SSO or end-to-end cloud egress. Confirm these checks in the account where the application is deployed.
 
 ## Official references

@@ -1,14 +1,8 @@
-import {afterAll,beforeAll,describe,expect,it} from "vitest";
-import {chromium,type Browser} from "playwright";
-import {expect as browserExpect} from "playwright/test";
-import {createServer,type ViteDevServer} from "vite";
-import {fileURLToPath} from "node:url";
-describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("optional source context in target setup",()=>{
-  let server:ViteDevServer,browser:Browser,origin:string;
-  beforeAll(async()=>{server=await createServer({root:fileURLToPath(new URL("../",import.meta.url)),mode:"browser-fixture",server:{host:"127.0.0.1",port:0}});await server.listen();origin=server.resolvedUrls!.local[0]!;browser=await chromium.launch({channel:"chrome",headless:true});},30000);
-  afterAll(async()=>{await browser?.close();await server?.close();});
-  for(const width of [390,1440])it("attaches existing source and recovers a pending native import at "+width+"px",async()=>{
-    const context=await browser.newContext({viewport:{width,height:1000},reducedMotion:"reduce"}),page=await context.newPage();
+import {test, expect, expect as browserExpect} from 'playwright/test';
+test.describe("optional source context in target setup",()=>{
+   for(const width of [390,1440])test("attaches existing source and recovers a pending native import at "+width+"px",async({context,page,baseURL})=>{
+  const origin=baseURL!;
+    await page.setViewportSize({width,height:1000});await page.emulateMedia({reducedMotion:"reduce"});
     let target:any={id:"target-owned",kind:"website",name:"Owned project",url:"https://owned.example/",revision:1,archived:false,objective:"Assess my project",exclusions:""},pending:any[]=[];
     const writes:{name:string;value:any}[]=[],errors:string[]=[];page.on("pageerror",e=>errors.push(e.message));
     const pin={id:"source-one",repo:"context",repoId:"repo-one",branch:"main",commit:"a".repeat(40),addedAt:1,addedBy:"owner"};
@@ -28,7 +22,7 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("optional source
       }
       return json({});
     });
-    try{
+
       await page.route('**/v1/ui/setup',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({schemaVersion:1,access:true,missing:[],storage:true,models:true,ready:true})}));await page.goto(origin);await page.getByRole("button",{name:/Owned project.*owned.example/}).click();
       await page.getByRole("button",{name:/Source context \(optional\)/}).click();
       await page.getByRole("button",{name:"Load existing repositories",exact:true}).click();
@@ -47,6 +41,6 @@ describe.skipIf(process.env.PENTCLOUD_ONBOARDING_BROWSER!=="1")("optional source
       expect(await page.locator("body").evaluate(el=>el.scrollWidth<=window.innerWidth)).toBe(true);
       expect(errors).toEqual([]);
       if(process.env.PENTCLOUD_SCREENSHOT_DIR)await page.screenshot({path:process.env.PENTCLOUD_SCREENSHOT_DIR+"/source-context-"+width+".png",fullPage:true});
-    }finally{await context.close();}
-  },30000);
+
+  });
 });

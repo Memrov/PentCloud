@@ -21,6 +21,7 @@ import { createGitClient } from "@cloudflare/computer/git";
 import { WorkerShellBackend } from "@cloudflare/computer/backends/worker-shell";
 import curlCommands from "@cloudflare/computer/shell/curl";
 import { WorkerJavaScriptBackend } from "@cloudflare/computer/backends/worker-javascript";
+import { createToolBindings } from "@cloudflare/computer/modules/tools";
 import { Plugin } from "@opencode/plugin";
 import { Lifecycle, type MemoryLimitContext } from "agents/lifecycle";
 import { Browser, browserRun,type BrowserRunOptions,type BrowserConnection } from "agents/browser";
@@ -216,39 +217,22 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
               access: "read-write",
               globalOutbound: null,
               modules: {
-                "ws:attempt": {
-                  call: async (values: readonly WorkspaceRuntimeValue[]) => {
-                    const [name, args] = values;
-                    if (
-                      typeof name !== "string" ||
-                      !args ||
-                      typeof args !== "object" ||
-                      Array.isArray(args)
-                    )
-                      throw new Error(
-                        "call requires a tool name and argument object",
-                      );
-                    if (
-                      ![
-                        "search_in_memory",
-                        "search_code",
-                        "search_guide",
-                        "search_answer",
-                        "store_code",
-                        "store_guide",
-                        "store_answer",
-                      ].includes(name)
-                    )
-                      throw new Error(
-                        "Tool is not available in isolated JavaScript",
-                      );
-                    return this.callTool(
-                      name,
-                      args as Record<string, unknown>,
-                      "javascript",
-                    );
+                "ws:tools": createToolBindings([
+                  "search_in_memory",
+                  "search_code",
+                  "search_guide",
+                  "search_answer",
+                  "store_code",
+                  "store_guide",
+                  "store_answer",
+                ].map(name => ({
+                  name,
+                  readOnly: name.startsWith("search_"),
+                  call: async (args, {signal}) => {
+                    const details = await this.callTool(name, args, "javascript", signal);
+                    return {text: JSON.stringify(details), details: details as WorkspaceRuntimeValue, isError: false};
                   },
-                },
+                }))),
               },
               onInterrupt: "fail",
               maxCpuMs: dynamicWorkerBudgets.javascript.cpuMs,

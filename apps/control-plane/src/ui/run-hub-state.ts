@@ -14,21 +14,6 @@ export function mergeRunHubJobs(current: UIJob[], state: RunHubState): UIJob[] {
   return merged.sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0) || left.id.localeCompare(right.id));
 }
 
-export function deriveMergedRunStatus(jobs: UIJob[], fallback: UIRunStatus): UIRunStatus {
-  if (jobs.some((job) => ["failed", "invalid_result", "integration_failed"].includes(job.status))) return "failed";
-  if (jobs.some((job) => job.status === "interrupted")) return "interrupted";
-  if (jobs.some((job) => ["created", "provisioning", "running"].includes(job.status))) return "running";
-  if (jobs.length > 0 && jobs.every((job) => job.status === "completed")) return "completed";
-  if (jobs.some((job) => job.status === "waiting")) return "waiting";
-  return fallback;
-}
-
-export function mergeSpecialistJob(current: UIJob[], summary: RunHubState["jobs"][number]): UIJob[] {
-  return current.map((job) => job.id === summary.id ? mergeSummary(job, summary) : job);
-}
-
-type UIRunStatus = UIJob["status"];
-
 function mergeSummary(current: UIJob | undefined, summary: RunHubState["jobs"][number]): UIJob {
   if (current && current.revision > summary.revision) return current;
   if (summary.nativeSession === true) {

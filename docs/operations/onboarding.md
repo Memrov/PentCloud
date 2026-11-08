@@ -55,9 +55,11 @@ Managed browsers use native hostname guardrails and trusted CDP interception for
 paths, exclusions, redirect hops and headers. Chromium retains response streaming,
 uploads, cookies and TLS; responses are not buffered through an application proxy.
 Computer curl, the API adapter and retrieval use the same URL matcher. Browser
-WebSockets are disabled. **Kali retains direct Internet access: scope is not
-network-enforced for Kali.** Required browser headers and login are not silently
-injected into every Kali tool. Program rules, rate limits and permitted testing
+WebSockets are disabled. Scanner reach depends on the installed tool profile;
+these browser and HTTP controls do not provide universal scanner confinement.
+**Legacy Kali retains direct Internet access: scope is not network-enforced for
+Kali.** Required browser headers and login are not silently injected into every
+scanner tool. Program rules, rate limits and permitted testing
 remain operator and agent responsibilities. Review the
 [network risks](../../SECURITY.md#network-and-data-risks).
 
@@ -75,15 +77,15 @@ check without a model. Redirects require review instead of silently adopting a
 different address. Authentication-required responses can still prove reachability.
 This check does not prove ownership, scanner connectivity or host confinement.
 
-New discovery uses the existing stock WhatWeb tool with the verified stealthy
+New discovery uses the installed WhatWeb capability with the verified stealthy
 profile (`whatweb-stealthy-v2`) and a 60-second tool timeout. An observed HTTP
 status is required for successful discovery; a completed envelope with no HTTP
 response records a coverage warning. Historical `whatweb-polite-v1` attempts
-retain their recorded arguments when retried. The shared scanner can take time to start.
+retain their recorded arguments when retried. The selected scanner runtime can take time to start.
 Discovery and assessment execution use the same one-active/two-waiting queue.
 A queued primary can hold a read-only conversation alongside that execution. Recorded
 remote uncertainty keeps its existing safety ownership until reconciliation;
-refreshing progress never starts an additional scan or polls Kali status.
+refreshing progress never starts an additional scan or polls scanner health.
 The setup page shows a Kumo loading card for queued discovery, scanner startup
 and discovery, then recorded completion or a coverage warning. Model and API
 setup remain usable during the wait. Progress follows stored job state; the UI
@@ -93,7 +95,7 @@ conversation on mobile.
 
 Choose **Open chat** once the displayed model/API setup passes its checks.
 The primary can discuss the project, ask native questions and read supplied files
-while Kali is starting or discovery is running. Opening chat uses OpenCode credits;
+while the scanner is starting or discovery is running. Opening chat uses OpenCode credits;
 loading a page or testing a connection never starts this conversation. Discovery
 itself has no model chat.
 
@@ -114,7 +116,7 @@ assessment**. An unknown remote outcome cannot be acknowledged away. Stop,
 archive, trash and permanent deletion include queued preparation conversations,
 even if material admission already marked their jobs terminal. Input rejection
 aborts preparation without hiding its existing native transcript. Discovery
-rejected before any launch receipt is safely drained without contacting Kali;
+rejected before any launch receipt is safely drained without contacting the scanner;
 its missing coverage still needs acknowledgement. Initial files remain selected
 for primary admission if discovery could not admit them.
 A terminal receipt with a different execution mode/model is retained
@@ -185,7 +187,7 @@ Tests and actual attempts share that provider/compatibility configuration, with
 `models.fetch` and `models.snapshot` disabled to avoid loading the global catalog.
 A disposable `OpenCodeConnectionTest` Durable Object owns each explicit test's
 SDK host and clears its temporary storage afterward. It has no run workspace or
-Kali integration. The current Worker and fresh-install template both bind it as
+scanner integration. The current Worker and fresh-install template both bind it as
 `MODEL_TESTS`; upgrades append the class migration without changing run storage.
 
 PentCloud does not switch between Go and Console billing or alter OpenCode
@@ -198,18 +200,23 @@ replay. BYOK uses that same adapter without a custom streaming/history layer.
 ## API test access and files
 
 API test credentials are separate from model keys. Select public/unauthenticated
-coverage, or save a Bearer token/API-key header and test a known protected
-read-only endpoint. The test compares anonymous and authenticated GET responses;
-a public 200 is not proof the key works. Cookie login, OAuth refresh, website
-login and mTLS are outside this first setup.
+coverage, or enable API authentication in the target's **Network and login
+settings**. Save its binding name, Bearer/API-key scheme, header and allowed
+audience URL; enter the value as a native encrypted Worker secret or Secrets Store
+binding in Cloudflare. See [target secret setup](../cloudflare-setup.md#target-login-and-api-secrets).
+Start a fresh run to capture that target configuration, then explicitly test a
+known protected read-only endpoint. The test compares anonymous and authenticated
+GET responses; a public 200 is not proof the key works. API authentication does
+not add OAuth refresh or mTLS. Browser form login is configured separately.
 
-Saved API credentials are injected server-side by pentcloud_api_request only
-within the selected API origin/base path. Redirects do not receive the key.
-The credential's audience is immutable: changing a target address requires a
-new key reference. Ambiguous encoded path separators/nested encodings are
-rejected before a credential is attached.
-Most stock scanners do not accept arbitrary headers; storing a key does not
-make every scanner authenticated. Findings must identify the actual coverage.
+Bound API secrets are injected server-side by `pentcloud_api_request` only within
+the pinned API origin/base path. Redirects do not receive the key. Changing the
+audience or rotating the bound value requires a fresh run and another explicit
+test; an existing run cannot silently adopt different credentials. Ambiguous
+encoded path separators/nested encodings are rejected before a credential is
+attached. Many scanner profiles do not accept arbitrary headers; configuring a
+binding does not make every scanner authenticated. Findings must identify the
+actual coverage.
 This credential-custody rule does not constrain other browsers or scanner
 egress; the [network and data risks](../../SECURITY.md#network-and-data-risks) remains
 the product's disclosure.
@@ -226,8 +233,9 @@ evidence; deleting a current attachment does not erase old commits or exports.
 **Stop run** is available in the run header during discovery and setup, before
 chat opens. It uses the existing Coordinator cancellation path and preserves
 history. Already-submitted tool operations retain their normal drain/reconciliation
-rules. The shared Kali Container has a separate native inactivity lifetime;
-stopping a run does not change its 30-minute idle policy.
+rules. Native tool-pack attempts retire their owned runtimes during cancellation.
+On legacy installations, the shared Kali Container has a separate native inactivity
+lifetime; stopping a run does not change its 30-minute idle policy.
 
 Finish connection tests and choose **Open chat** during or after discovery.
 This action pins target, model/adapter, credential versions and selected definition;
@@ -243,12 +251,14 @@ only references and a SHA-256 connection-proof fingerprint; native OpenCode
 receives the key in memory for its provider. Rotation requires another explicit
 model test. A pinned run cannot silently adopt a different key; use a new run
 after testing a rotated binding. No account administration credential is needed
-in the runtime. Target API credentials retain their existing server-only
-Coordinator storage and write-only save/replace/revoke controls.
-Values do not enter Git, ordinary exports or live State. Privileged account
-administration and platform backups are inside the trusted deployment boundary;
-this is not application column encryption or immediate cryptographic erasure.
-Revocation fences new use; it cannot retract a request already sent.
+in the runtime. Target API secret values also remain in native Worker Secrets
+or Secrets Store bindings. Coordinator keeps the nonsecret target reference and
+connection-proof fingerprint, and resolves the value only for an authorized
+request. The application has no API-key vault or save/replace/revoke key controls.
+Rotate or remove the native binding in Cloudflare; this cannot retract a request
+already sent. Values do not enter Git, ordinary exports or live State. Privileged
+account administration and platform backups remain inside the trusted deployment
+boundary.
 
 Old targetless chats remain readable. New external steering/revision requests
 on them require a new target-backed run. Previously admitted work and its
@@ -262,7 +272,8 @@ reconciled without starting another discovery job. No keys enter that URL.
 
 CLI export includes target/profile metadata, reusable definition files and
 verified Git bundles. import-targets restores the library and definitions into
-an empty library, requiring credential re-entry; it does not restore execution
+an empty library, requiring native credential bindings and fresh connection checks;
+it does not restore execution
 authority or native conversations. Retain live resources for session recovery.
 Destructive uninstall inventories and explicitly removes onboarding data only
 after all runs and remote/publication ownership are safely settled.

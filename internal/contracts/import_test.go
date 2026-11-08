@@ -90,17 +90,6 @@ func TestPinnedImport(t *testing.T) {
 		if _, ok := filesByPath[path]; !ok {
 			t.Errorf("prompt %s absent from manifest", path)
 		}
-		canonical, err := os.ReadFile(filepath.Join(promptRoot, name))
-		if err != nil {
-			t.Fatalf("read canonical prompt %s: %v", name, err)
-		}
-		embedded, err := os.ReadFile(filepath.Join(root, "internal/prompts/assets", name))
-		if err != nil {
-			t.Fatalf("read embedded prompt %s: %v", name, err)
-		}
-		if string(embedded) != string(canonical) {
-			t.Errorf("embedded prompt %s differs from canonical import", name)
-		}
 	}
 	gotAggregate := sha256.Sum256([]byte(aggregate.String()))
 	if got := hex.EncodeToString(gotAggregate[:]); got != promptDigest {

@@ -36,8 +36,9 @@ attachments, evidence, local memory and dedicated Artifacts Git repository.
 Archive and Trash retain data and can be restored; deletion cannot.
 
 Permanent deletion preserves unresolved scanner-safety ownership. It waits if
-another run owns execution; after drain it destroys the shared native Kali
-instance to discard ephemeral scratch, without starting a replacement. A durable
+another run owns execution. Attempt-owned tool runtimes must finish their existing
+retirement/drain path. On legacy installations, deletion also destroys the shared
+native Kali instance to discard ephemeral scratch without starting a replacement. A durable
 purge intent blocks new execution until cleanup completes. Failures remain
 visible for retry; select Trash to find unfinished deletion. Saved targets,
 settings, saved credentials and shared source repositories are excluded. The target
@@ -64,9 +65,16 @@ Under authenticated `/v1` or `/v1/ui` routes:
 | Inspect a pinned read-only stock result tool | `POST /jobs/:id/remote-inspect` |
 | Reconcile an observed exact operation | `POST /jobs/:id/remote-receipts/:receiptId/reconcile` |
 
-## Toolbox and observability
+## Installed tools and observability
 
-The gateway uses official MCP SDK transport and a private named service binding.
+New installations use eleven native tool packs through `pentcloud_tool`. Each
+runner belongs to one attempt and pack; request profiles and installed image
+contracts bound its capabilities. Cancellation retires the attempt-owned runtimes.
+Inspect durable receipts and immutable evidence; do not repeat an uncertain
+operation or infer support from an upstream tool name. See the
+[execution contract](architecture.md#execution-backends-and-prompt-ownership).
+
+On legacy shared-Kali installations, the gateway uses official MCP SDK transport and a private named service binding.
 One native Cloudflare Container runs the unchanged stock Kali image; Kali-capable
 specialists wait for readiness before model inference. Existing recovery renews
 activity during active/unresolved work. The native 30-minute inactivity timeout
@@ -83,31 +91,15 @@ normal usage after its connection-link expiry.
 ## Routine checks and support boundaries
 
 Use [testing](operations/testing.md) for the smallest appropriate local gate.
-The default app gate reuses dependencies/pinned Go and builds the app; only
+The default app gate reuses dependencies and builds the app; only
 `verify:full` runs the complete recovery suite. Verification never deploys.
 For deployment or key rotation, follow [deployment](deployment.md) and
 [authentication](operations/authentication.md). Reuse installation ownership
 state and preserve Worker identities, bound secrets and migration tags.
 
-## Retiring the former result hint
+## Existing installations
 
-Result acceptance and publication use Coordinator's durable native recovery wake;
-new installations do not need a result Workflow. Native Builds normalize the old
-`RESULTS`/`ResultValidation` binding and matching namespace push target out of
-private deployment metadata. The source config retains `triggers.events: []` so
-Wrangler's native trigger reconciliation removes the old subscription. Preserve
-unrelated event subscriptions and installation resource identities when upgrading.
-
-Before upgrading an existing installation, verify native trigger reconciliation
-on its test Worker and inspect the resulting subscription and deployment metadata.
-Omitting an event-trigger field does not clear existing subscriptions. The former
-Workflow resource may still reference its old class: verify that the native
-upgrade accepts the removed export before promoting it. If the platform refuses
-that upgrade, remote retirement is a deployment prerequisite; resolve it through
-Cloudflare's native resource controls while retaining historical instances.
-`wrangler workflows delete` also deletes its instances and must not be used as an
-automatic cleanup step. This source change does not delete Workflow history.
-
-Sources: [Artifacts push events](https://developers.cloudflare.com/artifacts/guides/event-subscriptions/),
-[Workflow deletion](https://developers.cloudflare.com/workflows/reference/wrangler-commands/#workflows-delete),
-and [native Wrangler trigger reconciliation](https://github.com/cloudflare/workers-sdk/blob/main/packages/deploy-helpers/src/triggers/deploy.ts).
+Preserve installation identities and historical migration tags when upgrading.
+The [legacy migration notes dated November 8, 2026](operations/legacy-migrations-2026-11-08.md)
+cover separate-Worker Builds configuration, retirement of the former result
+Workflow, and the remaining shared-Kali compatibility path.

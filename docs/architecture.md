@@ -7,11 +7,11 @@ results, screenshots or proof that any particular vulnerability was found.
 
 ## From target to assessment
 
-![Save a target, verify its address, configure models and context during toolbox startup, open read-only preparation chat, follow the admitted assessment, then review findings.](../media/journey.light.png)
+![Save a target, verify its address, configure models and context during discovery, open read-only preparation chat, follow the admitted assessment, then review findings.](../media/journey.light.png)
 
 Saving a target does not contact it. After authorization confirmation, the bounded
-address check starts model-free discovery. Setup stays usable while the shared
-scanner starts. The primary can hold a read-only preparation conversation after
+address check starts model-free discovery. Setup stays usable while discovery
+runs. The primary can hold a read-only preparation conversation after
 model setup passes; execution/delegation waits for ordinary admission. Address
 verification does not prove ownership or enforce network scope.
 Optional program scope, identification headers and Cloudflare credential
@@ -19,19 +19,40 @@ references belong to the saved target. Runs pin that target revision; the model
 receives its relevant instructions, not the entire scope catalog. Managed
 requests pass through the shared target matcher. Browser Run adds native hostname
 guardrails and narrow CDP interception while Chromium handles HTTP transport.
-Kali retains direct Internet access without network scope enforcement. [Capabilities and limits](operations/onboarding.md#bounty-scope-and-target-login).
+Installed scanner profiles have their own scope limits; they do not provide
+universal network confinement. Legacy Kali retains direct Internet access.
+[Capabilities and limits](operations/onboarding.md#bounty-scope-and-target-login).
 
 [Onboarding details and failure behavior](operations/onboarding.md).
 
 ## Separate conversations, shared accepted work
 
-![Coordinator and native Lifecycle track separate OpenCode sessions and workspaces. Agents read accepted Git work and use role-dependent capabilities. Only one mutating attempt runs at a time; Kali is shared.](../media/agents.light.png)
+![Coordinator and native Lifecycle track separate OpenCode sessions and workspaces. Agents read accepted Git work and use role-dependent installed tools. Only one mutating attempt runs at a time.](../media/agents.light.png)
 
 The roles shown are examples, not simultaneous scanning lanes. Each revision gets
 a fresh native session/workspace. Coordinator SQLite is the live run/settings and
 admission authority; its durable admission order allows one mutating attempt and
-at most two waiting. Role-dependent tools reach Worker capabilities, Browser Run and one
-shared stock Kali Container. Separate sessions do not provide network confinement.
+at most two waiting. Role-dependent tools reach Computer capabilities, Browser Run
+and the installed scanner backend. Separate sessions do not provide network confinement.
+
+## Execution backends and prompt ownership
+
+New installations deploy one customer Worker with eleven native tool packs.
+`pentcloud_tool` exposes bounded request profiles; a runner belongs to one attempt
+and pack. The runtime validates the installed image and tool contract, records
+execution receipts and retires attempt-owned runtimes on cancellation. A profile
+is not a promise that every stock scanner option or workflow is supported.
+
+Existing installations can retain the separate private shared-Kali gateway and
+its stock MCP catalog. Its readiness, generation and 30-minute inactivity rules
+apply only to that backend. Preserve its installed bindings and migration history;
+see the [dated legacy migration notes](operations/legacy-migrations-2026-11-08.md).
+
+OpenCode loads the [canonical specialist Markdown](../apps/control-plane/src/native/specialists/README.md)
+directly. Every role keeps its completion, scope, cancellation and receipt rules
+always loaded. Trusted runtime bindings select backend instructions and the
+matching native skill; role prose does not grant tools. The original PentAGI
+imports and frozen adaptation provenance remain historical reference data.
 
 ## Evidence with a history
 
@@ -41,13 +62,13 @@ Artifacts Git holds immutable inputs, candidates, captured evidence and accepted
 ancestry. A data checkpoint does not advance accepted history. Coordinator
 centrally verifies provenance and ancestry before acceptance. Its durable native
 wake reads the exact persisted Attempt result after a lost completion or eviction;
-Artifacts push notifications are not required. There is no Workflow per specialist
-and no second Git control ledger.
+Artifacts push notifications and a result Workflow are not required. There is no
+second Git control ledger.
 
 Native OpenCode sessions hold conversations. Git is not the sole transcript
 store or live-state authority. Evidence capture is bounded; expired/unrecorded
-Kali scratch is not recoverable from Git. Structural validation is not independent
-security verification. See [Kali evidence](operations/kali-evidence.md).
+scanner scratch is not recoverable from Git. Structural validation is not independent
+security verification. See [legacy Kali evidence](operations/kali-evidence.md).
 
 ## Recovery respects uncertainty
 

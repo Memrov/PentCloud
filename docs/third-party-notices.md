@@ -5,6 +5,11 @@ PentCloud builds on [PentAGI](https://github.com/vxcontrol/pentagi). The root
 notices retain its attribution. Cloudflare Agents Starter presentation patterns
 are attributed below.
 
+The [preserved PentAGI reference](../upstream/pentagi/README.md) includes the original
+template hashes and the frozen paragraph-level adaptation record. Current native
+Markdown defaults are maintained directly; retiring the generator and duplicate
+prompt directory does not remove that source or attribution.
+
 The Go runtime license accompanies its source assets under
 `apps/control-plane/src/native/assets`. Diagrams include Source Sans Pro;
 its [OFL notice](../media/fonts/SourceSansPro-OFL.txt) accompanies the exports.

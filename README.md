@@ -59,7 +59,7 @@ For errors: [Setup and runtime debugging](docs/operations/debugging.md).
 1. **Save your target.** Add a website or API, confirm authorization and verify the
    address. Optionally import a public bounty program and add target-bound
    headers/login references. The target stays available for later runs.
-2. **Prepare while the toolbox starts.** Configure OpenCode models by agent role,
+2. **Prepare while discovery runs.** Configure OpenCode models by agent role,
    attach documents/source/configs and add optional source context. Open the primary
    conversation once setup passes; preparation stays read-only while discovery runs.
 3. **Follow the investigation.** Open each specialist's conversation, watch streaming
@@ -82,9 +82,9 @@ For errors: [Setup and runtime debugging](docs/operations/debugging.md).
 | **Model flexibility** | Choose supported OpenCode models per role, including explicitly configured Console BYOK connections. |
 | **Cloudflare-native runtime** | Workers, Durable Objects, Artifacts, Browser Run and on-demand tool Containers run in your account. |
 
-Separate sessions do not mean parallel scans or a private Container for each agent.
-One mutating attempt runs at a time, with at most two waiting. Read-only preparation
-can continue during initial discovery.
+Native tool-pack runtimes are scoped to each attempt and pack. One mutating attempt
+runs at a time, with at most two waiting. Read-only preparation can continue during
+initial discovery. Existing legacy installations retain their shared Kali backend.
 
 ## Evidence with a history
 
@@ -101,7 +101,7 @@ it does not independently prove a vulnerability. Reports disclose incomplete
 coverage and missing evidence. Markdown download and native Print / Save as PDF
 are available.
 
-[Evidence lifecycle](docs/operations/kali-evidence.md) ·
+[Evidence lifecycle](docs/architecture.md#evidence-with-a-history) ·
 [Findings and reporting](docs/operations/findings.md)
 
 ## Your cloud. Your keys. Your evidence.
@@ -114,7 +114,8 @@ assessment context are sent to OpenCode and the configured model providers.
 **Coordinator SQLite owns live runs, settings and admission.** Artifacts Git
 stores immutable inputs, work, evidence checkpoints and accepted results. Native
 sessions retain conversations; Git is not the sole transcript or live-state store.
-Result validation uses Cloudflare Workflows, rather than a Workflow per specialist.
+Coordinator validates results and uses native Agents Lifecycle for recovery;
+result acceptance does not depend on a Workflow or Artifacts push notification.
 
 Optionally attach existing Artifacts source or import a public GitHub repository.
 Source stays separate from assessment work and is pinned to an exact commit per

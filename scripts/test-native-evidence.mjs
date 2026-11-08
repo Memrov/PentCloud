@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
-import {withNativeTestHarness} from './lib/native-test-harness.mjs';
+import {withNativeTestHarness, rpcResult} from './lib/native-test-harness.mjs';
 const root=fileURLToPath(new URL('../apps/control-plane',import.meta.url));
 await withNativeTestHarness({root,workers:[{configPath:'test/native-attempt-probe/wrangler.jsonc'}]},async server=>{
  const response=await server.fetch('https://attempt.test/evidence-checkpoints');const value=await response.json();
@@ -34,7 +34,8 @@ await withNativeTestHarness({root,workers:[{configPath:'test/native-attempt-prob
 });
 
 await withNativeTestHarness({root,workers:[{configPath:'test/native-coordinator-probe/wrangler.jsonc'}]},async server=>{
- const response=await server.fetch('https://coordinator.test/evidence-scenario');const value=await response.json();assert.equal(response.status,200,JSON.stringify(value));
+ const {COORDINATOR}=await server.getWorker().getEnv();
+ const value=await rpcResult(COORDINATOR.getByName("global").evidenceScenario());
  assert.equal(value.listing.commit,value.afterStop.commit);assert.match(value.content,/retained on stop/);assert.equal(value.stoppedContent,value.content);
  assert.equal(value.forged,true);assert.equal(value.crossRun,true);assert.equal(value.job.evidenceCommits.length,1);assert.equal(value.job.status,'interrupted');
  assert.equal(value.mainUnchanged,true);

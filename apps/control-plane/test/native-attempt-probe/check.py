@@ -235,7 +235,7 @@ javascript = results['javascript']
 assert javascript['scratch']['exitCode'] == 0 and javascript['scratch']['stdout'] == 'isolated scratch\n', javascript
 assert javascript['memory']['exitCode'] == 0, javascript
 assert javascript['blockEscape']['exitCode'] != 0 and javascript['fileWrite']['exitCode'] != 0, javascript
-assert javascript['fileRead']['exitCode'] != 0 and 'not available' in javascript['fileRead']['stderr'], javascript
+assert javascript['fileRead']['exitCode'] != 0 and javascript['invalidArguments']['exitCode'] != 0, javascript
 for name in ['publish', 'replay']:
     published = results[name]
     assert published['main'] == published['base'] and published['head'] != published['base'], published

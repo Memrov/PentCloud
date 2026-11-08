@@ -151,18 +151,18 @@ do not redact or sanitize the evidence's meaning. Review it before sharing.
 Use [testing](testing.md) for normal gates. The local conversation browser fixture
 covers desktop/phone navigation, repeated roles/retries, isolated steering,
 Back/Forward/reload, report provenance, blocked remote content and print styles.
-Run it with `PENTCLOUD_MATERIALS_BROWSER=1 npm exec --workspace
-@pentagi-artifacts/control-plane -- vitest run test/conversations-browser.test.ts`.
+Run it with
+`npm run test:browser -- apps/control-plane/test/conversations-browser.pw.ts`.
 It uses local fixtures only, not production scans or paid inference.
 
-`test/streaming-browser.test.ts` uses a real local EventSource connection with
+`test/streaming-browser.pw.ts` uses a real local EventSource connection with
 completion frames deliberately withheld. It checks text before completion,
 continuous responses across tool steps, reconnect replacement, hidden details,
 14px composer text, theme switching, Stop routing and preserved scroll on desktop
 and a 390px phone. The conversation fixture additionally verifies required and
 conditional OpenCode questions, custom choices, numeric bounds and exact native
-permission replies with Kumo controls. Run it with the same
-`PENTCLOUD_MATERIALS_BROWSER=1` command and that test filename. Native Workers
+permission replies with Kumo controls. Run the streaming case with
+`npm run test:browser -- apps/control-plane/test/streaming-browser.pw.ts`. Native Workers
 fixtures additionally cover stream cleanup, tool screenshot metadata, split
 secret redaction and the settled cold-history path without model/Kali requests.
 
@@ -174,10 +174,10 @@ presentation. See [debugging](debugging.md) for native runtime and Access eviden
 The usability browser fixtures additionally verify clipboard command copying,
 table copy-control visibility, draft isolation and late-response protection,
 event-driven permission attention, report-ready target links, jump-to-latest and
-typed purge confirmation. To run the complete local UI acceptance set, enable
-both `PENTCLOUD_MATERIALS_BROWSER=1` and `PENTCLOUD_ONBOARDING_BROWSER=1` and pass
-`--no-file-parallelism` to Vitest so fixture Vite servers share the optimizer
-cache sequentially. These fixtures never use production models or scanners.
+typed purge confirmation. Run the complete local UI acceptance set with
+`npm run test:browser`. Playwright owns browser and fixture-server lifecycle;
+no browser-test environment opt-ins are needed. These fixtures never use
+production models or scanners.
 
 ## Layout and run identity
 

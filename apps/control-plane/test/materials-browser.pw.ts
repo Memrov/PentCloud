@@ -1,19 +1,10 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { createServer as createHTTPServer } from "node:http";
-import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { chromium, type Browser } from "playwright";
-import { expect as browserExpect } from "playwright/test";
-import { createServer, type ViteDevServer } from "vite";
-import { hostedUIResponse } from "../src/native/ui-response";
+import {test, expect, expect as browserExpect} from 'playwright/test';
+import type {BrowserContext, Page} from 'playwright/test';
 
 // Real local React UI, mocked HTTP/SSE only. No model, scanner, Git or production traffic.
-// Opt in locally; the portable native Builds unit gate does not install a browser.
-describe.skipIf(process.env.PENTCLOUD_MATERIALS_BROWSER !== "1")("chat files in the browser", () => {
-let server: ViteDevServer;
-let browser: Browser;
-let origin: string;
+// Playwright runs these separately from the portable native Builds unit gate.
+test.describe("chat files in the browser", () => {
 const COMMIT = "a".repeat(40);
 const run = {id: "run-ui-files", status: "running", baselineRepo: "run-run-ui-files", inputCommit: COMMIT, maxDepth: 4, maxJobs: 48};
 const active = {id: "job-ui-files", runId: run.id, role: "primary", status: "running", revision: 1, nativeSession: true, inputCommit: COMMIT, attempt: 1};
@@ -21,23 +12,16 @@ const ready = (id: string, runId: string, name: string, body: Buffer) => {
   const sha256 = createHash("sha256").update(body).digest("hex");
   return {id, runId, name, sha256, size: body.length, mediaType: "text/plain", kind: "text", status: "ready", sourcePath: `.pentagi/materials/${sha256}/source`, textPath: `.pentagi/materials/${sha256}/source`};
 };
-beforeAll(async () => {
-  server = await createServer({root: fileURLToPath(new URL("../", import.meta.url)), mode: "browser-fixture", server: {host: "127.0.0.1", port: 0}});
-  await server.listen();
-  origin = server.resolvedUrls!.local[0]!;
-  browser = await chromium.launch({channel: "chrome", headless: true});
-}, 30000);
-afterAll(async () => { await browser?.close(); await server?.close(); });
-async function fixture(existing: boolean, viewport = {width: 1440, height: 1000}, legacy = false, firstFailure: "network" | number = "network", inputError?: string, session?: {messages: unknown[]; settled?: boolean}) {
+async function fixture(context: BrowserContext, page: Page, existing: boolean, viewport = {width: 1440, height: 1000}, legacy = false, firstFailure: "network" | number = "network", inputError?: string, session?: {messages: unknown[]; settled?: boolean}) {
   const initialJob = inputError ? {...active, nativeSession: false, status: "invalid_result", inputError} : legacy ? {...active, nativeSession: false, status: "completed"} : session?.settled ? {...active, status: "completed", outputCommit: COMMIT} : active;
-  const context = await browser.newContext({viewport, reducedMotion: "reduce"});
+  await page.setViewportSize(viewport);await page.emulateMedia({reducedMotion:"reduce"});
   let publishCoordinator: (revision: number) => void = (_revision: number) => { throw new Error("Coordinator is not connected"); };
   await context.routeWebSocket("**/agents/coordinator/global*", socket => {
     socket.send(JSON.stringify({type: "cf_agent_identity", name: "global", agent: "coordinator", stateFollows: true}));
     socket.send(JSON.stringify({type: "cf_agent_state", state: {revision: 1, runs: existing ? [run] : [], jobs: existing ? [initialJob] : []}}));
     publishCoordinator = revision => socket.send(JSON.stringify({type: "cf_agent_state", state: {revision, runs: [run, {...run, id: `run-refresh-${revision}`}], jobs: [initialJob]}}));
   });
-  const page = await context.newPage();
+
   const calls: Array<{path: string; body: string | null; bytes: Buffer | null; headers: Record<string, string>}> = [];
   let failSubmission = true;
   let currentRun = {...run};
@@ -72,35 +56,23 @@ async function fixture(existing: boolean, viewport = {width: 1440, height: 1000}
     if (path.endsWith("/file") && url.searchParams.get("preview") === "1") return route.fulfill({status: 200, contentType: "text/plain; charset=utf-8", headers: {"X-Content-Truncated": "1"}, body: "<script>window.fileExecuted = true</script>"});
     return route.fulfill({status: 404, contentType: "application/json", body: JSON.stringify({error: `Unhandled UI fixture ${path}`})});
   });
-  return {context, page, calls, publishCoordinator: (revision: number) => publishCoordinator(revision)};
+  return {calls, publishCoordinator: (revision: number) => publishCoordinator(revision)};
 }
 
-it.each([1440,390])("keeps production chat private at %i px while retaining screenshots, live projections and explicit external navigation", async (width) => {
-  // Serve the actual production browser bundle with the same policy as the Worker.
-  const production = createHTTPServer(async (request, response) => {
-    try {
-      const path = new URL(request.url!, "http://127.0.0.1").pathname;
-      const file = path.startsWith("/assets/") || path === "/theme.js" ? path : "/index.html";
-      const bytes = await readFile(new URL(`../dist/client${file}`, import.meta.url));
-      const type = file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html";
-      const reply = hostedUIResponse(new Response(new Uint8Array(bytes), {headers:{"Content-Type":type}}), `http://${request.headers.host}${request.url}`);
-      const headers:Record<string,string>={};reply.headers.forEach((v,k)=>{headers[k]=v;});
-      response.writeHead(reply.status,headers);response.end(Buffer.from(await reply.arrayBuffer()));
-    } catch { response.writeHead(404); response.end(); }
-  });
-  await new Promise<void>(resolve=>production.listen(0,"127.0.0.1",resolve));
-  const address=production.address(); if(!address||typeof address==="string")throw Error("No production fixture port");
-  const site=`http://127.0.0.1:${address.port}`;
+for(const width of [1440,390])test(`keeps production chat private at ${width} px while retaining screenshots, live projections and explicit external navigation`,async({context,page,baseURL})=> {
+  const origin=baseURL!;
+  // The shared Playwright webServer serves the production bundle with hostedUIResponse.
+  const site=origin;
   const pixel="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==";
   const markdown='**Finding**\n\n![tracking](https://target.invalid/pixel)\n\n<img src="https://target.invalid/html">\n<iframe src="https://target.invalid/frame"></iframe>\n\n[Inspect target](https://target.invalid/page)';
   const messages=[{id:"privacy",type:"assistant",content:[{type:"text",text:markdown},{type:"reasoning",text:"![reasoning tracker](https://target.invalid/reasoning)"},{id:"shot",type:"tool",name:"cloudflare_browser",state:{status:"completed",input:{},content:[],metadata:{cloudflareImages:[pixel]}}}]}];
-  const {context,page,publishCoordinator}=await fixture(true,{width,height:1000},false,"network",undefined,{messages});
+  const {publishCoordinator}=await fixture(context, page, true,{width,height:1000},false,"network",undefined,{messages});
   const foreign:string[]=[];
   await context.route("**/*",route=>{if(new URL(route.request().url()).origin!==site){foreign.push(route.request().url());return route.abort();}return route.continue();});
   await page.addInitScript(()=>{(window as any).privacyViolations=[];document.addEventListener("securitypolicyviolation",event=>(window as any).privacyViolations.push(event.effectiveDirective));});
-  try {
+
     const reply=await page.goto(`${site}?run=${run.id}&job=${active.id}`);
-    expect(reply?.headers()["content-security-policy"]).toContain(`connect-src 'self' ws://127.0.0.1:${address.port}`);
+    expect(reply?.headers()["content-security-policy"]).toContain(`connect-src 'self' ws://${new URL(site).host}`);
     await browserExpect(page.getByRole("heading",{name:"Primary",exact:true})).toBeVisible();
     await browserExpect(page.getByText("Finding",{exact:true})).toBeVisible();
     await page.getByRole("button",{name:/Activity/}).click();
@@ -119,15 +91,16 @@ it.each([1440,390])("keeps production chat private at %i px while retaining scre
     await page.evaluate(()=>{const img=document.createElement("img");img.src="https://target.invalid/csp-probe";document.body.appendChild(img);});
     await browserExpect.poll(()=>page.evaluate(()=>(window as any).privacyViolations)).toContain("img-src");
     expect(foreign).toEqual([]);
-  } finally {await context.close();await new Promise<void>((resolve,reject)=>production.close(error=>error?reject(error):resolve()));}
-},30000);
 
-it("keeps file/history inspection in place across repeated projections and follows new messages only at the bottom", async () => {
+});
+
+test("keeps file/history inspection in place across repeated projections and follows new messages only at the bottom", async ({context,page,baseURL}) => {
+  const origin=baseURL!;
   const history = Array.from({length: 35}, (_, index) => ({id: `history-${index}`, type: "user", text: `Historical investigation detail ${index}.\n\n${"Evidence and scope details. ".repeat(12)}`}));
   // Settled inference fences are reconciled against each identical Coordinator job projection.
   const messages = [...history, {id: "settled-fence", type: "idle", outcome: "failed", error: "Attempt has settled"}];
-  const {context, page, publishCoordinator} = await fixture(true, {width: 1440, height: 900}, false, "network", undefined, {messages, settled: true});
-  try {
+  const {publishCoordinator} = await fixture(context, page, true, {width: 1440, height: 900}, false, "network", undefined, {messages, settled: true});
+
     await page.addInitScript(() => {
       const NativeEventSource = window.EventSource;
       (window as any).sessionSources = [];
@@ -160,12 +133,13 @@ it("keeps file/history inspection in place across repeated projections and follo
     await append(`Latest message while following the conversation.\n\n${"Additional live investigation detail. ".repeat(120)}`, 3);
     await browserExpect(page.locator(".message-row").last()).toContainText("Latest message while following the conversation");
     await browserExpect.poll(bottomGap).toBeLessThan(2);
-  } finally { await context.close(); }
-}, 30000);
 
-it("keeps the new-run/upload identity and selections after a lost create reply on mobile", async () => {
-  const {context, page, calls} = await fixture(false, {width: 390, height: 844});
-  try {
+});
+
+test("keeps the new-run/upload identity and selections after a lost create reply on mobile", async ({context,page,baseURL}) => {
+  const origin=baseURL!;
+  const {calls} = await fixture(context, page, false, {width: 390, height: 844});
+
     await page.goto(origin);
     await page.getByRole("button",{name:/Owned target/}).click();
     await page.getByRole("checkbox",{name:/I own this project/}).check();
@@ -187,12 +161,13 @@ it("keeps the new-run/upload identity and selections after a lost create reply o
     expect(upload.bytes?.toString()).toBe("hello\n");
     expect(upload.headers["x-content-sha256"]).toBe("5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  } finally { await context.close(); }
-}, 30000);
 
-it("queues active-chat files through a stable revision and keeps immutable previews inert", async () => {
-  const {context, page, calls} = await fixture(true);
-  try {
+});
+
+test("queues active-chat files through a stable revision and keeps immutable previews inert", async ({context,page,baseURL}) => {
+  const origin=baseURL!;
+  const {calls} = await fixture(context, page, true);
+
     await page.goto(`${origin}?run=${run.id}&job=${active.id}`);
     await browserExpect(page.getByRole("button", {name: "Attach files"})).toBeVisible({timeout: 3000});
     await page.getByRole("textbox", {name: /^Message /}).fill("Review this file next");
@@ -216,24 +191,26 @@ it("queues active-chat files through a stable revision and keeps immutable previ
     const href = await page.getByLabel("Download source.html").getAttribute("href");
     expect(new URL(href!, origin).searchParams.get("commit")).toBe(COMMIT);
     expect(new URL(href!, origin).searchParams.get("path")).toBe("evidence/source.html");
-  } finally { await context.close(); }
-}, 30000);
+
+});
 
 
-it("keeps archived chats readable without querying native file or session controls", async () => {
-  const {context, page, calls} = await fixture(true, {width: 390, height: 844}, true);
-  try {
+test("keeps archived chats readable without querying native file or session controls", async ({context,page,baseURL}) => {
+  const origin=baseURL!;
+  const {calls} = await fixture(context, page, true, {width: 390, height: 844}, true);
+
     await page.goto(`${origin}?run=${run.id}&job=${active.id}`);
     await browserExpect(page.getByRole("heading", {name: "Primary", exact: true})).toBeVisible();
     expect(await page.getByRole("button", {name: "Attach files"}).count()).toBe(0);
     expect(await page.getByRole("button", {name: "Files", exact: true}).count()).toBe(0);
     expect(calls.some(call => /\/(files|session-controls)$/.test(call.path))).toBe(false);
-  } finally { await context.close(); }
-}, 30000);
 
-it("adds each dropped/pasted file once, keeps ordinary text paste, and removes only the selected file", async () => {
-  const {context, page, calls} = await fixture(false);
-  try {
+});
+
+test("adds each dropped/pasted file once, keeps ordinary text paste, and removes only the selected file", async ({context,page,baseURL}) => {
+  const origin=baseURL!;
+  const {calls} = await fixture(context, page, false);
+
     await page.goto(origin);
     await page.getByRole("button",{name:/Owned target/}).click();
     await page.getByRole("checkbox",{name:/I own this project/}).check();
@@ -259,12 +236,13 @@ it("adds each dropped/pasted file once, keeps ordinary text paste, and removes o
     await page.getByLabel("Remove dropped.txt").click();
     await browserExpect(page.getByText("dropped.txt", {exact: true})).toHaveCount(0);
     await browserExpect(page.getByText("pasted.txt", {exact: true})).toBeVisible();
-  } finally { await context.close(); }
-}, 30000);
 
-it.each([{existing: false, label: "new run"}, {existing: true, label: "active revision"}])("allows correcting a $label draft after a definitive 400 rejection", async ({existing}) => {
-  const {context, page, calls} = await fixture(existing, {width: 1440, height: 1000}, false, 400);
-  try {
+});
+
+for(const {existing,label} of [{existing: false, label: "new run"}, {existing: true, label: "active revision"}])test(`allows correcting a ${label} draft after a definitive 400 rejection`,async({context,page,baseURL})=> {
+  const origin=baseURL!;
+  const {calls} = await fixture(context, page, existing, {width: 1440, height: 1000}, false, 400);
+
     await page.goto(existing ? `${origin}?run=${run.id}&job=${active.id}` : origin);
     if(!existing){await page.getByRole("button",{name:/Owned target/}).click();await page.getByRole("checkbox",{name:/I own this project/}).check();}
     await browserExpect(page.getByRole("button", {name: "Attach files"})).toBeVisible();
@@ -291,12 +269,13 @@ it.each([{existing: false, label: "new run"}, {existing: true, label: "active re
     expect(corrected.upload_ids).toEqual([rejected.upload_ids[0]]);
     if (existing) expect(corrected.request_id).not.toBe(rejected.request_id);
     else expect(corrected.run_id).toBe(rejected.run_id); // Existing uploaded receipts stay scoped to their stable run.
-  } finally { await context.close(); }
-}, 30000);
 
-it("lets the operator explicitly edit a capacity-rejected revision without recycling its request identity", async () => {
-  const {context, page, calls} = await fixture(true, {width: 1440, height: 1000}, false, 429);
-  try {
+});
+
+test("lets the operator explicitly edit a capacity-rejected revision without recycling its request identity", async ({context,page,baseURL}) => {
+  const origin=baseURL!;
+  const {calls} = await fixture(context, page, true, {width: 1440, height: 1000}, false, 429);
+
     await page.goto(`${origin}?run=${run.id}&job=${active.id}`);
     await browserExpect(page.getByRole("button", {name: "Attach files"})).toBeVisible();
     await page.getByRole("textbox", {name: /^Message /}).fill("Original capacity request");
@@ -312,12 +291,13 @@ it("lets the operator explicitly edit a capacity-rejected revision without recyc
     expect(requests).toHaveLength(2);
     expect(requests[1].request_id).not.toBe(requests[0].request_id);
     expect(requests[1].upload_ids).toEqual(requests[0].upload_ids);
-  } finally { await context.close(); }
-}, 30000);
 
-it("shows a pre-session input rejection with a correctable composer and no native session requests", async () => {
-  const {context, page, calls} = await fixture(true, {width: 390, height: 844}, false, "network", "The selected material set exceeds its admission limit");
-  try {
+});
+
+test("shows a pre-session input rejection with a correctable composer and no native session requests", async ({context,page,baseURL}) => {
+  const origin=baseURL!;
+  const {calls} = await fixture(context, page, true, {width: 390, height: 844}, false, "network", "The selected material set exceeds its admission limit");
+
     await page.goto(`${origin}?run=${run.id}&job=${active.id}`);
     await browserExpect(page.getByText("The selected material set exceeds its admission limit", {exact: true})).toBeVisible({timeout: 3000});
     await browserExpect(page.getByText("Input rejected before session start", {exact: true})).toBeVisible();
@@ -326,7 +306,7 @@ it("shows a pre-session input rejection with a correctable composer and no nativ
     expect(await page.getByRole("button", {name: "Files", exact: true}).count()).toBe(0);
     expect(calls.some(call => /\/(events|files|session-controls)$/.test(call.path))).toBe(false);
     expect(await page.getByText("Reconnecting", {exact: true}).count()).toBe(0);
-  } finally { await context.close(); }
-}, 30000);
+
+});
 
 });

@@ -14,3 +14,9 @@ export async function withNativeTestHarness(options, run) {
     await server.close();
   }
 }
+
+/** Copy data across the native Node/workerd RPC proxy for local assertions. */
+export async function rpcResult(promise) {
+  const value = await promise;
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}

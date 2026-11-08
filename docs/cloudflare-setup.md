@@ -89,7 +89,7 @@ keyless when its binding is absent. Every other provider requires its key.
 The app's current `nodejs_compat` compatibility settings expose encrypted Worker
 secrets to OpenCode's native environment integrations. Use Worker runtime
 secrets (`secret_text`) for search, rather than Secrets Store getter bindings.
-OpenCode 2.2.5 owns the native search transport and authentication. Searches use
+The pinned OpenCode SDK owns the native search transport and authentication. Searches use
 the explicitly selected provider with no automatic fallback or billing-route
 switch. Provider rate limits and failures surface to the specialist. Provision
 only the search providers you intend to use; apply the same private Cloudflare
@@ -118,10 +118,12 @@ does not prove login or key validity. Use the explicit read-only API check durin
 setup. Browser authentication is confirmed by the agent after form submission.
 Never put credential values in chat, source, uploaded context or command arguments.
 
-Secret references belong to the saved target and are pinned into each run. Browser
-login is fresh for every run; its agents reuse only that run's short-lived login.
-Existing application-managed API keys remain compatible. Cloudflare's limit on
-Worker variables/secrets still applies; provision only the bindings you need.
+Secret references belong to the saved target and are pinned into each run. Start
+a fresh run after changing the API binding, its audience or the secret value, and
+repeat the explicit protected-endpoint check. Browser login is fresh for every
+run; its agents reuse only that run's short-lived login. API secret values are
+managed only in Cloudflare, with no application API-key vault. Cloudflare's limit
+on Worker variables/secrets still applies; provision only the bindings you need.
 
 ## Program accounts and verification
 
