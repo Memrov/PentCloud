@@ -26,8 +26,12 @@ export WRANGLER_SEND_METRICS=false
 # Formatting and type-aware lint cover the whole repository, so run them once.
 npm run format:check
 npm run lint
+# Generated runtime types are committed; regenerate with `npm run types` in the
+# Worker's workspace after changing its Wrangler config or compatibility date.
+types_check() { env -u WRANGLER_CI_OVERRIDE_NAME -u WRANGLER_CI_MATCH_TAG npm run types:check --workspace "$1"; }
 if [[ "$worker" != gateway ]]; then
-  npm run types --workspace @pentagi-artifacts/control-plane
+  types_check @pentagi-artifacts/control-plane
+  types_check @pentcloud/tool-packs
   npm run typecheck --workspace @pentagi-artifacts/control-plane
   npm run typecheck --workspace @pentcloud/tool-packs
   npm run test:unit
@@ -60,7 +64,7 @@ if [[ "$worker" != gateway ]]; then
 fi
 if [[ "$worker" != app ]]; then
   # App Builds pins Wrangler to the app identity. Gateway fixtures stay local.
-  env -u WRANGLER_CI_OVERRIDE_NAME -u WRANGLER_CI_MATCH_TAG npm run types --workspace @pentagi-artifacts/aws-toolbox-control
+  types_check @pentagi-artifacts/aws-toolbox-control
   npm run typecheck --workspace @pentagi-artifacts/aws-toolbox-control
   env -u WRANGLER_CI_OVERRIDE_NAME -u WRANGLER_CI_MATCH_TAG npm test --workspace @pentagi-artifacts/aws-toolbox-control
 fi

@@ -10,8 +10,7 @@
     "jsx": "react-jsx",
     "types": [
       "vitest/globals",
-      "node",
-      "@cloudflare/workers-types/experimental"
+      "node"
     ]
   },
   "include": [

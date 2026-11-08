@@ -33,6 +33,14 @@ as backlog in `.oxlintrc.json` warn instead of failing until they are fixed.
 To skip the one-time formatting commit in `git blame`, run
 `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
+Each Worker's `worker-configuration.d.ts` holds its bindings and the
+Workers runtime types for its compatibility date and flags, as
+[Cloudflare recommends](https://developers.cloudflare.com/workers/languages/typescript/)
+instead of `@cloudflare/workers-types`. The files are committed and the gates
+run `wrangler types --check`. After changing a Worker's Wrangler config,
+compatibility date or flags, or upgrading Wrangler, regenerate with
+`npm run types --workspace <workspace>` and commit the result.
+
 A focused test can be selected with, for example,
 `npm run test:unit -- test/materials-ui.test.ts`.
 The unit gate does not run the separate Playwright browser suite. A passing

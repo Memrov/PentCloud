@@ -10,7 +10,8 @@
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "deploy:dry-run": "npm run build && wrangler deploy --config dist/worker/wrangler.json --dry-run --containers-rollout=none",
-    "types": "wrangler types --strict-vars=false --include-runtime=false",
+    "types": "wrangler types --strict-vars=false",
+    "types:check": "wrangler types --check --strict-vars=false",
     "dev:worker": "vite dev"
   },
   "dependencies": {
