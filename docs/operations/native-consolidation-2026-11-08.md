@@ -12,7 +12,7 @@ The linked examples are the pinned open-source implementations or tests examined
 | --- | --- | --- | --- |
 | PL-01 | Implemented | Role Markdown describes the available backend; backend-specific tool skills remain selected from native bindings. | [anomalyco/opencode](https://github.com/anomalyco/opencode/blob/dc2ffcf8bf26f9e669b6aa22b95f50e12be15e06/packages/core/test/config/agent.test.ts#L703-L721) |
 | PL-02 | Implemented and integration verified | Use Wrangler test-harness service/DO bindings. Remove hand-written HTTP test dispatch and gateway-owned Miniflare setup; retain real transport cases and the existing research canary’s explicit dependency. | [cloudflare/workers-sdk](https://github.com/cloudflare/workers-sdk/blob/56459a561b7b133a9152b993336e1e5470b1d290/fixtures/create-test-harness-example/tests/vitest.test.ts#L11-L69) |
-| PL-03 | Implemented; live CDP check blocked by local prerequisites | Ordinary read-only Browser Run QA connects from Node over CDP. Only target-access QA deploys the Worker fixture. The available Mac lacks the required native `cf` CLI/account setup; no replacement harness was added. | [microsoft/playwright](https://github.com/microsoft/playwright/blob/07c7069cdbb1f5c7331d3f4d2abd864dcfde745a/tests/library/chromium/connect-over-cdp.spec.ts#L423-L454) |
+| PL-03 | Implemented; live CDP check pending release | Ordinary read-only Browser Run QA connects from Node over CDP. Only target-access QA deploys the Worker fixture. The native `cf` CLI prerequisite was prepared during the publication continuation; subsequent live evidence is tracked in PR #16. | [microsoft/playwright](https://github.com/microsoft/playwright/blob/07c7069cdbb1f5c7331d3f4d2abd864dcfde745a/tests/library/chromium/connect-over-cdp.spec.ts#L423-L454) |
 | PL-04 | Implemented and browser verified | Playwright owns webServer, browser, context and page lifecycle for all eight browser suites and native UI smoke; all 45 cases pass on the owner's Mac. | [microsoft/playwright](https://github.com/microsoft/playwright/blob/07c7069cdbb1f5c7331d3f4d2abd864dcfde745a/packages/web/playwright.config.ts#L24-L53) |
 | AP-02 | Implemented | Delete unused merged-status/job helpers; active authoritative run projections remain. | [cloudflare/agents](https://github.com/cloudflare/agents/blob/5c33d89791d6a00c6ea64cf7790fa753e3e5cbfd/packages/agents/src/tests/capabilities/lifecycle.ts#L932-L981) |
 | DOC-01 | Implemented | Current docs and diagrams describe the shipped backend and native lifecycle. Historical migration evidence stays explicitly dated. | [cloudflare/agents](https://github.com/cloudflare/agents/blob/5c33d89791d6a00c6ea64cf7790fa753e3e5cbfd/examples/next/lifecycle/src/index.ts#L83-L132) |
@@ -66,7 +66,7 @@ The EX-01 stop is grounded in OpenCode 2.2.6: [tool file content](https://github
 | Full application build and deployment package | Native Vite production build, Worker output/source-map checks and Wrangler `--dry-run --containers-rollout=none` passed; no deployment performed |
 | Live Browser Run CDP | Not started: required native `cf` CLI/account setup unavailable in the known Mac tooling. No sessions, Access policies/tokens or account leases were created; nothing outstanding to clean up |
 | Independent code review | No blockers found in production changes and the complete gateway/coordinator/material/evidence/lifecycle transport-test conversion. All eight browser suites compared: 351 assertion call sites before, 352 after; HTTP fixtures and incremental SSE semantics preserved |
-| CI and deployment | Public GitHub upload blocked by automatic approval review on a regenerated architecture diagram. No branch publication, CI run, merge or production deployment is claimed. |
+| CI and deployment | The first public upload was blocked pending explicit diagram disclosure authorization. The owner subsequently authorized publication and release through the required gates; [PR #16](https://github.com/Memrov/PentCloud/pull/16) records hosted CI and deployment evidence. |
 
 The final reviewed source diff removes **1,178 authored code/test lines net**,
 **48,699 repeated generated runtime-declaration lines**, and **4,419 duplicate
@@ -93,9 +93,9 @@ the SVGs contain no scripts or external references. The final continuation
 removed those 57 metadata bytes from each PNG and verified that decoded pixel
 bytes are unchanged. This does not replace the required publication approval:
 automatic approval review denied uploading the diagrams to the public
-repository because it requires explicit authorization for that public
-disclosure. The branch remains unpublished. The implementation bundle was
-instead copied privately to the owner's Mac for local validation, with SHA-256
+repository because it required explicit authorization for that public
+disclosure. At that checkpoint the branch remained unpublished. The implementation bundle was
+copied privately to the owner's Mac for local validation, with SHA-256
 and Git bundle verification before use.
 
 ## Final continuation verification
@@ -126,8 +126,23 @@ retains the optional legacy prompt-build step, so no connection change is
 needed for this release. Recheck live migration and admission state immediately
 before a future promotion.
 
-The live Node/CDP journey remains unverified because the native `cf` CLI/account
-connection is unavailable on the Mac. No live browser session or temporary
-account/Access credential was created in this continuation. Public branch
-publication, hosted CI, merge and deployment remain pending explicit disclosure
-authorization and their applicable release gates.
+The live Node/CDP journey was unverified at this checkpoint because the native
+`cf` CLI/account connection was unavailable on the Mac. No live browser session
+or temporary account/Access credential was created in that continuation.
+
+## Publication continuation
+
+The owner explicitly authorized publishing the reviewed changes and diagrams,
+then CI, merge and deployment after the release gates pass. The branch was
+published in [PR #16](https://github.com/Memrov/PentCloud/pull/16). Its initial
+hosted browser run passed all 45 cases; CodeQL and dependency review also passed.
+The complete hosted verification and any subsequent candidate checks remain
+required before merge.
+
+The official `cf` 1.0.0-beta.28 CLI was installed in an isolated task directory
+outside the repository. Live account permission metadata identifies the native
+permission as `Browser Run Write`; the interactive QA runner now requests that
+name. The existing supplied-token path permits a short-lived, account-scoped
+lease without reading another client's credential cache. PR #16 records the
+subsequent live result and cleanup evidence rather than treating setup as proof
+of a completed browser journey.

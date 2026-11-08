@@ -45,7 +45,7 @@ export async function main(args=process.argv.slice(2)) {
   process.once('SIGINT',interrupt);process.once('SIGTERM',interrupt);
   const base=`/accounts/${accountId}`,settingsPath=`${base}/workers/scripts/${workerName}/settings`;
   try {
-    auth=await accountAuthorization({accountId,run:privateProcess,permissionNames:[values['target-access']?'Workers Scripts Write':'Browser Rendering Write',...qaPermissions],purpose:'browser qa'});
+    auth=await accountAuthorization({accountId,run:privateProcess,permissionNames:[values['target-access']?'Workers Scripts Write':'Browser Run Write',...qaPermissions],purpose:'browser qa'});
     secrets.push(auth.token);if(auth.id)proof.accountLease={id:auth.id,name:auth.name,expiresOn:auth.expiresOn};
     api=cloudflareAPI(auth.token);
     await withQAAccess({api,accountId,origin,proof:proof.appAccess},async({headers})=>{
