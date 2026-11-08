@@ -30,6 +30,8 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+      - name: Select the pinned npm version
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
       - run: npm ci
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -51,6 +53,8 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+      - name: Select the pinned npm version
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
       - run: npm ci
       - run: npm exec -- vp exec playwright install --with-deps chromium
       - run: npm exec -- vp run test:browser
