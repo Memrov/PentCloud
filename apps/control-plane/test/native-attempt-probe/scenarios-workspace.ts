@@ -21,6 +21,30 @@ export async function probeNativeDiscovery(
 ): Promise<Record<string, unknown>> {
   const { input, id, checks } = context;
 
+  if (context.kind === "native-discovery-pack-timeout") {
+    context.env.TOOL_PACKS = {
+      ready: async () => ({}),
+      run: async () => {
+        await context.ctx.storage.put(
+          "fixture:packRuns",
+          ((await context.ctx.storage.get<number>("fixture:packRuns")) ?? 0) + 1
+        );
+        return {
+          exitCode: -1,
+          timedOut: true,
+          truncated: false,
+          stdout: "",
+          stderr: "",
+          error: "signal: killed"
+        };
+      },
+      stop: async () => ({ stopped: true })
+    };
+    const state =
+      (await context.ctx.storage.get<Record<string, unknown>>("attempt"))!;
+    await context.ctx.storage.put("attempt", { ...state, toolPacks: true });
+  }
+
   // Exercise production admission too: bypassing run() hid stripped execution metadata.
   checks.result = await context.attempt.run(input);
   checks.record = JSON.parse(
@@ -35,6 +59,10 @@ export async function probeNativeDiscovery(
   checks.scannerArguments = await context.ctx.storage.get(
     "fixture:whatwebArguments"
   );
+  if (context.kind === "native-discovery-pack-timeout") {
+    checks.replayed = await context.attempt.run(input);
+    checks.packRuns = await context.ctx.storage.get("fixture:packRuns");
+  }
   return checks;
 }
 export async function probePurgeFailure(

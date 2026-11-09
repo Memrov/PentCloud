@@ -1365,7 +1365,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         },
         "initial-discovery"
       )) as Record<string, unknown>;
-      const httpStatus = raw.httpStatus;
+      const httpStatus = raw.httpStatus ?? null;
       const result = {
         structuredContent: {
           status:

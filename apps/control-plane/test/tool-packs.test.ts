@@ -158,6 +158,7 @@ describe("pack execution uses the existing remote receipt namespace", () => {
 });
 
 import { toolResultFiles, EVIDENCE_FILE_LIMIT } from "../src/native/evidence";
+import { digest } from "../src/native/domain";
 it("preserves oversized Unicode tool results in bounded evidence parts", () => {
   const record = {
     stdout: "🧪".repeat(EVIDENCE_FILE_LIMIT / 2),
@@ -195,6 +196,28 @@ it("keeps the discovery HTTP status outside a truncated model preview", () => {
   expect(result.httpStatus).toBe(200);
   expect(result.modelPreviewTruncated).toBe(true);
 });
+
+it.each([
+  { name: "short scanner result", value: { stdout: "", exitCode: -1 } },
+  {
+    name: "truncated scanner output",
+    value: { stdout: "x".repeat(40000), exitCode: -1 }
+  },
+  {
+    name: "truncated structured output",
+    value: { data: "x".repeat(40000), exitCode: -1 }
+  }
+])(
+  "preserves provenance through JSON publication of $name",
+  async ({ value }) => {
+    const preview = packResultPreview(value, "web-context", ["evidence.json"]);
+    expect(preview.httpStatus).toBeNull();
+    expect(preview.evidence).toEqual(["evidence.json"]);
+    expect(await digest(preview)).toBe(
+      await digest(JSON.parse(JSON.stringify(preview)))
+    );
+  }
+);
 
 it("replays completed file work without rereading a changed input", async () => {
   const s = storage();

@@ -67,30 +67,39 @@ export function packResultPreview(
   evidence: string[]
 ): Record<string, unknown> {
   const r = value as Record<string, unknown>;
-  let httpStatus: unknown;
+  let httpStatus: unknown = null;
   if (pack === "web-context" && typeof r.stdout === "string")
     try {
       const parsed = JSON.parse(r.stdout);
-      httpStatus = (Array.isArray(parsed) ? parsed[0] : parsed)?.http_status;
+      httpStatus =
+        (Array.isArray(parsed) ? parsed[0] : parsed)?.http_status ?? null;
     } catch {}
   const serialized = JSON.stringify(value);
-  if (serialized.length <= 30000) return { ...r, httpStatus, evidence };
-  return {
-    pack,
-    exitCode: r.exitCode,
-    timedOut: r.timedOut,
-    truncated: r.truncated,
-    image: r.image,
-    instance: r.instance,
-    toolVersion: r.toolVersion,
-    httpStatus,
-    stdout: typeof r.stdout === "string" ? r.stdout.slice(0, 18000) : undefined,
-    stderr: typeof r.stderr === "string" ? r.stderr.slice(0, 4000) : undefined,
-    preview:
-      typeof r.stdout !== "string" ? serialized.slice(0, 22000) : undefined,
-    modelPreviewTruncated: true,
-    evidence
-  };
+  const preview =
+    serialized.length <= 30000
+      ? { ...r, httpStatus, evidence }
+      : {
+          pack,
+          exitCode: r.exitCode,
+          timedOut: r.timedOut,
+          truncated: r.truncated,
+          image: r.image,
+          instance: r.instance,
+          toolVersion: r.toolVersion,
+          httpStatus,
+          stdout:
+            typeof r.stdout === "string" ? r.stdout.slice(0, 18000) : undefined,
+          stderr:
+            typeof r.stderr === "string" ? r.stderr.slice(0, 4000) : undefined,
+          preview:
+            typeof r.stdout !== "string"
+              ? serialized.slice(0, 22000)
+              : undefined,
+          modelPreviewTruncated: true,
+          evidence
+        };
+  // The durable preview must hash identically to its published JSON readback.
+  return JSON.parse(JSON.stringify(preview));
 }
 
 /** Replay against the original request identity before touching mutable workspace files. */
