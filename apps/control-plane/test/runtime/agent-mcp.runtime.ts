@@ -104,6 +104,14 @@ it("drives real MCP requests through native routes with authorization, actor aud
     authorized: true,
     task: "Review approved scope"
   };
+  await client.callTool({
+    name: "pentcloud_read",
+    arguments: { resource: "models", modelRoute: "console", refresh: true }
+  });
+  expect(await calls()).toContainEqual({
+    method: "modelCatalog",
+    args: ["console", true]
+  });
   const denied = await client.callTool({
     name: "pentcloud_start",
     arguments: { ...start, authorized: false }
@@ -191,7 +199,12 @@ it("isolates browser ownership across users and reconnects the same user without
 
 it("serves the private app with fresh server-side identity and rejects foreign origins, expired grants, MCP recursion and sockets", async () => {
   const origin = "https://operator.test";
-  const auth = { origin, identity: "operator", assertion: await accessToken() };
+  const auth = {
+    origin,
+    expiresAt: Date.now() + 300000,
+    identity: "operator",
+    assertion: await accessToken()
+  };
   const nativeEnv = env as unknown as NativeEnv;
   const response = await agentBrowserResponse(
     new Request("http://pentcloud.internal/v1/ui/onboarding", {
@@ -208,6 +221,15 @@ it("serves the private app with fresh server-side identity and rejects foreign o
   expect(await response.json()).toMatchObject({ targets: [] });
   expect(response.headers.get("Cache-Control")).toBe("no-store");
   expect(response.headers.has("Set-Cookie")).toBe(false);
+  expect(
+    (
+      await agentBrowserResponse(
+        new Request("http://pentcloud.internal/"),
+        { ...auth, expiresAt: Date.now() - 1 },
+        nativeEnv
+      )
+    ).status
+  ).toBe(401);
   for (const [url, headers] of [
     ["https://outside.test/v1/ui/onboarding", {}],
     [
@@ -272,6 +294,7 @@ it("serves the private app with fresh server-side identity and rejects foreign o
 it("loads private HTTP compatibility code under the existing CSP without returning credentials", async () => {
   const auth = {
     origin: "https://operator.test",
+    expiresAt: Date.now() + 300000,
     identity: "operator",
     assertion: await accessToken()
   };
@@ -305,6 +328,30 @@ it("loads private HTTP compatibility code under the existing CSP without returni
   const source = await script.text();
   expect(source).toContain("crypto.getRandomValues");
   expect(source).not.toContain(auth.assertion);
+  const hashed = await agentBrowserResponse(
+    new Request("http://pentcloud.internal/__pentcloud_agent_browser_digest", {
+      method: "POST",
+      body: "abc",
+      headers: { Origin: "http://pentcloud.internal" }
+    }),
+    auth,
+    nativeEnv
+  );
+  expect(hashed.status).toBe(200);
+  expect(
+    [...new Uint8Array(await hashed.arrayBuffer())]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+  ).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  const oversized = await agentBrowserResponse(
+    new Request("http://pentcloud.internal/__pentcloud_agent_browser_digest", {
+      method: "POST",
+      body: new Uint8Array(2 * 1024 * 1024 + 1)
+    }),
+    auth,
+    nativeEnv
+  );
+  expect(oversized.status).toBe(413);
   expect(
     (
       await agentBrowserResponse(

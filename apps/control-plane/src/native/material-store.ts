@@ -277,7 +277,7 @@ export class MaterialStore {
   }
 }
 
-async function readBounded(
+export async function readBounded(
   body: ReadableStream<Uint8Array>,
   limit: number
 ): Promise<Uint8Array> {

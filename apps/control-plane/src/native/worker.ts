@@ -138,11 +138,7 @@ const worker = {
         storage: "DO SQLite and Artifacts"
       });
     try {
-      if (
-        !url.pathname.startsWith("/v1/") &&
-        !url.pathname.startsWith("/agents/") &&
-        url.pathname !== "/mcp"
-      )
+      if (!/^\/(?:v1\/|agents\/|mcp$)/.test(url.pathname))
         return env.ASSETS
           ? hostedUIResponse(await env.ASSETS.fetch(request), request.url)
           : new Response("PentCloud", { status: 200 });
@@ -262,6 +258,8 @@ const worker = {
       return new Response("Not found", { status: 404 });
     } catch (error) {
       const response = errorResponse(error, env);
+      if (url.pathname === "/mcp")
+        response.headers.set("Cache-Control", "no-store");
       if (
         /^\/v1(?:\/ui)?\/jobs\/[A-Za-z0-9._-]+\/browser-live-view$/.test(
           url.pathname

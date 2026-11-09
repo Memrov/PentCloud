@@ -5,9 +5,12 @@ import { Lifecycle } from "agents/lifecycle";
 import worker, { actor } from "./worker";
 import { hostedUIResponse } from "./ui-response";
 import type { NativeEnv } from "./types";
+import { readBounded } from "./material-store";
+import { MATERIAL_FILE_LIMIT } from "./materials";
 
 export const AGENT_BROWSER_ORIGIN = "http://pentcloud.internal";
 const bootstrapPath = "/__pentcloud_agent_browser.js";
+const digestPath = "/__pentcloud_agent_browser_digest";
 // Native internal hosts use HTTP. Web Crypto's random bytes remain available,
 // but randomUUID is secure-context-only. Keep this compatibility code private
 // to this browser and use the same cryptographic entropy and UUID v4 bits.
@@ -17,11 +20,22 @@ const bootstrap = `if (!crypto.randomUUID) crypto.randomUUID = () => {
   bytes[8] = (bytes[8] & 63) | 128;
   const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0"));
   return [hex.slice(0,4).join(""), hex.slice(4,6).join(""), hex.slice(6,8).join(""), hex.slice(8,10).join(""), hex.slice(10).join("")].join("-");
-};`;
+};
+if (!crypto.subtle) Object.defineProperty(crypto, "subtle", { value: {
+  async digest(algorithm, data) {
+    if ((typeof algorithm === "string" ? algorithm : algorithm?.name)?.toUpperCase() !== "SHA-256")
+      throw new DOMException("Only SHA-256 is available", "NotSupportedError");
+    const bytes = ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : new Uint8Array(data);
+    const response = await fetch("${digestPath}", { method: "POST", body: bytes });
+    if (!response.ok) throw new Error("Could not hash this upload; reconnect your agent and retry");
+    return response.arrayBuffer();
+  }
+} });`;
 export interface AgentBrowserAuthorization {
   assertion: string;
   origin: string;
   identity: string;
+  expiresAt: number;
 }
 
 /** One private browser per verified operator, never shared with assessment browsers.
@@ -76,7 +90,12 @@ export class AgentBrowser extends DurableObject<NativeEnv> {
     );
     if (identity === "access-service")
       throw Error("403: Sign in as an operator");
-    this.authorization = { assertion, origin, identity };
+    this.authorization = {
+      assertion,
+      origin,
+      identity,
+      expiresAt: Date.now() + 5 * 60 * 1000
+    };
     await this.lifecycle.start();
     return JSON.stringify(await this.tool.execute({ code }, {}));
   }
@@ -97,7 +116,7 @@ export async function agentBrowserResponse(
   auth: AgentBrowserAuthorization | undefined,
   env: NativeEnv
 ): Promise<Response> {
-  if (!auth)
+  if (!auth || auth.expiresAt <= Date.now())
     return new Response("Reconnect your agent to continue", { status: 401 });
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
@@ -140,6 +159,27 @@ export async function agentBrowserResponse(
           "X-Content-Type-Options": "nosniff"
         }
       });
+    if (url.pathname === digestPath && request.method === "POST") {
+      if (!request.body)
+        return new Response("Missing upload bytes", { status: 400 });
+      let bytes: Uint8Array;
+      try {
+        bytes = await readBounded(request.body, MATERIAL_FILE_LIMIT);
+      } catch {
+        return new Response("Upload exceeds two MiB or could not be read", {
+          status: 413
+        });
+      }
+      return new Response(
+        await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)),
+        {
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Cache-Control": "no-store"
+          }
+        }
+      );
+    }
     const response = await worker.fetch(forwarded, env);
     const safe = new Headers(response.headers);
     safe.delete("Set-Cookie");

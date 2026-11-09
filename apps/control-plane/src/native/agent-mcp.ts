@@ -81,11 +81,13 @@ export async function agentMcp(
               "queue"
             ]),
             id: id.optional(),
+            modelRoute: z.enum(["go", "console"]).default("go"),
+            refresh: z.boolean().default(false),
             view: z.enum(["active", "archived", "trash", "all"]).optional()
           }),
           annotations: { readOnlyHint: true, openWorldHint: false }
         },
-        async ({ resource, id: key, view }) => {
+        async ({ resource, id: key, view, modelRoute, refresh }) => {
           if (
             ["run", "pending_start", "findings", "report", "controls"].includes(
               resource
@@ -104,7 +106,10 @@ export async function agentMcp(
             findings: `/runs/${key}/findings`,
             report: `/runs/${key}/report`,
             controls: `/jobs/${key}/session-controls`,
-            models: "/settings/models",
+            models:
+              "/settings/models?route=" +
+              modelRoute +
+              (refresh ? "&refresh=1" : ""),
             queue: "/queue"
           };
           return invoke(paths[resource]);

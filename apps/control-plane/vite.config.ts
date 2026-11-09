@@ -43,7 +43,10 @@ export default defineConfig(({ mode }) => ({
       build: {
         minify: true,
         sourcemap: true,
-        rolldownOptions: { output: { sourcemapExcludeSources: true } }
+        // Lifecycle addresses internal-host callbacks by constructor.name.
+        rolldownOptions: {
+          output: { keepNames: true, sourcemapExcludeSources: true }
+        }
       }
     }
   }

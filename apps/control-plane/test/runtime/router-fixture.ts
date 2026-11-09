@@ -143,7 +143,8 @@ export class RouterControl extends DurableObject<RuntimeFixtureEnv> {
     this.record("activateAnalysis", id, revision, requestId, ack);
     return { run, rootJob: job };
   }
-  async modelCatalog() {
+  async modelCatalog(route = "go", refresh = false) {
+    this.record("modelCatalog", route, refresh);
     return {
       models: [
         { id: "opencode-go:deepseek-v4-pro", reasoningEfforts: ["default"] }

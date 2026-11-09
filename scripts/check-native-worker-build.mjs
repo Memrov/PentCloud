@@ -17,6 +17,15 @@ const config = JSON.parse(
 assert.equal(config.no_bundle, true);
 assert.equal(config.upload_source_maps, true);
 await readFile(new URL(config.main, output));
+const agentBrowser = await compiledConstructorName(
+  new URL(config.main, output),
+  "AgentBrowser"
+);
+assert.equal(
+  agentBrowser,
+  "AgentBrowser",
+  "Lifecycle must resolve the compiled AgentBrowser through ctx.exports"
+);
 const original = await readFile(
   new URL("../apps/control-plane/src/native/domain.ts", import.meta.url),
   "utf8"
@@ -47,11 +56,61 @@ for (const file of maps) {
 assert(stack, "Compiled production identifier stack was not checked");
 console.log(
   JSON.stringify(
-    { worker: config.name, maps: maps.length, largest, stack },
+    { worker: config.name, maps: maps.length, largest, agentBrowser, stack },
     null,
     2
   )
 );
+
+// Follow actual bundle re-exports for both the native class and customer
+// subclass. Evaluate its unchanged declaration without constructing an instance;
+// an inert superclass avoids initializing any Worker bindings or browser state.
+async function compiledConstructorName(filename, exportedName) {
+  const source = ts.createSourceFile(
+    filename.pathname,
+    await readFile(filename, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS
+  );
+  for (const statement of source.statements) {
+    if (
+      !ts.isExportDeclaration(statement) ||
+      !statement.exportClause ||
+      !ts.isNamedExports(statement.exportClause)
+    )
+      continue;
+    const exported = statement.exportClause.elements.find(
+      (element) => element.name.text === exportedName
+    );
+    if (!exported) continue;
+    const local = (exported.propertyName ?? exported.name).text;
+    if (statement.moduleSpecifier) {
+      assert(ts.isStringLiteral(statement.moduleSpecifier));
+      return compiledConstructorName(
+        new URL(statement.moduleSpecifier.text, filename),
+        local
+      );
+    }
+    const declaration = source.statements
+      .filter(ts.isVariableStatement)
+      .flatMap((item) => item.declarationList.declarations)
+      .find((item) => ts.isIdentifier(item.name) && item.name.text === local);
+    assert(
+      declaration?.initializer && ts.isClassExpression(declaration.initializer),
+      `${exportedName} must resolve to a compiled class`
+    );
+    const base =
+      declaration.initializer.heritageClauses?.[0]?.types[0]?.expression;
+    assert(base && ts.isIdentifier(base), "Expected a named superclass");
+    return new vm.Script(`var ${declaration.getText(source)}; ${local}.name`, {
+      filename: filename.pathname
+    }).runInNewContext({ [base.text]: class {} });
+  }
+  assert.fail(
+    `Missing compiled export ${exportedName} in ${filename.pathname}`
+  );
+}
 
 // Execute the actual compiled pure identifier validator at its original bundle
 // line/column. No synthetic generated positions, runtime hooks or production

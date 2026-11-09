@@ -48,7 +48,9 @@ every client automatically.
 ## Operating PentCloud
 
 `pentcloud_read` reads targets/setup, runs/jobs, findings, reports, native
-questions and permissions, the model catalog and queue. `pentcloud_onboarding`
+questions and permissions, the model catalog and queue. Select
+`modelRoute: "console"` for Console/BYOK catalogs or `"go"` for Go.
+`pentcloud_onboarding`
 adapts the existing target/program/setup actions; its tool description gives
 their input shapes. Secret values remain in native bindings.
 
@@ -105,9 +107,11 @@ loads, UI actions and job EventSource streams use their normal handlers;
 coordinator WebSocket live summaries are unavailable in this private browser.
 Reload or read run state through MCP when a summary needs refreshing. This is
 an app-control browser; target browsing remains in authorized assessments.
-The private HTML loads a same-origin UUID compatibility script because native
-internal hosts use HTTP. It uses Web Crypto random bytes; the public HTTPS app
-and its CSP remain unchanged. Browser clipboard APIs may be unavailable over HTTP.
+The private HTML loads a same-origin compatibility script because native
+internal hosts use HTTP. UUIDs use Web Crypto random bytes. SHA-256 upload
+hashing delegates to server Web Crypto over the authenticated private route,
+with the existing two MiB file limit. The public HTTPS app and CSP remain
+unchanged. Browser clipboard APIs may be unavailable over HTTP.
 Internal-host support requires a deployed Worker, so local provider fixtures
 do not establish deployed Browser Run acceptance.
 
@@ -115,7 +119,10 @@ The browser stays alive for up to ten idle minutes and can be recreated after
 expiry; the SDK reports a restart. `pentcloud_browser_close` discards your UI
 browser. It does not cancel assessments. Revoke the user's OAuth grant through
 Cloudflare Access or remove their admission policy to stop future token
-refresh. Already issued short-lived assertions remain bounded by their expiry.
+refresh. The private browser's server-side authorization also expires five
+minutes after its last authenticated browser tool call, independently of the
+assertion's own lifetime. An expired assertion can end access sooner. New browser
+calls must pass Access again; the browser cannot silently renew this lease itself.
 
 Implementation references: [Cloudflare's stateless MCP example](https://github.com/cloudflare/agents/blob/5c33d89791d6a00c6ea64cf7790fa753e3e5cbfd/examples/mcp-worker/src/server.ts),
 [MCP handler API](https://developers.cloudflare.com/agents/model-context-protocol/apis/handler-api/),
