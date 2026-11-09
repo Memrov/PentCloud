@@ -2615,14 +2615,16 @@ export class Coordinator extends DurableObject<NativeEnv> {
   async findings(runId: string, jobId: string) {
     await this.start();
     const run = this.run(runId),
-      job = this.jobs(runId).find(
+      jobs = this.jobs(runId).filter(
         (j) =>
-          j.id === jobId &&
           j.role === "reporter" &&
           j.status === "completed" &&
           j.outputCommit &&
           j.terminal?.tool === "report_result"
-      );
+      ),
+      job = jobId
+        ? jobs.find((j) => j.id === jobId)
+        : jobs.sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))[0];
     if (!job) throw new Error("404: accepted reporter is unavailable");
     using repo = await this.env.ARTIFACTS.get(run.repo);
     const bundle = await readFindings(
@@ -2633,7 +2635,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return {
       version: 1,
       runId,
-      jobId,
+      jobId: job.id,
       commit: job.outputCommit!,
       ...(bundle ? { bundle } : {})
     };

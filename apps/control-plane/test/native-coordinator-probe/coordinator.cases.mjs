@@ -278,6 +278,10 @@ describe("coordinator", () => {
     assert.equal(value.legacy.bundle, undefined);
     assert.equal(value.bundle.bundle.document.findings.length, 1);
     assert.equal(value.bundle.commit, "a".repeat(40));
+    assert.deepEqual(value.latest, value.bundle);
+    assert.equal(value.older.jobId, "earlier-report");
+    assert.equal(value.older.commit, "b".repeat(40));
+    assert.equal(value.older.bundle, undefined);
     assert.match(value.wrong, /accepted reporter/);
     assert.match(value.missing, /reference/);
   });

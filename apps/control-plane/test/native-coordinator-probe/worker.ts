@@ -951,8 +951,22 @@ export class ProbeCoordinator extends Coordinator {
     );
     this.write(`blob:${commit}:${doc.reportPath}`, "# Owned report");
     this.write(`blob:${commit}:proof.txt`, "Owned proof");
-    this.write("job:job-0", { ...job, findingsVersion: 1 });
+    this.write("job:job-0", { ...job, findingsVersion: 1, finishedAt: 2 });
     const bundle = await this.findings("run-0", "job-0");
+    this.write("job:earlier-report", {
+      ...job,
+      id: "earlier-report",
+      outputCommit: "b".repeat(40),
+      finishedAt: 1
+    });
+    this.write("job:failed-report", {
+      ...job,
+      id: "failed-report",
+      status: "failed",
+      finishedAt: 3
+    });
+    const latest = await this.findings("run-0", "");
+    const older = await this.findings("run-0", "earlier-report");
     let wrong: string | undefined;
     try {
       await this.findings("run-0", "other");
@@ -973,7 +987,7 @@ export class ProbeCoordinator extends Coordinator {
     } catch (e) {
       missing = String(e);
     }
-    return { legacy, bundle, wrong, missing };
+    return { legacy, bundle, latest, older, wrong, missing };
   }
   async directDeleteScenario(mode: string) {
     if (mode === "tool-packs") {
