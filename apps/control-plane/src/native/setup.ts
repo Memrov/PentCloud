@@ -306,7 +306,8 @@ export async function configureSetupAccess(
             allow_any_on_localhost: true,
             allow_any_on_loopback: true,
             allowed_uris: [
-              "https://chatgpt.com/connector_platform_oauth_redirect"
+              "https://chatgpt.com/connector_platform_oauth_redirect",
+              "https://chatgpt.com/connector/oauth/*"
             ]
           }
         },

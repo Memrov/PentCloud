@@ -23,13 +23,14 @@ sign in again after grant expiry. The persistent connection uses renewable,
 bounded grants, not a never-expiring credential.
 
 New applications created by `/setup` enable these OAuth defaults. Existing
-applications retain their configuration and need this owner step. Add the
-**exact OAuth callback shown by the client** to Access's allowed redirect URIs.
-The setup default allows OpenAI's stable callback
-`https://chatgpt.com/connector_platform_oauth_redirect` and localhost/loopback
-clients. OpenAI can instead show a server-specific callback, which must be added
-explicitly; other cloud clients need their own exact callback. Do not allow an
-arbitrary remote callback wildcard. See
+applications retain their configuration and need this owner step. The setup
+default allows OpenAI's stable callback
+`https://chatgpt.com/connector_platform_oauth_redirect`, its server-specific
+callbacks under `https://chatgpt.com/connector/oauth/*`, and localhost/loopback
+clients. The ChatGPT path rule uses Access's native sub-path matching so new
+connections do not require an owner to copy a generated callback ID. Other cloud
+clients need their own exact callback. Keep remote rules scoped to the client's
+HTTPS hostname and callback path. See
 [OpenAI's authentication guidance](https://developers.openai.com/plugins/build/auth).
 
 Clients need Streamable HTTP, OAuth and RFC 8707 resource indicators. Access

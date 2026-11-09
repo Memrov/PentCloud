@@ -284,7 +284,8 @@ describe("native Access bootstrap", () => {
         dynamic_client_registration: {
           enabled: true,
           allowed_uris: [
-            "https://chatgpt.com/connector_platform_oauth_redirect"
+            "https://chatgpt.com/connector_platform_oauth_redirect",
+            "https://chatgpt.com/connector/oauth/*"
           ]
         }
       },
