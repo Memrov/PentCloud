@@ -6,6 +6,8 @@ export { Coordinator } from "./native/coordinator";
 export { NativeAttempt } from "./native/attempt";
 export { TargetEgress } from "./native/target-egress";
 export { OpenCodeConnectionTest } from "./native/model-test";
+export { AgentBrowser } from "./native/agent-browser";
+export { InternalHostRouter } from "agents/browser";
 export { WorkspaceServiceProxy } from "@cloudflare/computer";
 // Historical proof storage remains readable; no routes reach retired model code.
 export class ProofQueue extends DurableObject {

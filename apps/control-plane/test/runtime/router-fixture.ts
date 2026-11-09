@@ -39,6 +39,7 @@ export default {
 export interface RuntimeFixtureEnv {
   COORDINATOR: DurableObjectNamespace<RouterControl>;
   ATTEMPTS: DurableObjectNamespace<RouterAttempt>;
+  AGENT_BROWSERS: DurableObjectNamespace<RouterBrowser>;
   CONTROL_TOKEN: string;
   OPENCODE_GO_API_KEY: string;
 }
@@ -62,6 +63,34 @@ const job = {
   status: "running",
   revision: 2
 };
+
+/** Browser provider boundary only: MCP transport and production routing remain real. */
+export class RouterBrowser extends DurableObject<RuntimeFixtureEnv> {
+  async description() {
+    return "Use browser.cdp to click and type in PentCloud.";
+  }
+  async execute(
+    _assertion: string,
+    origin: string,
+    code: string
+  ): Promise<string> {
+    await this.env.COORDINATOR.getByName("global").noteRemote(
+      "agentBrowser",
+      JSON.stringify([this.ctx.id.name, origin, code])
+    );
+    return JSON.stringify({
+      status: "completed",
+      executionId: "fixture",
+      result:
+        code === "screenshot"
+          ? { type: "browser_screenshot", mediaType: "image/png", data: "cG5n" }
+          : { url: "http://pentcloud.internal/", title: "PentCloud" }
+    });
+  }
+  async close() {
+    return { closed: true };
+  }
+}
 
 /** Service contract fixture: real platform RPC and SQL, no duplicated Coordinator logic. */
 export class RouterControl extends DurableObject<RuntimeFixtureEnv> {

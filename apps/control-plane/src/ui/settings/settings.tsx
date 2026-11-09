@@ -53,6 +53,7 @@ import {
 import { PromptEditor } from "./prompt-editor";
 import { RuntimeRecoveryPanel } from "../components/runtime-recovery";
 import { ThemeControl } from "../components/theme-control";
+import { AgentConnection } from "./agent-connection";
 
 export default function Settings({
   embedded = false
@@ -242,6 +243,7 @@ export default function Settings({
             dirty={dirty}
             stale={catalog.stale}
           />
+          <AgentConnection />
           {error && (
             <Banner
               className="settings-banner"

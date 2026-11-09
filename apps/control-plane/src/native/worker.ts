@@ -23,6 +23,7 @@ import { knownRuntimeSecrets } from "../../../../shared/runtime-secrets";
 
 import { hostedUIResponse } from "./ui-response";
 import { readVerificationEmail } from "./verification-email";
+import { agentMcp } from "./agent-mcp";
 import {
   configureSetupAccess,
   prepareSetupStorage,
@@ -31,7 +32,7 @@ import {
 } from "./setup";
 
 const jwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
-async function actor(request: Request, env: NativeEnv): Promise<string> {
+export async function actor(request: Request, env: NativeEnv): Promise<string> {
   if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD)
     throw new Error("401: Cloudflare Access configuration is required");
   const token = request.headers.get("Cf-Access-Jwt-Assertion");
@@ -64,7 +65,7 @@ function errorResponse(error: unknown, env: NativeEnv) {
   return Response.json({ error: message.slice(0, 1500) }, { status });
 }
 
-export default {
+const worker = {
   async email(message: ForwardableEmailMessage, env: NativeEnv) {
     if (!env.PENTCLOUD_VERIFICATION_EMAIL || message.rawSize > 256 * 1024) {
       message.setReject("Verification email is unavailable");
@@ -139,7 +140,8 @@ export default {
     try {
       if (
         !url.pathname.startsWith("/v1/") &&
-        !url.pathname.startsWith("/agents/")
+        !url.pathname.startsWith("/agents/") &&
+        url.pathname !== "/mcp"
       )
         return env.ASSETS
           ? hostedUIResponse(await env.ASSETS.fetch(request), request.url)
@@ -160,6 +162,22 @@ export default {
             "403: Use this application's origin for browser actions"
           );
       }
+      if (url.pathname === "/mcp")
+        return await agentMcp(request, env, identity, (next, bindings) =>
+          worker.fetch(next, bindings)
+        );
+      if (
+        url.pathname === "/v1/ui/agent-connection" &&
+        request.method === "GET"
+      )
+        return Response.json(
+          {
+            endpoint: url.origin + "/mcp",
+            browser: !!env.AGENT_BROWSERS,
+            authentication: "cloudflare-access-managed-oauth"
+          },
+          { headers: browserViewHeaders }
+        );
       if (url.pathname === "/v1/ui/setup" && request.method === "GET")
         return Response.json(await setupStatus(env), {
           headers: browserViewHeaders
@@ -255,3 +273,4 @@ export default {
     }
   }
 } satisfies ExportedHandler<NativeEnv>;
+export default worker;

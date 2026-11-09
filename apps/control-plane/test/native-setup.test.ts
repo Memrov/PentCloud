@@ -278,6 +278,16 @@ describe("native Access bootstrap", () => {
     expect(JSON.parse(String(create.init!.body))).toMatchObject({
       domain: "customer.example",
       type: "self_hosted",
+      oauth_configuration: {
+        enabled: true,
+        grant: { access_token_lifetime: "5m", session_duration: "168h" },
+        dynamic_client_registration: {
+          enabled: true,
+          allowed_uris: [
+            "https://chatgpt.com/connector_platform_oauth_redirect"
+          ]
+        }
+      },
       policies: [
         {
           decision: "allow",

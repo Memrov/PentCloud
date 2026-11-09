@@ -442,6 +442,11 @@ test.describe("agent conversations and report reader", () => {
             blockingRunIds: [],
             upstreamRoles: roles
           });
+        if (path.endsWith("/agent-connection"))
+          return json({
+            endpoint: "https://customer.example/mcp",
+            browser: true
+          });
         if (path.endsWith("/runtime-diagnostics"))
           return json({
             coordinator: {},
@@ -467,6 +472,37 @@ test.describe("agent conversations and report reader", () => {
       await browserExpect(
         page.getByRole("heading", { name: "Prompts and models", exact: true })
       ).toBeVisible();
+      await page
+        .getByRole("button", { name: "Connect your agent", exact: true })
+        .click();
+      await browserExpect(
+        page.getByText("https://customer.example/mcp", { exact: true })
+      ).toBeVisible();
+      await browserExpect(
+        page.getByText(
+          "Sign in through Cloudflare Access with your operator account.",
+          { exact: true }
+        )
+      ).toBeVisible();
+      await browserExpect(
+        page.getByText(/Your agent client must also run in the cloud/)
+      ).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth
+        )
+      ).toBe(true);
+      if (process.env.PENTCLOUD_CAPTURE_UI)
+        await page
+          .getByRole("link", { name: "Managed OAuth", exact: true })
+          .scrollIntoViewIfNeeded();
+      if (process.env.PENTCLOUD_CAPTURE_UI)
+        await page.screenshot({
+          path: `${process.env.PENTCLOUD_CAPTURE_UI}/pentcloud-agent-connection-${viewport.width}.png`
+        });
+      await page
+        .getByRole("button", { name: "Connect your agent", exact: true })
+        .click();
       if (viewport.width < 721) {
         await page
           .getByRole("combobox", { name: "Agent", exact: true })

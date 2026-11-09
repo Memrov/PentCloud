@@ -91,6 +91,10 @@
       {
         "name": "METASPLOIT",
         "class_name": "MetasploitRunner"
+      },
+      {
+        "name": "AGENT_BROWSERS",
+        "class_name": "AgentBrowser"
       }
     ],
     "code_update_strategy": {
@@ -134,6 +138,12 @@
         "ReferenceRunner",
         "MetasploitRunner"
       ]
+    },
+    {
+      "tag": "v4-agent-browser",
+      "new_sqlite_classes": [
+        "AgentBrowser"
+      ]
     }
   ],
   "artifacts": [
@@ -153,7 +163,9 @@
   "ai": {
     "binding": "AI"
   },
-  "triggers": { "events": [] },
+  "triggers": {
+    "events": []
+  },
   "vars": {},
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
