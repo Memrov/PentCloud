@@ -10,7 +10,7 @@ import type { PinnedModel } from "./opencode-models";
 export type NativeExecution = {
   kind: "discovery";
   url: string;
-  profile: "whatweb-polite-v1" | "whatweb-stealthy-v2";
+  profile: "whatweb-polite-v1" | "whatweb-stealthy-v2" | "http-probes-v3";
 };
 export interface NewRunInput {
   run_id: string;
@@ -112,6 +112,7 @@ export interface RunRecord {
   boundAPIFingerprint?: string;
   discoveryAcknowledged?: boolean;
   discoveryDrained?: boolean;
+  discoveryBestEffort?: boolean;
   definition?: TargetDefinition;
   target?: SavedTarget;
   authorization?: { actor: string; at: number; disclosureVersion: string };

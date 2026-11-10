@@ -51,6 +51,17 @@ describe("managed specialist defaults", () => {
       createAgentSettings(settings.roles, "operator", new Date(0))
     ).rejects.toThrow("primary prompt template is empty");
   });
+  it("persists maximum Go reasoning in the role settings revision", async () => {
+    const settings = await defaultAgentSettings(
+      "opencode-go:deepseek-v4-pro",
+      "max"
+    );
+    expect(settings.roles.primary.reasoningEffort).toBe("max");
+    expect(
+      (await createAgentSettings(settings.roles, "operator", new Date(0)))
+        .revision
+    ).toBe(settings.revision);
+  });
   it("defaults historical search settings and pins each role's choice in the revision", async () => {
     const initial = await defaultAgentSettings(
       "opencode-go:deepseek-v4-pro",

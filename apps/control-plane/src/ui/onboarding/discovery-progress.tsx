@@ -10,7 +10,8 @@ export function DiscoveryProgress({
   refreshing,
   onRefresh,
   children,
-  inChat = false
+  inChat = false,
+  bestEffort = false
 }: {
   jobs: UIJob[];
   settled: boolean;
@@ -19,7 +20,13 @@ export function DiscoveryProgress({
   onRefresh: () => void;
   children?: ReactNode;
   inChat?: boolean;
+  bestEffort?: boolean;
 }) {
+  failed ||= jobs.some(
+    (job) =>
+      job.discoveryCoverage === "partial" ||
+      job.discoveryCoverage === "unavailable"
+  );
   const queued =
     jobs.some((job) => ["created", "provisioning"].includes(job.status)) &&
     !jobs.some((job) => job.status === "running");
@@ -37,7 +44,9 @@ export function DiscoveryProgress({
           ? "Finishing discovery"
           : "Preparing discovery and checking your target";
   const description = failed
-    ? "Discovery could not finish normally. Review the coverage gap below. Analysis stays locked until scanner work is safely settled."
+    ? bestEffort && settled
+      ? "The initial checks are incomplete. Your agent can continue with the available context and choose further tools."
+      : "Discovery could not finish normally. Review the coverage gap below. Analysis stays locked until scanner work is safely settled."
     : settled
       ? inChat
         ? "The initial check is finished. Assessment continues in this conversation when admitted."
@@ -46,7 +55,9 @@ export function DiscoveryProgress({
         ? "Your target is confirmed. Discovery will start automatically."
         : finishing
           ? "Saving the discovery result and waiting for scanner work to settle."
-          : "The tools for this run are preparing automatically. The initial check will begin when they are ready.";
+          : bestEffort
+            ? "Quick checks run together for up to 10 seconds. Your agent can continue even if they return no results."
+            : "The tools for this run are preparing automatically. The initial check will begin when they are ready.";
   return (
     <section
       className="onboarding-card onboarding-progress"

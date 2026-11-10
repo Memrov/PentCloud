@@ -404,7 +404,7 @@ test.describe("agent conversations and report reader", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportedParameters: ["tools"],
-        reasoningEfforts: ["default"]
+        reasoningEfforts: ["default", "max"]
       };
       page.on("pageerror", (error) => errors.push(error.message));
       await page.route("**/v1/ui/**", (route) => {
@@ -521,6 +521,16 @@ test.describe("agent conversations and report reader", () => {
         .fill("Alternate");
       await page.getByRole("option", { name: /Alternate fixture/ }).click();
       await page
+        .getByRole("combobox", { name: "Reasoning effort", exact: true })
+        .click();
+      await page.getByRole("option", { name: "max", exact: true }).click();
+      await browserExpect(
+        page.getByRole("combobox", {
+          name: "Reasoning effort",
+          exact: true
+        })
+      ).toContainText("max");
+      await page
         .getByRole("textbox", { name: "Coder prompt template", exact: true })
         .fill("Edited fixture instructions");
       if (viewport.width < 721)
@@ -559,6 +569,17 @@ test.describe("agent conversations and report reader", () => {
         await page.screenshot({
           path: `${process.env.PENTCLOUD_CAPTURE_UI}/pentcloud-settings-${viewport.width}.png`
         });
+        if (viewport.width < 721) {
+          await page
+            .getByRole("combobox", {
+              name: "Reasoning effort",
+              exact: true
+            })
+            .scrollIntoViewIfNeeded();
+          await page.screenshot({
+            path: `${process.env.PENTCLOUD_CAPTURE_UI}/pentcloud-reasoning-${viewport.width}.png`
+          });
+        }
       }
     });
   test("keeps native questions, required fields, custom choices and permissions working with Kumo", async ({

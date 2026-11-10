@@ -1,4 +1,5 @@
 import type { UISettingsModel } from "../ui/settings/model";
+import type { ReasoningEffort } from "../settings/catalog";
 import type { OpenCodeWorkerd } from "@opencode/sdk/workerd";
 import { Plugin } from "@opencode/plugin";
 export type OpenCodeRoute = "go" | "console";
@@ -215,6 +216,24 @@ type NativeProvider = NonNullable<
 type NativeCompatibility = NonNullable<
   NonNullable<NativeProvider["models"]>[string]["compatibility"]
 >;
+/** Resolve the saved choice against the immutable model selected for this run. */
+export function effectiveReasoningEffort(
+  model: OpenCodeModel,
+  requested: ReasoningEffort
+): ReasoningEffort {
+  if (requested !== "default") {
+    if (!model.reasoningEfforts.includes(requested))
+      throw new Error(
+        `409: ${model.id} does not support ${requested} reasoning`
+      );
+    return requested;
+  }
+  return (
+    (["ultra", "max", "xhigh", "high", "medium", "low"] as const).find(
+      (effort) => model.reasoningEfforts.includes(effort)
+    ) ?? "default"
+  );
+}
 /** Translate the inference catalog's wire names to OpenCode v2 configuration. */
 function nativeCompatibility(
   raw: Record<string, unknown> = {}
@@ -253,7 +272,8 @@ function nativeCompatibility(
 /** One provider configuration for both connection tests and actual attempts. */
 export function nativeProvider(
   model: OpenCodeModel,
-  key: string
+  key: string,
+  effort: ReasoningEffort = "default"
 ): NativeProvider {
   return {
     name: model.connectionId
@@ -262,10 +282,13 @@ export function nativeProvider(
         ? "OpenCode Go"
         : "OpenCode Console",
     package: model.package,
-    settings: { baseURL: model.baseURL, apiKey: key, timeout: 120000 },
+    settings: { baseURL: model.baseURL, apiKey: key },
     models: {
       [model.modelId]: {
         name: model.name,
+        ...(effort === "default"
+          ? {}
+          : { settings: { reasoningEffort: effort } }),
         compatibility: nativeCompatibility(model.compatibility),
         capabilities: { tools: true },
         limit: {

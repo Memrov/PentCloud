@@ -8,9 +8,51 @@ const bindings = env as unknown as {
   MODEL_TESTS: DurableObjectNamespace<ProbeModelTest>;
 };
 const origin = "http://attempt-fixture.invalid";
-const attempt = () => bindings.ATTEMPTS.getByName(crypto.randomUUID());
+// The fixture returns arbitrary JSON; retain its public signature at the RPC boundary.
+const attempt = () =>
+  bindings.ATTEMPTS.getByName(crypto.randomUUID()) as unknown as Pick<
+    ProbeAttempt,
+    "probe"
+  >;
 
 describe("native attempt runtime", () => {
+  it("exposes only the current role's callable tools to JavaScript", async () => {
+    const result = await attempt().probe("javascript-role-tools", origin);
+    expect(result.result).toMatchObject({
+      exitCode: 0,
+      result: ["search_in_memory"]
+    });
+  });
+  it("reads large evidence in bounded pages without losing Unicode or escaping bytes", async () => {
+    const result = await attempt().probe("evidence-read-pages", origin);
+    expect(result).toMatchObject({
+      bounded: true,
+      restored: true,
+      fileReadBounded: true,
+      fileReadRestored: true,
+      commandBounded: true,
+      commandEvidence: true,
+      commandRestored: true,
+      multilineRetained: true
+    });
+    expect(result.pages).toBeGreaterThan(1);
+    expect(result.totalBytes).toBe(result.expectedBytes);
+  });
+  it("keeps large file reads available during read-only preparation", async () => {
+    const result = await attempt().probe("evidence-read-preparation", origin);
+    expect(result).toMatchObject({
+      fileReadBounded: true,
+      fileReadRestored: true,
+      restored: true
+    });
+  });
+  it("publishes oversized output before advertising its readable evidence paths", async () => {
+    const result = await attempt().probe("evidence-read-pending", origin);
+    expect(result).toMatchObject({
+      checkpointRecovered: true,
+      commandEvidence: true
+    });
+  });
   it("redacts target headers from shell, API and retrieval results", async () => {
     const result = JSON.stringify(
       await attempt().probe("header-redaction", origin)
@@ -63,5 +105,17 @@ describe("native attempt runtime", () => {
       }
     });
     expect(result).not.toHaveProperty("result.error");
+  });
+  it("sends maximum reasoning in the real OpenCode provider request", async () => {
+    const result = await attempt().probe("native-pinned-model-max", origin);
+    expect(result).toMatchObject({
+      modelRequests: 1,
+      request: {
+        model: "fixture-console",
+        reasoningEffort: "max",
+        authenticated: true
+      },
+      result: { status: "completed" }
+    });
   });
 });

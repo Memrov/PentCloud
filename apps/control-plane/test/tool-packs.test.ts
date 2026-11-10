@@ -176,6 +176,10 @@ it("preserves oversized Unicode tool results in bounded evidence parts", () => {
   );
   let offset = 0;
   for (const f of files.slice(0, -1)) {
+    // Every part must remain readable by the text evidence tool independently.
+    expect(() =>
+      new TextDecoder("utf-8", { fatal: true }).decode(f.bytes)
+    ).not.toThrow();
     bytes.set(f.bytes, offset);
     offset += f.bytes.length;
   }
@@ -195,6 +199,54 @@ it("keeps the discovery HTTP status outside a truncated model preview", () => {
   );
   expect(result.httpStatus).toBe(200);
   expect(result.modelPreviewTruncated).toBe(true);
+});
+
+it.each(["🧪".repeat(10000), "\u0000".repeat(20000), "\\".repeat(40000)])(
+  "bounds scanner previews after UTF-8 encoding and JSON escaping",
+  (stdout) => {
+    const preview = packResultPreview({ stdout, exitCode: 0 }, "http", [
+      "evidence.json"
+    ]);
+    expect(
+      new TextEncoder().encode(JSON.stringify(preview)).byteLength
+    ).toBeLessThan(32768);
+    expect(preview.evidence).toEqual(["evidence.json"]);
+    expect(preview.exitCode).toBe(0);
+  }
+);
+
+it("preserves failure signals when an oversized package error is retained as evidence", () => {
+  const preview = packResultPreview(
+    {
+      error: "Denied: " + "🧪".repeat(10000),
+      rejected: true,
+      notExecuted: true,
+      isError: true
+    },
+    "metasploit",
+    ["evidence.json"]
+  );
+  expect(preview).toMatchObject({
+    rejected: true,
+    notExecuted: true,
+    isError: true,
+    evidence: ["evidence.json"]
+  });
+  expect(preview.error).toMatch(/^Denied:/);
+  expect(
+    new TextEncoder().encode(JSON.stringify(preview)).byteLength
+  ).toBeLessThan(32768);
+});
+
+it("maps an MCP tool error to the SDK failure envelope", () => {
+  const preview = packResultPreview(
+    { isError: true, content: [{ type: "text", text: "backend failure" }] },
+    "metasploit",
+    ["evidence.json"]
+  );
+  expect(preview.isError).toBe(true);
+  expect(preview.error).toMatch(/MCP error/);
+  expect(preview.evidence).toEqual(["evidence.json"]);
 });
 
 it.each([

@@ -296,6 +296,21 @@ describe("native execution", () => {
     expect(result.record.runtime_provenance).toEqual(result.result.runtime);
     expect(result.replayed).toEqual(result.result);
   });
+  it.each(["native-discovery-http", "native-discovery-http-failed"])(
+    "uses parallel native probes without starting scanners or models: %s",
+    async (kind) => {
+      const result = await probe(kind);
+      expect(result.httpMethods).toEqual(["HEAD", "GET"]);
+      expect(result.readies).toBe(0);
+      expect(result.modelRequests).toBe(0);
+      expect(result.result.model).toBeNull();
+      expect(result.result.status).toBe(
+        kind.endsWith("failed") ? "failed" : "completed"
+      );
+      expect(result.replayed).toEqual(result.result);
+      expect(result.evidence.length).toBeGreaterThan(0);
+    }
+  );
   it.each([
     "native-discovery",
     "native-discovery-failed",

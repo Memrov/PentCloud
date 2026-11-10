@@ -53,8 +53,10 @@ establish that a scanner never ran. See [legacy Kali evidence](kali-evidence.md)
 During discovery, preparation chat can read files, ask questions and discuss the
 project; execution tools remain unavailable until admission. Check setup
 revisions, dirty/conflict state and connection proofs when the button is disabled.
-Failed discovery requires safe drain and explicit acknowledgement of incomplete
-coverage; an unknown scanner outcome still holds execution ownership.
+New runs use parallel native HTTP probes with a shared 10-second deadline.
+Incomplete discovery hands off to the agent after safe drain and remains visible
+as a coverage gap. Historical scanner profiles still require explicit
+acknowledgement on failure; an unknown outcome still holds execution ownership.
 
 Catalog refresh and model testing are separate. Catalog requests are anonymous;
 a connection test uses the selected Cloudflare secret binding and may consume

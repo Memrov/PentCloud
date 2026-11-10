@@ -24,6 +24,7 @@ import {
   probeEvidenceTransfer,
   probeEvidencePackScratch,
   probeEvidencePackLarge,
+  probeEvidenceReadPages,
   probeEvidenceCheckpoints,
   probeEvidenceIncompleteImage
 } from "./scenarios-evidence";
@@ -37,6 +38,7 @@ import {
   probeComputer,
   probeShell,
   probeJavascript,
+  probeJavascriptRoleTools,
   probePublish,
   probeMemoryContract,
   probeMemory,
@@ -65,9 +67,13 @@ const exact = new Map<string, Scenario>([
   ["evidence-transfer", probeEvidenceTransfer],
   ["evidence-pack-scratch", probeEvidencePackScratch],
   ["evidence-pack-large", probeEvidencePackLarge],
+  ["evidence-read-pages", probeEvidenceReadPages],
+  ["evidence-read-preparation", probeEvidenceReadPages],
+  ["evidence-read-pending", probeEvidenceReadPages],
   ["evidence-checkpoints", probeEvidenceCheckpoints],
   ["evidence-incomplete-image", probeEvidenceIncompleteImage],
   ["native-pinned-model", probeNativePinnedModel],
+  ["native-pinned-model-max", probeNativePinnedModel],
   ["purge-failure", probePurgeFailure],
   ["purge", probePurge],
   ["browser-live-view", probeBrowserLiveView],
@@ -91,6 +97,7 @@ const exact = new Map<string, Scenario>([
   ["computer", probeComputer],
   ["shell", probeShell],
   ["javascript", probeJavascript],
+  ["javascript-role-tools", probeJavascriptRoleTools],
   ["publish", probePublish],
   ["replay", probePublish],
   ["session", probeSession],
@@ -133,6 +140,7 @@ const roles = new Map<string, Role>([
   ["known-running", "pentester"],
   ["computer-coder", "coder"],
   ["javascript", "coder"],
+  ["javascript-role-tools", "memorist"],
   ["research-policy", "searcher"]
 ]);
 export function scenarioRole(kind: string): Role {

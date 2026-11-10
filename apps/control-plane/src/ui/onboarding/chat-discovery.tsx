@@ -18,10 +18,16 @@ export function ChatDiscovery({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string>();
   const discovery = jobs.filter((job) => job.tool === "native_discovery");
-  const failed = discovery.some((job) =>
-    ["failed", "invalid_result", "integration_failed", "interrupted"].includes(
-      job.status
-    )
+  const failed = discovery.some(
+    (job) =>
+      job.discoveryCoverage === "partial" ||
+      job.discoveryCoverage === "unavailable" ||
+      [
+        "failed",
+        "invalid_result",
+        "integration_failed",
+        "interrupted"
+      ].includes(job.status)
   );
   if (
     !discovery.length ||
@@ -66,6 +72,7 @@ export function ChatDiscovery({
         </Collapsible.Trigger>
         <Collapsible.DefaultPanel>
           <DiscoveryProgress
+            bestEffort={run.discoveryBestEffort === true}
             inChat
             jobs={discovery}
             settled={run.discoveryDrained === true}
@@ -76,7 +83,7 @@ export function ChatDiscovery({
         </Collapsible.DefaultPanel>
       </Collapsible>
       <div className="chat-discovery-actions">
-        {failed && (
+        {failed && !run.discoveryBestEffort && (
           <Button
             variant="secondary"
             disabled={busy || !run.discoveryDrained}

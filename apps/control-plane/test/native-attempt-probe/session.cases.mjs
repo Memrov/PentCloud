@@ -55,6 +55,7 @@ describe("native sessions", () => {
     expect(new Set(v.before.tools.names)).toEqual(
       new Set([
         "computer_read",
+        "computer_read_bytes",
         "computer_ls",
         "computer_find",
         "computer_grep",

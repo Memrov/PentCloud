@@ -77,11 +77,14 @@ check without a model. Redirects require review instead of silently adopting a
 different address. Authentication-required responses can still prove reachability.
 This check does not prove ownership, scanner connectivity or host confinement.
 
-New discovery uses the installed WhatWeb capability with the verified stealthy
-profile (`whatweb-stealthy-v2`) and a 60-second tool timeout. An observed HTTP
-status is required for successful discovery; a completed envelope with no HTTP
-response records a coverage warning. Historical `whatweb-polite-v1` attempts
-retain their recorded arguments when retried. The selected scanner runtime can take time to start.
+New discovery (`http-probes-v3`) runs scope-checked HEAD and GET requests in
+parallel with one 10-second budget, including response-body reads. It follows no
+redirects, retains selected response headers and at most 64 KiB of the body as
+evidence, and gives the agent a bounded preview. It starts no scanner container
+and makes no model request. Missing or timed-out responses remain coverage gaps;
+the agent can choose further tools, including the installed httpx and WhatWeb
+packages. An observed HTTP status is required for a successful discovery result.
+Historical WhatWeb profiles retain their pinned execution and acknowledgement rules.
 Discovery and assessment execution use the same one-active/two-waiting queue.
 A queued primary can hold a read-only conversation alongside that execution. Recorded
 remote uncertainty keeps its existing safety ownership until reconciliation;
@@ -95,7 +98,7 @@ conversation on mobile.
 
 Choose **Open chat** once the displayed model/API setup passes its checks.
 The primary can discuss the project, ask native questions and read supplied files
-while the scanner is starting or discovery is running. Opening chat uses OpenCode credits;
+while discovery is queued or running. Opening chat uses OpenCode credits;
 loading a page or testing a connection never starts this conversation. Discovery
 itself has no model chat.
 
@@ -110,18 +113,20 @@ are reloaded; subsequent execution retries remain immutable. A durable
 any assessment model turn. New steering waits
 for that transition, while pending native forms remain answerable.
 
-If discovery fails after chat opens, the conversation stays available. Assessment
-work waits for safe execution drain and **Accept incomplete discovery & continue
-assessment**. An unknown remote outcome cannot be acknowledged away. Stop,
+If discovery fails after chat opens, the conversation stays available. New runs
+continue to assessment after safe execution drain, with the failed probes retained
+in context and evidence. No extra coverage acknowledgement is needed. Historical
+scanner runs still require **Accept incomplete discovery & continue assessment**.
+An unknown remote outcome cannot be acknowledged away. Stop,
 archive, trash and permanent deletion include queued preparation conversations,
 even if material admission already marked their jobs terminal. Input rejection
 aborts preparation without hiding its existing native transcript. Discovery
 rejected before any launch receipt is safely drained without contacting the scanner;
-its missing coverage still needs acknowledgement. Initial files remain selected
+its missing coverage still needs acknowledgement on historical scanner runs. Initial files remain selected
 for primary admission if discovery could not admit them.
 A terminal receipt with a different execution mode/model is retained
 as a rejected result, without accepting its Git candidate or retrying work.
-The run then shows **Discovery needs attention**; continuing requires explicit
+The run then shows **Discovery needs attention**; historical scanner runs require
 acknowledgement of incomplete discovery. Never relabel rejected output as a
 successful scanner result or automatically retry an uncertain scan.
 

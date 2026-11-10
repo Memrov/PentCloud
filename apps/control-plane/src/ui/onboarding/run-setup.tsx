@@ -304,6 +304,7 @@ export function RunSetup({
         </Badge>
       </header>
       <DiscoveryProgress
+        bestEffort={run.discoveryBestEffort === true}
         jobs={discoveries}
         settled={data?.readiness?.discoverySettled === true}
         failed={failed}
@@ -314,7 +315,7 @@ export function RunSetup({
           })
         }
       >
-        {failed && (
+        {failed && !run.discoveryBestEffort && (
           <Checkbox
             checked={ack}
             onCheckedChange={setAck}

@@ -1,5 +1,6 @@
 /** Bounded views of existing records; never a second transcript store. */
-export const RECORDED_WORK_PAGE = 32 * 1024;
+// JSON wrapping and UTF-8 encoding must still fit the inline tool-output budget.
+export const RECORDED_WORK_PAGE = 8 * 1024;
 export interface RecordedWorkPage {
   format: "json-fragment";
   offset: number;

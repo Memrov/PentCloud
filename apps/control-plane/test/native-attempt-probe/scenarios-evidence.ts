@@ -405,6 +405,146 @@ export async function probeEvidencePackLarge(
   checks.checkpoint = await context.ctx.storage.get("fixture:evidenceReceipts");
   return checks;
 }
+export async function probeEvidenceReadPages(
+  context: ProbeScenarioContext
+): Promise<Record<string, unknown>> {
+  const { internal, computer, checks, id } = context;
+  await internal.captureToolEvidence("pentcloud_tool", {}, "paged-result", {
+    stdout: "🧪\\\u0000".repeat(20000),
+    exitCode: 0
+  });
+  const files =
+    (await context.ctx.storage.get<Array<{ path: string }>>("evidenceFiles"))!;
+  const path = files.find((file) => file.path.endsWith("-result.json"))!.path;
+  const expected = await context.attempt.workspace.fs.readFile(
+    `${context.attempt.directory}/${path}`,
+    "utf8"
+  );
+  const state =
+    await context.ctx.storage.get<Record<string, unknown>>("attempt");
+  if (context.kind === "evidence-read-preparation")
+    await context.ctx.storage.put("attempt", { ...state, preparation: true });
+  const fileRead = await computer("computer_read", { path })
+    .catch((error: unknown) => {
+      if (!(error instanceof Error) || !error.message.includes("read cap"))
+        throw error;
+      return { content: error.message };
+    })
+    .finally(async () => {
+      if (context.kind === "evidence-read-preparation")
+        await context.ctx.storage.put("attempt", state!);
+    });
+  checks.fileReadBounded =
+    new TextEncoder().encode(fileRead.content).byteLength < 32768;
+  // Exercise the actual model-visible continuation, including during preparation.
+  const fileParts: string[] = [];
+  let fileOffset: number | undefined = 0;
+  if (context.kind === "evidence-read-preparation")
+    await context.ctx.storage.put("attempt", { ...state, preparation: true });
+  try {
+    while (fileOffset !== undefined && fileParts.length < 1000) {
+      const output = await computer("computer_read_bytes", {
+        path,
+        offset: fileOffset
+      });
+      const page = JSON.parse(output.content).value as {
+        text: string;
+        nextOffset?: number;
+      };
+      fileParts.push(page.text);
+      fileOffset = page.nextOffset;
+    }
+  } finally {
+    await context.ctx.storage.put("attempt", state!);
+  }
+  checks.fileReadRestored = fileParts.join("") === expected;
+  if (context.kind === "evidence-read-pending") {
+    const push = context.attempt.workspace.git.push.bind(
+      context.attempt.workspace.git
+    );
+    let fail = true;
+    context.attempt.workspace.git.push = async (options) => {
+      if (fail) {
+        fail = false;
+        throw new Error("Lost oversized-output push");
+      }
+      return push(options);
+    };
+  }
+  const command = await computer("computer_exec", {
+    backend: "native-shell",
+    command: "printf 'start'; printf '%100000s' x; printf 'end'"
+  });
+  checks.commandBounded =
+    new TextEncoder().encode(command.content).byteLength < 32768;
+  checks.commandEvidence = command.content.includes("pentcloud_read_evidence");
+  checks.checkpointRecovered = !(await context.ctx.storage.get(
+    "evidenceCollectionPending"
+  ));
+  const retained =
+    (await context.ctx.storage.get<Array<{ path: string }>>("evidenceFiles"))!;
+  const commandFiles = retained.filter(
+    (file) => !files.some((before) => before.path === file.path)
+  );
+  const commandRecords = await Promise.all(
+    commandFiles.map(async (file) => ({
+      path: file.path,
+      text: await context.attempt.workspace.fs.readFile(
+        `${context.attempt.directory}/${file.path}`,
+        "utf8"
+      )
+    }))
+  );
+  const fullCommand = commandRecords.find(
+    (record) =>
+      JSON.parse(record.text).result?.stdout ===
+      "start" + " ".repeat(99999) + "xend"
+  );
+  checks.commandRestored =
+    !!fullCommand &&
+    commandRecords.some(
+      (record) =>
+        record.path !== fullCommand.path &&
+        record.text.includes(fullCommand.path)
+    );
+  const multilineTool = (await internal.cloudflareTools()).find(
+    (tool) => tool.name === "computer_grep"
+  )!;
+  multilineTool.execute = async () => ({ content: "line\n".repeat(2500) });
+  const multiline = (await internal.callCloudflareTool(
+    multilineTool,
+    {},
+    "multiline-output",
+    new AbortController().signal
+  )) as { content: string };
+  checks.multilineRetained = multiline.content.includes(
+    "pentcloud_read_evidence"
+  );
+  const parts: string[] = [];
+  let offset: number | undefined = 0;
+  checks.bounded = true;
+  while (offset !== undefined && parts.length < 1000) {
+    const output = await computer("pentcloud_read_evidence", {
+      job_id: id,
+      path,
+      offset
+    });
+    if (new TextEncoder().encode(output.content).byteLength > 32768)
+      checks.bounded = false;
+    const page = JSON.parse(output.content).value as {
+      text: string;
+      nextOffset?: number;
+      totalBytes?: number;
+    };
+    parts.push(page.text);
+    offset = page.nextOffset;
+    checks.totalBytes = page.totalBytes;
+  }
+  checks.pages = parts.length;
+  checks.restored = parts.join("") === expected;
+  checks.expectedBytes = new TextEncoder().encode(expected).byteLength;
+  return checks;
+}
 export async function probeEvidenceCheckpoints(
   context: ProbeScenarioContext
 ): Promise<Record<string, unknown>> {

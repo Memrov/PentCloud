@@ -75,10 +75,26 @@ export function packResultPreview(
         (Array.isArray(parsed) ? parsed[0] : parsed)?.http_status ?? null;
     } catch {}
   const serialized = JSON.stringify(value);
+  const failure = {
+    ...(typeof r.error === "string"
+      ? { error: r.error.slice(0, 512) }
+      : r.isError === true
+        ? {
+            error:
+              "Tool package reported an MCP error; read the retained evidence for details"
+          }
+        : {}),
+    ...(typeof r.isError === "boolean" ? { isError: r.isError } : {}),
+    ...(typeof r.rejected === "boolean" ? { rejected: r.rejected } : {}),
+    ...(typeof r.notExecuted === "boolean"
+      ? { notExecuted: r.notExecuted }
+      : {})
+  };
   const preview =
-    serialized.length <= 30000
-      ? { ...r, httpStatus, evidence }
+    new TextEncoder().encode(serialized).byteLength <= 24000
+      ? { ...r, ...failure, httpStatus, evidence }
       : {
+          ...failure,
           pack,
           exitCode: r.exitCode,
           timedOut: r.timedOut,
@@ -98,6 +114,20 @@ export function packResultPreview(
           modelPreviewTruncated: true,
           evidence
         };
+  // Character counts miss both UTF-8 expansion and escaping of raw stream text.
+  if (new TextEncoder().encode(JSON.stringify(preview)).byteLength > 24000)
+    return JSON.parse(
+      JSON.stringify({
+        ...failure,
+        pack,
+        exitCode: r.exitCode,
+        timedOut: r.timedOut,
+        truncated: r.truncated,
+        httpStatus,
+        modelPreviewTruncated: true,
+        evidence
+      })
+    );
   // The durable preview must hash identically to its published JSON readback.
   return JSON.parse(JSON.stringify(preview));
 }

@@ -39,7 +39,11 @@ vi.mock("@opencode/sdk/workerd", () => ({
     }
   }
 }));
-import { probeOpenCode } from "../src/native/opencode-models";
+import {
+  effectiveReasoningEffort,
+  nativeProvider,
+  probeOpenCode
+} from "../src/native/opencode-models";
 afterEach(() => {
   calls.closed = false;
   calls.reject = false;
@@ -70,6 +74,22 @@ it("validates a connection through the embedded OpenCode session with the pinned
   ).toMatchObject({ reasoningField: "reasoning_content" });
   expect(calls.prompt.sessionID).toBe("ses_connection");
   expect(calls.closed).toBe(true);
+});
+
+it("uses the strongest advertised reasoning and forwards it to the pinned model", () => {
+  const reasoningModel = {
+    ...model,
+    reasoningEfforts: ["default" as const, "high" as const, "max" as const]
+  };
+  const effort = effectiveReasoningEffort(reasoningModel, "default");
+  expect(effort).toBe("max");
+  expect(
+    nativeProvider(reasoningModel, "fake-key", effort).models?.test?.settings
+  ).toEqual({ reasoningEffort: "max" });
+  expect(effectiveReasoningEffort(reasoningModel, "high")).toBe("high");
+  expect(() => effectiveReasoningEffort(model, "max")).toThrow(
+    /does not support max reasoning/
+  );
 });
 
 it("propagates one cancellation scope and closes the host after a rejected model request", async () => {

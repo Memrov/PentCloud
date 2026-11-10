@@ -75,7 +75,7 @@ export function stockOutputPaths(family: string, result: unknown): string[] {
       add(value);
       if (value.length <= EVIDENCE_FILE_LIMIT) {
         for (const match of value.matchAll(/\]\(([^\s)]+)\)/g)) add(match[1]!);
-        if (/^[\[{]/.test(value))
+        if (/^[[{]/.test(value))
           try {
             walk(JSON.parse(value), depth + 1);
           } catch {}
@@ -123,6 +123,27 @@ export async function boundedEvidenceBytes(
     offset += chunk.byteLength;
   }
   return bytes;
+}
+/** Small UTF-8 pages stay below OpenCode's output limit even after JSON escaping. */
+export function evidenceTextPage(text: string, offset = 0) {
+  const bytes = new TextEncoder().encode(text);
+  if (
+    !Number.isSafeInteger(offset) ||
+    offset < 0 ||
+    offset > bytes.length ||
+    (offset < bytes.length && (bytes[offset]! & 0xc0) === 0x80)
+  )
+    throw new Error("Use a returned nextOffset or zero to read evidence");
+  let end = Math.min(offset + 4096, bytes.length);
+  while (end < bytes.length && (bytes[end]! & 0xc0) === 0x80) end--;
+  return {
+    text: new TextDecoder("utf-8", { fatal: true }).decode(
+      bytes.subarray(offset, end)
+    ),
+    offset,
+    totalBytes: bytes.length,
+    ...(end < bytes.length ? { nextOffset: end } : {})
+  };
 }
 /** Checkpoints contain only immutable own-job evidence, never terminal authority. */
 export async function validateEvidenceCheckpoint(
@@ -337,11 +358,15 @@ export function toolResultFiles(
   if (bytes.byteLength <= EVIDENCE_FILE_LIMIT)
     return [{ name: "result.json", bytes }];
   const files: Array<{ name: string; bytes: Uint8Array }> = [];
-  for (let offset = 0; offset < bytes.byteLength; offset += EVIDENCE_FILE_LIMIT)
+  for (let offset = 0; offset < bytes.byteLength;) {
+    let end = Math.min(offset + EVIDENCE_FILE_LIMIT, bytes.byteLength);
+    while (end < bytes.byteLength && (bytes[end]! & 0xc0) === 0x80) end--;
     files.push({
       name: `result-${files.length + 1}.json.part`,
-      bytes: bytes.slice(offset, offset + EVIDENCE_FILE_LIMIT)
+      bytes: bytes.slice(offset, end)
     });
+    offset = end;
+  }
   return [
     ...files,
     {

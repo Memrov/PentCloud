@@ -136,16 +136,21 @@ test.describe("target-first setup in a real browser", () => {
       }
     );
   for (const viewport of [
-    { width: 1440, height: 1000 },
-    { width: 390, height: 844 }
+    { width: 1440, height: 1000, bestEffort: false },
+    { width: 390, height: 844, bestEffort: false },
+    { width: 1440, height: 1000, bestEffort: true },
+    { width: 390, height: 844, bestEffort: true }
   ])
     test(
       "saves and reuses a target, opens chat during discovery with Cloudflare secrets at " +
         viewport.width +
-        "px",
+        (viewport.bestEffort ? "px best-effort" : "px"),
       async ({ context, page, baseURL }) => {
         const origin = baseURL!;
-        await page.setViewportSize(viewport);
+        await page.setViewportSize({
+          width: viewport.width,
+          height: viewport.height
+        });
         await page.emulateMedia({ reducedMotion: "reduce" });
         const pageErrors: string[] = [];
         page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -328,6 +333,7 @@ test.describe("target-first setup in a real browser", () => {
             run = {
               id: value.run_id,
               phase: "discovery",
+              discoveryBestEffort: viewport.bestEffort,
               status: "running",
               target,
               baselineRepo: "fixture",
@@ -659,6 +665,9 @@ test.describe("target-first setup in a real browser", () => {
         job = {
           ...job,
           status: discoveryFailed ? "failed" : "completed",
+          ...(viewport.bestEffort
+            ? { discoveryCoverage: discoveryFailed ? "unavailable" : "partial" }
+            : {}),
           revision: job.revision + 1
         };
         publish();
@@ -668,7 +677,7 @@ test.describe("target-first setup in a real browser", () => {
         });
         await browserExpect(
           chatProgress.getByText(
-            discoveryFailed
+            discoveryFailed || viewport.bestEffort
               ? "Discovery needs attention"
               : "Finishing discovery",
             { exact: true }
@@ -677,16 +686,38 @@ test.describe("target-first setup in a real browser", () => {
         const continueAssessment = page.getByRole("button", {
           name: "Accept incomplete discovery & continue assessment"
         });
-        if (discoveryFailed)
+        if (viewport.bestEffort)
+          await browserExpect(continueAssessment).toHaveCount(0);
+        else if (discoveryFailed)
           await browserExpect(continueAssessment).toBeDisabled();
         run = { ...run, discoveryDrained: true };
         job = { ...job, revision: job.revision + 1 };
         publish();
-        if (discoveryFailed) {
+        if (viewport.bestEffort) {
+          primary = {
+            ...primary,
+            preparingConversation: false,
+            status: "running"
+          };
+          publish();
+          await browserExpect(continueAssessment).toHaveCount(0);
+          await browserExpect(
+            chatProgress.getByText(
+              "The initial checks are incomplete. Your agent can continue with the available context and choose further tools.",
+              { exact: true }
+            )
+          ).toBeVisible();
+          expect(
+            requests.some((request) =>
+              request.path.endsWith("/discovery.acknowledge")
+            )
+          ).toBe(false);
+        } else if (discoveryFailed) {
           await browserExpect(continueAssessment).toBeEnabled();
           await continueAssessment.click();
         }
-        await browserExpect(chatProgress).toHaveCount(0);
+        if (!viewport.bestEffort)
+          await browserExpect(chatProgress).toHaveCount(0);
         await browserExpect(
           page.getByRole("textbox", { name: /^Message / })
         ).toBeEnabled();

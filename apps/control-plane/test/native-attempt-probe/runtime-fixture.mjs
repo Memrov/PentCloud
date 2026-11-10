@@ -25,6 +25,7 @@ export const nativeNames = [
   "pentcloud_read_evidence",
   "cloudflare_browser",
   "computer_read",
+  "computer_read_bytes",
   "computer_ls",
   "computer_find",
   "computer_grep",

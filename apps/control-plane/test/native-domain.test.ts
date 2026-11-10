@@ -12,6 +12,7 @@ import type {
   AttemptResult,
   RunRecord
 } from "../src/native/types";
+import { parseJob } from "../src/ui/api";
 
 const job = (id: string, status = "created") =>
   ({
@@ -66,6 +67,27 @@ describe("native domain invariants", () => {
     expect(publicJob(job("native", "completed"))).toMatchObject({
       nativeSession: true
     });
+  });
+  it("preserves incomplete discovery coverage through the public UI projection", () => {
+    const discovery = {
+      ...job("discovery", "completed"),
+      revision: 1,
+      execution: {
+        kind: "discovery" as const,
+        url: "https://example.com/",
+        profile: "http-probes-v3" as const
+      },
+      terminal: {
+        arguments: { result: { structuredContent: { coverage: "partial" } } }
+      } as unknown as AttemptResult
+    };
+    expect(parseJob(publicJob(discovery))).toMatchObject({
+      status: "completed",
+      discoveryCoverage: "partial"
+    });
+    expect(publicJob(job("native", "completed"))).not.toHaveProperty(
+      "discoveryCoverage"
+    );
   });
   it("bounds admission globally across runs and allows identical replay at capacity", () => {
     const jobs = [

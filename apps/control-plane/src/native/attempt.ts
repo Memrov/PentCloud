@@ -33,6 +33,7 @@ import {
   evidenceManifestPath,
   evidenceBytesHash,
   boundedEvidenceBytes,
+  evidenceTextPage,
   toolResultFiles,
   stockOutputPaths,
   EVIDENCE_FILE_LIMIT,
@@ -48,7 +49,7 @@ import {
   type ToolboxStockOutput
 } from "../../../../shared/toolbox-files";
 import { journalAPIRequest } from "./api-operation";
-import { discoveryOutcome } from "./discovery";
+import { discoveryOutcome, httpDiscovery } from "./discovery";
 import { tool as aiTool, jsonSchema } from "ai";
 import {
   assertPinnedModel,
@@ -65,6 +66,7 @@ import { DurableObject } from "cloudflare:workers";
 import {
   Workspace,
   type DurableObjectStorageLike,
+  type WorkspaceRuntimeResult,
   type WorkspaceRuntimeValue
 } from "@cloudflare/computer";
 import { createGitClient } from "@cloudflare/computer/git";
@@ -246,6 +248,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
   private preparingToolbox: Promise<string> | undefined;
   private toolboxPreflightReady = false;
   private readonly codeModeSubcalls = new Map<string, number>();
+  private readonly javascriptTools = new Set<string>();
   private stopped = false;
   private readonly sessionStreams = new Set<AbortController>();
   private readonly abortController = new AbortController();
@@ -287,7 +290,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
               access: "read-write",
               globalOutbound: null,
               modules: {
-                "ws:tools": createToolBindings(
+                "ws:tools": createToolBindings(() =>
                   [
                     "search_in_memory",
                     "search_code",
@@ -296,23 +299,30 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
                     "store_code",
                     "store_guide",
                     "store_answer"
-                  ].map((name) => ({
-                    name,
-                    readOnly: name.startsWith("search_"),
-                    call: async (args, { signal }) => {
-                      const details = await this.callTool(
-                        name,
-                        args,
-                        "javascript",
-                        signal
-                      );
-                      return {
-                        text: JSON.stringify(details),
-                        details: details as WorkspaceRuntimeValue,
-                        isError: false
-                      };
-                    }
-                  }))
+                  ]
+                    .filter((name) => this.javascriptTools.has(name))
+                    .map((name) => ({
+                      name,
+                      readOnly: name.startsWith("search_"),
+                      call: async (args, { signal }) => {
+                        const details = await this.callTool(
+                          name,
+                          args,
+                          "javascript",
+                          signal
+                        );
+                        return {
+                          text: JSON.stringify(details),
+                          details: details as WorkspaceRuntimeValue,
+                          isError: !!(
+                            details &&
+                            typeof details === "object" &&
+                            "error" in details &&
+                            typeof details.error === "string"
+                          )
+                        };
+                      }
+                    }))
                 )
               },
               onInterrupt: "fail",
@@ -502,7 +512,14 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     await this.coordinator().browserState(state.input.id, stateData);
   }
   private async cloudflareTools() {
-    const workspace = this.guardedWorkspace(await this.state());
+    const state = await this.state();
+    const workspace = this.guardedWorkspace(state);
+    this.javascriptTools.clear();
+    for (const tool of catalogForRole(
+      state.input.role,
+      enabledTools(state.input)
+    ))
+      this.javascriptTools.add(tool.name);
     const runtime: ExecWorkspaceLike["runtime"] = {
       backends: () => this.workspace.runtime.backends(),
       exec: async (command, options) => {
@@ -517,7 +534,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
           kill: () => execution.kill(),
           result: async () => {
             try {
-              return await execution.result();
+              return await this.retainCommandOutput(await execution.result());
             } finally {
               execution[Symbol.dispose]();
             }
@@ -525,7 +542,6 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         };
       }
     };
-    const state = await this.state();
     const api =
       state.input.context.target &&
       (state.input.context.target as { kind?: string }).kind === "api"
@@ -561,24 +577,69 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     const computer = createAITools({
       workspace: { fs: workspace.fs, runtime },
       root: this.directory,
-      assets: false
+      assets: false,
+      read: {
+        maxBytes: 4 * 1024,
+        maxLines: 1000
+      },
+      ...(this.env.LOADER
+        ? {
+            exec: {
+              "native-shell": {
+                description:
+                  "Set backend to native-shell and put shell code in command. Use relative task-repository paths and omit cwd. Scratch and /tmp are outside this backend. Use advertised commands, not absolute Linux executable paths such as /usr/bin/jq; scanners run through pentcloud_tool. Source/report writes require a writer role, and Git publication belongs to the runtime."
+              },
+              "native-javascript": {
+                description:
+                  "Set backend to native-javascript and put an ES module with a default function in command. Files are confined to /workspace/scratch; this backend cannot read the task repository. Use computer_read for repository files and input for data passed to code. ws:tools lists only this role's available memory tools."
+              }
+            }
+          }
+        : {})
+    });
+    computer.read!.description +=
+      " For a line exceeding the read cap, use computer_read_bytes to read the complete file in byte pages without dropping long-line content.";
+    computer.read_bytes = aiTool({
+      description:
+        "Read task-workspace UTF-8 text in bounded byte pages, including long single-line files that exceed computer_read's line cap. Start with offset 0, then pass each nextOffset until absent. Offsets count bytes of redacted text. Read only; the same path and symlink restrictions apply. Files are bounded to 2 MiB; use computer_read/find/grep for narrower access to larger files and computer_read for media.",
+      inputSchema: jsonSchema<{ path: string; offset?: number }>({
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          offset: { type: "integer", minimum: 0 }
+        },
+        required: ["path"],
+        additionalProperties: false
+      }),
+      execute: async ({ path, offset }) => {
+        const bytes = await boundedEvidenceBytes(
+          new Response(await workspace.fs.readFile(path))
+        );
+        const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        return { path, ...evidenceTextPage(String(this.safe(text)), offset) };
+      }
     });
     const evidence = [
       openCodeTool(
         "pentcloud_read_evidence",
         aiTool({
           description:
-            "Read a verified evidence file from an earlier same-run job. Use the job ID and path in native context.evidence. Binary files remain available through Files/downloads.",
-          inputSchema: jsonSchema<{ job_id: string; path: string }>({
+            "Read a verified same-run evidence file in bounded UTF-8 pages. Use the job ID and path in native context.evidence. Start with offset 0, then pass each returned nextOffset until absent. Offsets count bytes of redacted text. Binary files remain available through Files/downloads.",
+          inputSchema: jsonSchema<{
+            job_id: string;
+            path: string;
+            offset?: number;
+          }>({
             type: "object",
             properties: {
               job_id: { type: "string" },
-              path: { type: "string" }
+              path: { type: "string" },
+              offset: { type: "integer", minimum: 0 }
             },
             required: ["job_id", "path"],
             additionalProperties: false
           }),
-          execute: async ({ job_id, path }) => {
+          execute: async ({ job_id, path, offset }) => {
             const response = await this.coordinator().readEvidence(
                 state.input.id,
                 job_id,
@@ -586,12 +647,9 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
               ),
               bytes = await boundedEvidenceBytes(response);
             await this.active();
+            let text: string;
             try {
-              return {
-                path,
-                job_id,
-                text: new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-              };
+              text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
             } catch {
               return {
                 path,
@@ -601,6 +659,11 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
                 message: "Use the existing Files download for binary evidence"
               };
             }
+            return {
+              path,
+              job_id,
+              ...evidenceTextPage(String(this.safe(text)), offset)
+            };
           }
         })
       )
@@ -902,6 +965,45 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       )
     ]);
   }
+  private async retainCommandOutput(result: WorkspaceRuntimeResult<"utf8">) {
+    const streams: Record<string, string> = {};
+    for (const stream of ["stdout", "stderr"] as const) {
+      const saved = result.truncated?.[stream];
+      if (!saved) continue;
+      if (saved.status !== "saved")
+        throw new Error(
+          `Complete command ${stream} was not retained: ${saved.reason}`
+        );
+      const bytes = await boundedEvidenceBytes(
+        new Response(await this.workspace.fs.readFile(saved.path)),
+        EVIDENCE_TOTAL_LIMIT
+      );
+      streams[stream] = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    }
+    if (!Object.keys(streams).length) return result;
+    const receipt = await fingerprint(result.truncated);
+    await this.captureToolEvidence("computer_exec", {}, receipt, {
+      ...streams,
+      exitCode: result.exitCode
+    });
+    const files =
+      (await this.ctx.storage.get<EvidenceFile[]>("evidenceFiles")) ?? [];
+    const manifest = files.find(
+      (file) => file.receiptId === receipt && file.path.endsWith("-result.json")
+    );
+    if (!manifest)
+      throw new Error(
+        "Complete command output could not be retained as evidence"
+      );
+    await this.checkpointEvidence();
+    const truncated = { ...result.truncated };
+    for (const stream of ["stdout", "stderr"] as const) {
+      const saved = result.truncated?.[stream];
+      if (saved?.status === "saved")
+        truncated[stream] = { ...saved, path: manifest.path };
+    }
+    return { ...result, truncated };
+  }
   private async callCloudflareTool(
     tool: CloudflareTool,
     args: unknown,
@@ -923,6 +1025,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
         "pentcloud_source_tree",
         "pentcloud_source_read",
         "computer_read",
+        "computer_read_bytes",
         "computer_ls",
         "computer_find",
         "computer_grep"
@@ -962,11 +1065,54 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
             });
           // Recorded-work records are redacted before paging. Rewriting the
           // serialized fragments here can damage JSON and invalidate offsets.
-          return tool.name === "pentcloud_run_work"
+          const safeResult = [
+            "pentcloud_run_work",
+            "pentcloud_read_evidence",
+            "computer_read_bytes"
+          ].includes(tool.name)
             ? result
             : (this.safe(result) as typeof result);
+          if (
+            new TextEncoder().encode(safeResult.content).byteLength <= 32768 &&
+            safeResult.content.split("\n", 2001).length <= 2000
+          )
+            return safeResult;
+          await this.captureToolEvidence(tool.name, {}, id, {
+            content: safeResult.content
+          });
+          const files = (
+            (await this.ctx.storage.get<EvidenceFile[]>("evidenceFiles")) ?? []
+          ).filter((file) => file.tool === tool.name && file.receiptId === id);
+          const manifest = files.find((file) =>
+            file.path.endsWith("-result.json")
+          );
+          if (!manifest)
+            throw new Error(
+              "Tool response exceeded the inline limit and could not be retained as evidence; use a narrower read or query"
+            );
+          // A local file is not a readable same-run reference until publication is acknowledged.
+          await this.checkpointEvidence();
+          return {
+            content: JSON.stringify({
+              message:
+                "Tool response retained as evidence. Use pentcloud_read_evidence with job_id and each path below, following nextOffset for all pages.",
+              job_id: state.input.id,
+              evidence: files.map((file) => file.path)
+            }),
+            metadata: {
+              ...safeResult.metadata,
+              truncated: true,
+              outputPath: manifest.path
+            }
+          };
         }
       );
+    } catch (error) {
+      if (error instanceof Error) {
+        error.message = this.error(error);
+        throw error;
+      }
+      throw new Error(this.error(error));
     } finally {
       this.inFlightTools--;
     }
@@ -1216,7 +1362,11 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
             ...(apiKey
               ? {
                   providers: {
-                    [model.provider]: nativeProvider(model, apiKey)
+                    [model.provider]: nativeProvider(
+                      model,
+                      apiKey,
+                      state.input.settings.reasoningEffort
+                    )
                   }
                 }
               : {})
@@ -1357,6 +1507,45 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
   }
   private async executeDiscovery(state: AttemptState): Promise<AttemptResult> {
     const execution = state.input.execution!;
+    if (execution.profile === "http-probes-v3") {
+      const raw = this.safe(
+        await httpDiscovery(
+          execution.url,
+          (request) => this.targetFetch(request),
+          this.abortController.signal
+        )
+      ) as Awaited<ReturnType<typeof httpDiscovery>>;
+      await this.active();
+      await this.captureToolEvidence(
+        "native_discovery",
+        { profile: execution.profile, target: execution.url },
+        "initial-http-discovery",
+        raw
+      );
+      const result = {
+        structuredContent: {
+          ...raw,
+          probes: raw.probes.map(({ body, ...probe }) => ({
+            ...probe,
+            ...(body !== undefined ? { bodyPreview: body.slice(0, 4096) } : {})
+          }))
+        },
+        content: []
+      };
+      const outcome = discoveryOutcome(result);
+      return this.publish({
+        tool: "native_discovery",
+        arguments: {
+          profile: execution.profile,
+          target: execution.url,
+          success: outcome.success,
+          scanStatus: outcome.status,
+          result
+        },
+        status: outcome.success ? "completed" : "failed",
+        finishedAt: Date.now()
+      });
+    }
     if (state.toolPacks) {
       const raw = (await this.packCall(
         {
@@ -1459,6 +1648,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
   private async prefetchPacks(state: AttemptState) {
     if (
       !state.toolPacks ||
+      state.input.execution?.profile === "http-probes-v3" ||
       (!state.input.execution &&
         !["coder", "maintenance", "pentester"].includes(state.input.role))
     )
@@ -1569,6 +1759,11 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
           )
             .filter((f) => f.tool === "pentcloud_tool" && f.receiptId === id)
             .map((f) => f.path);
+          if (!evidence.some((path) => path.endsWith("-result.json")))
+            throw new Error(
+              "Tool package output could not be retained as evidence; do not repeat the scan"
+            );
+          await this.checkpointEvidence();
           return packResultPreview(value, input.pack, evidence);
         }
       );
@@ -1822,9 +2017,11 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     if (input.execution) {
       if (
         input.execution.kind !== "discovery" ||
-        !["whatweb-polite-v1", "whatweb-stealthy-v2"].includes(
-          input.execution.profile
-        ) ||
+        ![
+          "whatweb-polite-v1",
+          "whatweb-stealthy-v2",
+          "http-probes-v3"
+        ].includes(input.execution.profile) ||
         input.execution.url !==
           (input.context.target as { url?: string } | undefined)?.url
       )
@@ -1833,8 +2030,11 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
       const model = this.selectedModel(input);
       if (input.settings.model !== model.id)
         throw new Error("Attempt changed the pinned OpenCode model");
-      if (input.settings.reasoningEffort !== "default")
-        throw new Error("Use the selected OpenCode model's default reasoning");
+      if (
+        input.settings.reasoningEffort !== "default" &&
+        !model.reasoningEfforts.includes(input.settings.reasoningEffort)
+      )
+        throw new Error("Attempt requested unsupported pinned model reasoning");
     }
     const digest = await fingerprint(input);
     // Expected immutable-replay conflicts must not reset the live OpenCode host.
@@ -2984,7 +3184,8 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     }
   }
   private async importKaliMaterials(state: AttemptState) {
-    if (state.toolPacks) return [];
+    if (state.toolPacks || state.input.execution?.profile === "http-probes-v3")
+      return [];
     if (!["coder", "maintenance", "pentester"].includes(state.input.role))
       return [];
     const selection = state.input.context.materials as
@@ -3237,6 +3438,7 @@ export class NativeAttempt extends DurableObject<NativeEnv> {
     return this.workspace.fs.readFile(path, "utf8");
   }
   private async needsToolbox(state: AttemptState) {
+    if (state.input.execution?.profile === "http-probes-v3") return false;
     return (
       (!state.toolPacks &&
         (!!state.input.execution ||
