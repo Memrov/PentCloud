@@ -42,12 +42,31 @@ export function enableComputerContainer(config) {
   };
 }
 
+export function enableCodexRunner(config) {
+  const binding = {
+    binding: "CODEX_RUNNER",
+    service: "codex-lifecycle-pilot",
+    entrypoint: "NativeCodexRunner"
+  };
+  const services = config.services ?? [];
+  const existing = services.find(
+    (service) => service.binding === binding.binding
+  );
+  if (existing && JSON.stringify(existing) !== JSON.stringify(binding))
+    throw new Error("CODEX_RUNNER already has a different service binding.");
+  return {
+    ...config,
+    vars: { ...config.vars, PENTCLOUD_AGENT_ENGINE: "codex" },
+    services: existing ? services : [...services, binding]
+  };
+}
+
 async function main() {
   const path = resolve(process.argv[2] ?? "apps/control-plane/wrangler.jsonc");
   const config = JSON.parse(await readFile(path, "utf8"));
   await writeFile(
     path,
-    `${JSON.stringify(enableComputerContainer(config), null, 2)}\n`,
+    `${JSON.stringify(enableCodexRunner(enableComputerContainer(config)), null, 2)}\n`,
     { mode: 0o600 }
   );
   console.log("Enabled the Computer container in the private build checkout.");

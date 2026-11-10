@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { enableComputerContainer } from "./enable-computer-container.mjs";
+import {
+  enableCodexRunner,
+  enableComputerContainer
+} from "./enable-computer-container.mjs";
 
 const template = JSON.parse(
   await readFile(
@@ -44,5 +47,35 @@ test("container pilot rejects a conflicting NativeAttempt image", () => {
         containers: [{ class_name: "NativeAttempt", images: {} }]
       }),
     /different container/
+  );
+});
+
+test("Codex runner preserves the private service bindings and is idempotent", () => {
+  const config = {
+    ...template,
+    services: [{ binding: "TOOL_PACKS", service: "private-packs" }],
+    vars: { ACCESS_AUD: "private-audience" }
+  };
+  const result = enableCodexRunner(config);
+  assert.deepEqual(result.services, [
+    ...config.services,
+    {
+      binding: "CODEX_RUNNER",
+      service: "codex-lifecycle-pilot",
+      entrypoint: "NativeCodexRunner"
+    }
+  ]);
+  assert.deepEqual(result.vars, {
+    ACCESS_AUD: "private-audience",
+    PENTCLOUD_AGENT_ENGINE: "codex"
+  });
+  assert.deepEqual(enableCodexRunner(result), result);
+  assert.throws(
+    () =>
+      enableCodexRunner({
+        ...config,
+        services: [{ binding: "CODEX_RUNNER", service: "other" }]
+      }),
+    /different service binding/
   );
 });

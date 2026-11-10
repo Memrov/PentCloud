@@ -229,6 +229,9 @@ class RecoveryGuardedHarness extends OpenCodeHarness {
 /** A fresh DO/session per immutable attempt. Only the Coordinator can accept candidates. */
 class NativeAttemptBase extends DurableObject<NativeEnv> {}
 export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
+  private get codexEnabled(): boolean {
+    return this.env.PENTCLOUD_AGENT_ENGINE === "codex";
+  }
   readonly directory = `${REPO_DIR}/${this.ctx.id.toString()}`;
   private inFlightTools = 0;
   private preparingConversation: Promise<void> | undefined;
@@ -2266,6 +2269,7 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
         state.input.context
       );
       await this.conversationActive();
+      if (this.codexEnabled) return;
       await this.lifecycle.start();
       const model = this.selectedModel(input);
       await this.harness
@@ -2301,16 +2305,17 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
         await this.coordinator().assertActive(input.id);
         if (preparing.preparation) {
           assertPreparationPromotion(preparing.input, input);
-          for (const pending of await this.harness.pending())
-            await this.harness.wait(pending.operationId, {
-              session: pending.session
-            });
+          if (!this.codexEnabled)
+            for (const pending of await this.harness.pending())
+              await this.harness.wait(pending.operationId, {
+                session: pending.session
+              });
           await this.coordinator().assertActive(input.id);
         }
         await this.initialize(input);
         await this.prepareWorkspace(await this.active());
         await this.lifecycle.start();
-        await this.reloadConversation?.();
+        if (!this.codexEnabled) await this.reloadConversation?.();
         const { promotionPending: _pending, ...ready } = await this.active();
         await this.ctx.storage.put("attempt", ready);
       })().finally(() => {
@@ -2349,6 +2354,71 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
       });
     return this.running;
   }
+  private async runCodex(
+    state: AttemptState,
+    context: Record<string, unknown>,
+    scannerFiles: string,
+    scannerTools: string
+  ): Promise<AttemptResult> {
+    const runner = this.env.CODEX_RUNNER;
+    if (!runner) throw new Error("Codex runner service binding is unavailable");
+    const model = this.selectedModel(state.input);
+    const prompt =
+      state.prompt +
+      "\n\nExecute the pinned specialist launch. Native context (immutable input " +
+      state.input.inputCommit +
+      "):\n" +
+      JSON.stringify(context) +
+      "\n\n" +
+      scannerFiles +
+      " Tool output and screenshots are checkpointed as evidence. Use pentcloud_read_evidence with same-run job/path references in native context.\n\n" +
+      "Task workspace: " +
+      this.directory +
+      ". Use relative file paths and omit cwd for computer_exec commands.\n\n" +
+      (state.input.context.materials
+        ? "Selected materials are immutable task data. Read their textPath with computer_read/find/grep; cite filename, source SHA-256 and line ranges in findings.\n\n"
+        : "") +
+      "Every role can use computer_* and cloudflare_browser. " +
+      scannerTools +
+      " Finish with your role result tool once.";
+    await runner.startNative({
+      id: state.input.id,
+      role: state.input.role,
+      model: model.modelId,
+      prompt
+    });
+    for (;;) {
+      const current = await this.state();
+      if (current.result) return current.result;
+      if (await this.ctx.storage.get<boolean>("cancelled")) {
+        await runner.cancelNative(state.input.id);
+        return this.interrupted(current);
+      }
+      const status = await runner.statusNative(state.input.id);
+      if (status.state !== "running" && status.state !== "queued") {
+        const finished = await this.state();
+        if (finished.result) return finished.result;
+        if (
+          state.input.role === "adviser" &&
+          status.state === "succeeded" &&
+          status.result?.trim()
+        )
+          return this.publish({
+            tool: "advice",
+            arguments: { result: status.result },
+            status: "completed",
+            finishedAt: Date.now()
+          });
+        throw new Error(
+          status.error ??
+            (status.state === "succeeded"
+              ? "Codex stopped without the required role result tool"
+              : `Codex ${status.state}`)
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+  }
   private async execute(): Promise<AttemptResult> {
     try {
       let state = await this.active();
@@ -2383,11 +2453,6 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
       if (state.input.context.materials)
         context.materials = state.input.context.materials;
       if (kaliInputs.length) context.kaliInputs = kaliInputs;
-      await this.startup("harness.submit.before", state);
-      const model = this.selectedModel(state.input);
-      await this.harness
-        .session()
-        .setModel({ providerID: model.provider, id: model.modelId });
       const scannerFiles = this.containerPilot
         ? "Computer files are mounted at /workspace in the Linux container."
         : state.toolPacks
@@ -2398,6 +2463,13 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
         : state.toolPacks
           ? "Installed bounded scanner profiles are available through pentcloud_tool according to role. Use its advertised request forms and report unsupported checks."
           : "Computer execution and stock Kali MCP scanner tools remain available according to role.";
+      if (this.codexEnabled)
+        return this.runCodex(state, context, scannerFiles, scannerTools);
+      await this.startup("harness.submit.before", state);
+      const model = this.selectedModel(state.input);
+      await this.harness
+        .session()
+        .setModel({ providerID: model.provider, id: model.modelId });
       let answer = await submitAndWaitForOperation(
         this.harness.session(),
         state.input.id,
@@ -2547,6 +2619,8 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
     await this.ctx.storage.put("cancelled", true);
     const state = await this.ctx.storage.get<AttemptState>("attempt");
     if (state && !state.result) await this.interrupted(state);
+    if (state && this.codexEnabled)
+      await this.env.CODEX_RUNNER?.cancelNative(state.input.id);
     if (state) await this.harness.abort().catch(() => false);
     if (state?.preparation) await this.harness.dispose();
     await this.toolbox?.detach().catch(() => undefined);
@@ -2568,6 +2642,8 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
       );
     if (state.input.execution)
       throw new Error("Discovery does not accept chat steering");
+    if (this.codexEnabled)
+      throw new Error("409: Codex one-shot roles do not accept chat steering");
     await this.selectedModelKey(state.input);
     await this.preflightToolbox(state);
     await this.lifecycle.start();

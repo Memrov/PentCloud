@@ -195,6 +195,22 @@ export type NativeEnv = Omit<
   Cloudflare.Env,
   "TOOLBOX" | "OPENCODE_BYOK_PROVIDERS"
 > & {
+  CODEX_RUNNER?: {
+    startNative(request: {
+      id: string;
+      role: Role;
+      model: string;
+      prompt: string;
+    }): Promise<{ id: string; state: string }>;
+    statusNative(id: string): Promise<{
+      state: string;
+      result?: string;
+      error?: string;
+      workflow: string;
+    }>;
+    cancelNative(id: string): Promise<void>;
+  };
+  PENTCLOUD_AGENT_ENGINE?: "codex";
   OPENCODE_GO_API_KEY?: string;
   TOOL_PACKS?: ToolPackService;
   TOOLBOX?: ToolboxService;
