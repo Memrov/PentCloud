@@ -37,6 +37,7 @@ export interface UIRun {
   createdAt?: number;
   phase?: string;
   discoveryDrained?: boolean;
+  discoveryBestEffort?: boolean;
   discoveryAcknowledged?: boolean;
   target?: {
     id: string;
@@ -72,6 +73,7 @@ export interface UIRun {
 export interface UIJob {
   id: string;
   runId: string;
+  discoveryCoverage?: "initial" | "partial" | "unavailable";
   /** Present only on live native job projections, never inferred for archives. */
   nativeSession?: true;
   preparingConversation?: true;
@@ -921,6 +923,9 @@ export function parseRun(value: unknown): UIRun {
       : {}),
     ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
     ...(value.discoveryDrained === true ? { discoveryDrained: true } : {}),
+    ...(value.discoveryBestEffort === true
+      ? { discoveryBestEffort: true }
+      : {}),
     ...(value.discoveryAcknowledged === true
       ? { discoveryAcknowledged: true }
       : {}),
@@ -963,6 +968,11 @@ export function parseJob(value: unknown): UIJob {
   return {
     id: value.id,
     runId: value.runId,
+    ...(value.discoveryCoverage === "initial" ||
+    value.discoveryCoverage === "partial" ||
+    value.discoveryCoverage === "unavailable"
+      ? { discoveryCoverage: value.discoveryCoverage }
+      : {}),
     ...(value.nativeSession === true ? { nativeSession: true as const } : {}),
     ...(value.preparingConversation === true
       ? { preparingConversation: true as const }

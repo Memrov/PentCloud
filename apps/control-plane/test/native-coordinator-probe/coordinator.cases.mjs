@@ -140,6 +140,27 @@ describe("coordinator", () => {
     await rpcResult(coordinator.cancelRun("run-1"));
     await rpcResult(attempts.getByName("job-1").release());
   });
+  it("restart rearms a terminal active receipt with an existing heartbeat", async () => {
+    const before = await rpcResult(coordinator.terminalReceiptBeforeReset());
+    assert.equal(before.active, "job-0");
+    await coordinator.abortForTest().catch(() => undefined);
+    coordinator = coordinators.getByName("global");
+    const after = await rpcResult(coordinator.terminalReceiptAfterReset());
+    assert.equal(after.active, "job-0");
+    assert.ok(after.heartbeat < before.future);
+    assert.ok(after.heartbeat <= Date.now() + 1000);
+    const diagnostics = await rpcResult(coordinator.diagnostics());
+    assert.equal(diagnostics.coordinator.heartbeatDueAt, after.heartbeat);
+    assert.ok(diagnostics.coordinator.alarmDueAt !== null);
+    assert.equal(diagnostics.coordinator.activeJobStatus, "completed");
+    assert.equal(diagnostics.coordinator.publicationPending, false);
+    assert.equal(
+      (await rpcResult(coordinator.platformRecoverySchedules())).recover,
+      1,
+      "restart keeps one native recovery job"
+    );
+    await rpcResult(attempts.getByName("job-0").release());
+  });
   it("queue snapshot never starts recovery", async () => {
     const value = await rpcResult(coordinator.readonlyQueueScenario());
     assert.deepEqual(value.cold.pending, []);
@@ -278,6 +299,10 @@ describe("coordinator", () => {
     assert.equal(value.legacy.bundle, undefined);
     assert.equal(value.bundle.bundle.document.findings.length, 1);
     assert.equal(value.bundle.commit, "a".repeat(40));
+    assert.deepEqual(value.latest, value.bundle);
+    assert.equal(value.older.jobId, "earlier-report");
+    assert.equal(value.older.commit, "b".repeat(40));
+    assert.equal(value.older.bundle, undefined);
     assert.match(value.wrong, /accepted reporter/);
     assert.match(value.missing, /reference/);
   });
@@ -354,6 +379,26 @@ describe("coordinator", () => {
     assert.equal(afterRun.phase, "primary");
     assert.equal(afterRun.discoveryDrained, true);
     assert.equal(afterRun.discoveryAcknowledged, true);
+  });
+  it("hands best-effort discovery failures to the prepared agent after safe drain", async () => {
+    const value = await rpcResult(
+      coordinator.earlyChatScenario(false, false, false, false, true)
+    );
+    assert.equal(
+      value.unknownHeld.starts,
+      0,
+      "an unresolved operation still owns execution"
+    );
+    assert.equal(
+      value.after.starts,
+      1,
+      "drained discovery does not require a second acknowledgment"
+    );
+    const run = value.snapshot.records.find(
+      (row) => row.key === "run:run-0"
+    ).value;
+    assert.equal(run.discoveryBestEffort, true);
+    assert.equal(run.discoveryAcknowledged, undefined);
   });
   for (const terminal of [false, true])
     it(`coordinator 14: earlyChatScenario (terminal=${terminal})`, async () => {
@@ -757,6 +802,37 @@ describe("coordinator", () => {
         (job) => job.status === "failed" || job.status === "interrupted"
       ),
       "late queue notification cannot resurrect cancelled jobs"
+    );
+  });
+  it("continues a vulnerability hunt after an empty independent review", async () => {
+    const snapshot = await rpcResult(
+      coordinator.reviewContinuationForTest("none")
+    );
+    const run = snapshot.records.find((row) => row.key === "run:run-0").value;
+    assert.equal(run.phase, "review");
+    assert.equal(run.wave, 1);
+    assert.equal(
+      snapshot.jobs.filter((job) => job.role === "primary").length,
+      1
+    );
+    await rpcResult(coordinator.cancelRun("run-0"));
+  });
+  it("finishes a vulnerability hunt after a confirmed finding or exhausted budget", async () => {
+    const confirmed = await rpcResult(
+      coordinator.reviewContinuationForTest("confirmed")
+    );
+    assert.equal(
+      confirmed.records.find((row) => row.key === "run:run-0").value.status,
+      "completed"
+    );
+    await reset();
+    coordinator = env.COORDINATOR.getByName("global");
+    const exhausted = await rpcResult(
+      coordinator.reviewContinuationForTest("none", 2)
+    );
+    assert.equal(
+      exhausted.records.find((row) => row.key === "run:run-0").value.status,
+      "failed"
     );
   });
   it("replayed revision keeps immutable identity at capacity", async () => {

@@ -951,8 +951,22 @@ export class ProbeCoordinator extends Coordinator {
     );
     this.write(`blob:${commit}:${doc.reportPath}`, "# Owned report");
     this.write(`blob:${commit}:proof.txt`, "Owned proof");
-    this.write("job:job-0", { ...job, findingsVersion: 1 });
+    this.write("job:job-0", { ...job, findingsVersion: 1, finishedAt: 2 });
     const bundle = await this.findings("run-0", "job-0");
+    this.write("job:earlier-report", {
+      ...job,
+      id: "earlier-report",
+      outputCommit: "b".repeat(40),
+      finishedAt: 1
+    });
+    this.write("job:failed-report", {
+      ...job,
+      id: "failed-report",
+      status: "failed",
+      finishedAt: 3
+    });
+    const latest = await this.findings("run-0", "");
+    const older = await this.findings("run-0", "earlier-report");
     let wrong: string | undefined;
     try {
       await this.findings("run-0", "other");
@@ -973,7 +987,7 @@ export class ProbeCoordinator extends Coordinator {
     } catch (e) {
       missing = String(e);
     }
-    return { legacy, bundle, wrong, missing };
+    return { legacy, bundle, latest, older, wrong, missing };
   }
   async directDeleteScenario(mode: string) {
     if (mode === "tool-packs") {
@@ -2035,6 +2049,74 @@ export class ProbeCoordinator extends Coordinator {
     this.write(`run:${runId}`, { ...JSON.parse(row.value), maxJobs });
     return { maxJobs };
   }
+  async reviewContinuationForTest(
+    finding: "none" | "confirmed",
+    maxJobs = 128
+  ) {
+    await this.seed(1, "coder", false);
+    const read = <T>(key: string): T =>
+      JSON.parse(
+        this.ctx.storage.sql
+          .exec<{ value: string }>(
+            "SELECT value FROM native_records WHERE key=?",
+            key
+          )
+          .one().value
+      );
+    const run = read<RunRecord>("run:run-0"),
+      job = read<AttemptRecord>("job:job-0"),
+      root = ".pentagi/evidence/job-0";
+    this.write("run:run-0", {
+      ...run,
+      task: "Find vulnerabilities.",
+      phase: "reporting",
+      maxJobs
+    });
+    this.write("job:job-0", {
+      ...job,
+      role: "reporter",
+      status: "completed",
+      findingsVersion: 1,
+      outputCommit: run.headCommit,
+      finishedAt: Date.now(),
+      terminal: {
+        tool: "report_result",
+        arguments: {
+          success: true,
+          result: "Independent assessment",
+          message: "Reviewed"
+        }
+      }
+    });
+    this.write(`blob:${run.headCommit}:${root}/assessment.md`, "# Review\n");
+    this.write(
+      `blob:${run.headCommit}:${root}/findings.json`,
+      JSON.stringify({
+        version: 1,
+        coverage: "complete",
+        summary: "Independent review",
+        reportPath: `${root}/assessment.md`,
+        findings:
+          finding === "confirmed"
+            ? [
+                {
+                  id: "confirmed-1",
+                  title: "Verified issue",
+                  severity: "medium",
+                  status: "confirmed",
+                  target: "https://owned.invalid/",
+                  summary: "Verified impact",
+                  evidence: "Reproduced in the owned fixture",
+                  report: "## Impact\nVerified impact.",
+                  evidencePaths: []
+                }
+              ]
+            : []
+      })
+    );
+    await (this as unknown as { advance(): Promise<void> }).advance();
+    return this.snapshot();
+  }
   async projectionBlock(blocked: boolean) {
     this.write("probe:block-projection", blocked);
     return { blocked };
@@ -2236,7 +2318,8 @@ export class ProbeCoordinator extends Coordinator {
     stop = false,
     terminalPreparation = false,
     queuedRejected = false,
-    rejectedPrimary = false
+    rejectedPrimary = false,
+    bestEffort = false
   ) {
     await this.seed(queuedRejected ? 2 : 1, "coder", false);
     if (queuedRejected) await this.recoverNow();
@@ -2272,7 +2355,7 @@ export class ProbeCoordinator extends Coordinator {
       execution: {
         kind: "discovery",
         url: run.target!.url,
-        profile: "whatweb-polite-v1"
+        profile: bestEffort ? "http-probes-v3" : "whatweb-polite-v1"
       }
     });
     this.write("run:" + run.id, {
@@ -2290,6 +2373,7 @@ export class ProbeCoordinator extends Coordinator {
         }
       },
       initialUploadIds: [file.id],
+      ...(bestEffort ? { discoveryBestEffort: true } : {}),
       phase: "discovery"
     });
     await this.recoverNow();
@@ -2456,11 +2540,12 @@ export class ProbeCoordinator extends Coordinator {
         throw new Error("409: Injected primary input rejection");
       };
     }
-    await this.onboardingAction(
-      "discovery.acknowledge",
-      { runId: run.id },
-      "fixture"
-    );
+    if (!bestEffort)
+      await this.onboardingAction(
+        "discovery.acknowledge",
+        { runId: run.id },
+        "fixture"
+      );
     await this.recoverNow();
     for (
       let n = 0;
@@ -2535,6 +2620,36 @@ export class ProbeCoordinator extends Coordinator {
       Date.now() + 1000
     );
     return { armed: true };
+  }
+  async terminalReceiptBeforeReset() {
+    await this.seed(1, "coder", true);
+    await this.fire();
+    const active = (
+      this as unknown as { activeReceipt(): { id: string } | undefined }
+    ).activeReceipt();
+    if (active?.id !== "job-0") throw new Error("expected active receipt");
+    const row = this.ctx.storage.sql
+      .exec<{ value: string }>(
+        "SELECT value FROM native_records WHERE key='job:job-0'"
+      )
+      .one();
+    this.write("job:job-0", {
+      ...(JSON.parse(row.value) as AttemptRecord),
+      status: "completed",
+      finishedAt: Date.now()
+    });
+    const future = Date.now() + 60_000;
+    await this.lifecycle.jobs.reschedule("pentcloud:recover", future);
+    return { future, active: active.id };
+  }
+  async terminalReceiptAfterReset() {
+    await this.lifecycle.start();
+    return {
+      active: (
+        this as unknown as { activeReceipt(): { id: string } | undefined }
+      ).activeReceipt()?.id,
+      heartbeat: this.lifecycle.jobs.get("pentcloud:recover")?.time
+    };
   }
   async nativeMemoryHandoff() {
     await this.lifecycle.start();

@@ -50,6 +50,9 @@ it("adds a distinct BYOK choice with native catalog metadata and the exact conne
     baseURL: `https://opencode.ai/inference/custom/${connectionId}`,
     apiKey: "fixture-key"
   });
+  expect(nativeProvider(byok!, "fixture-key").settings).not.toHaveProperty(
+    "timeout"
+  );
   expect(normalizeCatalog(raw, "go", providers)).toEqual([]);
 });
 it("rejects forged BYOK destinations/identities while preserving existing Console pins", () => {

@@ -34,6 +34,13 @@ export async function openCodeTool(name: string, entry: ToolSet[string]) {
       )
         for await (const value of pending) output = value;
       signal.throwIfAborted();
+      if (
+        output &&
+        typeof output === "object" &&
+        "error" in output &&
+        typeof output.error === "string"
+      )
+        throw new Error(output.error);
       // The SDK's model conversion bounds file reads and summarizes screenshots;
       // binary image data must never become a giant text prompt.
       const model = tool.toModelOutput
@@ -43,6 +50,9 @@ export async function openCodeTool(name: string, entry: ToolSet[string]) {
             toolCallId: id
           })
         : { type: "json" as const, value: output };
+      if (model.type === "error-text") throw new Error(model.value);
+      if (model.type === "error-json")
+        throw new Error(JSON.stringify(model.value));
       const content =
         model.type === "content"
           ? model.value
@@ -55,7 +65,7 @@ export async function openCodeTool(name: string, entry: ToolSet[string]) {
                   : "[Binary file omitted from text model context]"
               )
               .join("\n")
-          : model.type === "text" || model.type === "error-text"
+          : model.type === "text"
             ? model.value
             : JSON.stringify(model);
       const result =

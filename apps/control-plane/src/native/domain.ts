@@ -76,7 +76,22 @@ export function identifier(value: unknown, label = "id"): string {
   return value;
 }
 export function publicJob(j: AttemptRecord) {
+  const result = j.terminal?.arguments?.result;
+  const content =
+    result && typeof result === "object" && "structuredContent" in result
+      ? result.structuredContent
+      : undefined;
+  const coverage =
+    content && typeof content === "object" && "coverage" in content
+      ? content.coverage
+      : undefined;
   return {
+    ...(j.execution?.profile === "http-probes-v3" &&
+    (coverage === "initial" ||
+      coverage === "partial" ||
+      coverage === "unavailable")
+      ? { discoveryCoverage: coverage }
+      : {}),
     ...((!j.inputError || j.conversation) && !j.execution
       ? { nativeSession: true }
       : {}),
@@ -117,6 +132,7 @@ export function publicRun(r: RunRecord) {
     createdAt: r.createdAt,
     phase: r.phase,
     ...(r.discoveryDrained ? { discoveryDrained: true } : {}),
+    ...(r.discoveryBestEffort ? { discoveryBestEffort: true } : {}),
     ...(r.discoveryAcknowledged ? { discoveryAcknowledged: true } : {}),
     ...(r.target
       ? {

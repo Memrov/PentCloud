@@ -3,10 +3,12 @@ import { exports } from "cloudflare:workers";
 import app from "../native/worker";
 import { Coordinator as CoreCoordinator } from "../native/coordinator";
 import { NativeAttempt as CoreAttempt } from "../native/attempt";
+import { AgentBrowser as CoreAgentBrowser } from "../native/agent-browser";
 import type { NativeEnv } from "../native/types";
 import type { ToolPackService } from "../../../../shared/tool-packs";
 export { NativeDynamicWorkerTail } from "../native/dynamic-worker-tail";
 export { OpenCodeConnectionTest } from "../native/model-test";
+export { InternalHostRouter } from "agents/browser";
 export { TargetEgress } from "../native/target-egress";
 export { ProofQueue, ProofAttempt, WorkspaceServiceProxy } from "../worker";
 export {
@@ -34,6 +36,11 @@ export class Coordinator extends CoreCoordinator {
   }
 }
 export class NativeAttempt extends CoreAttempt {
+  constructor(ctx: DurableObjectState, env: NativeEnv) {
+    super(ctx, nativeEnv(env));
+  }
+}
+export class AgentBrowser extends CoreAgentBrowser {
   constructor(ctx: DurableObjectState, env: NativeEnv) {
     super(ctx, nativeEnv(env));
   }

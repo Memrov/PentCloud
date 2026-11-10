@@ -21,7 +21,8 @@ export default defineConfig({
         },
         durableObjects: {
           COORDINATOR: { className: "RouterControl", useSQLite: true },
-          ATTEMPTS: { className: "RouterAttempt", useSQLite: true }
+          ATTEMPTS: { className: "RouterAttempt", useSQLite: true },
+          AGENT_BROWSERS: { className: "RouterBrowser", useSQLite: true }
         }
       }
     })

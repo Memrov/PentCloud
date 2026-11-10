@@ -404,7 +404,7 @@ test.describe("agent conversations and report reader", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportedParameters: ["tools"],
-        reasoningEfforts: ["default"]
+        reasoningEfforts: ["default", "max"]
       };
       page.on("pageerror", (error) => errors.push(error.message));
       await page.route("**/v1/ui/**", (route) => {
@@ -442,6 +442,11 @@ test.describe("agent conversations and report reader", () => {
             blockingRunIds: [],
             upstreamRoles: roles
           });
+        if (path.endsWith("/agent-connection"))
+          return json({
+            endpoint: "https://customer.example/mcp",
+            browser: true
+          });
         if (path.endsWith("/runtime-diagnostics"))
           return json({
             coordinator: {},
@@ -467,6 +472,37 @@ test.describe("agent conversations and report reader", () => {
       await browserExpect(
         page.getByRole("heading", { name: "Prompts and models", exact: true })
       ).toBeVisible();
+      await page
+        .getByRole("button", { name: "Connect your agent", exact: true })
+        .click();
+      await browserExpect(
+        page.getByText("https://customer.example/mcp", { exact: true })
+      ).toBeVisible();
+      await browserExpect(
+        page.getByText(
+          "Sign in through Cloudflare Access with your operator account.",
+          { exact: true }
+        )
+      ).toBeVisible();
+      await browserExpect(
+        page.getByText(/Your agent client must also run in the cloud/)
+      ).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth
+        )
+      ).toBe(true);
+      if (process.env.PENTCLOUD_CAPTURE_UI)
+        await page
+          .getByRole("link", { name: "Managed OAuth", exact: true })
+          .scrollIntoViewIfNeeded();
+      if (process.env.PENTCLOUD_CAPTURE_UI)
+        await page.screenshot({
+          path: `${process.env.PENTCLOUD_CAPTURE_UI}/pentcloud-agent-connection-${viewport.width}.png`
+        });
+      await page
+        .getByRole("button", { name: "Connect your agent", exact: true })
+        .click();
       if (viewport.width < 721) {
         await page
           .getByRole("combobox", { name: "Agent", exact: true })
@@ -484,6 +520,16 @@ test.describe("agent conversations and report reader", () => {
         .getByRole("combobox", { name: "Search connected models", exact: true })
         .fill("Alternate");
       await page.getByRole("option", { name: /Alternate fixture/ }).click();
+      await page
+        .getByRole("combobox", { name: "Reasoning effort", exact: true })
+        .click();
+      await page.getByRole("option", { name: "max", exact: true }).click();
+      await browserExpect(
+        page.getByRole("combobox", {
+          name: "Reasoning effort",
+          exact: true
+        })
+      ).toContainText("max");
       await page
         .getByRole("textbox", { name: "Coder prompt template", exact: true })
         .fill("Edited fixture instructions");
@@ -523,6 +569,17 @@ test.describe("agent conversations and report reader", () => {
         await page.screenshot({
           path: `${process.env.PENTCLOUD_CAPTURE_UI}/pentcloud-settings-${viewport.width}.png`
         });
+        if (viewport.width < 721) {
+          await page
+            .getByRole("combobox", {
+              name: "Reasoning effort",
+              exact: true
+            })
+            .scrollIntoViewIfNeeded();
+          await page.screenshot({
+            path: `${process.env.PENTCLOUD_CAPTURE_UI}/pentcloud-reasoning-${viewport.width}.png`
+          });
+        }
       }
     });
   test("keeps native questions, required fields, custom choices and permissions working with Kumo", async ({

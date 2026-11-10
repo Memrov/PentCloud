@@ -149,7 +149,8 @@ export function resetRole(
 
 export function applyModelToAll(
   roles: SettingsRoles,
-  model: string
+  model: string,
+  supportedEfforts: UIReasoningEffort[] = []
 ): SettingsRoles {
   return Object.fromEntries(
     SETTINGS_ROLES.map(({ id }) => [
@@ -157,9 +158,11 @@ export function applyModelToAll(
       {
         ...roles[id],
         model,
-        ...(model.startsWith("opencode-go:")
-          ? { reasoningEffort: "default" }
-          : {})
+        reasoningEffort:
+          supportedEfforts.length > 0 &&
+          !supportedEfforts.includes(roles[id].reasoningEffort)
+            ? "default"
+            : roles[id].reasoningEffort
       }
     ])
   ) as SettingsRoles;

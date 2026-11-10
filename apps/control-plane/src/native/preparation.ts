@@ -6,6 +6,7 @@ export const PREPARATION_INSTRUCTIONS =
 export function preparationTool(name: string): boolean {
   return [
     "computer_read",
+    "computer_read_bytes",
     "computer_ls",
     "computer_find",
     "computer_grep",

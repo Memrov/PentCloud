@@ -2,6 +2,43 @@ import { expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { openCodeTool } from "../src/native/cloudflare-tools";
 
+it.each(["returned error", "error-text", "error-json"] as const)(
+  "surfaces %s as an OpenCode tool failure",
+  async (format) => {
+    const tool = await openCodeTool("computer_write", {
+      inputSchema: z.object({}),
+      execute: async () =>
+        format === "returned error"
+          ? { error: "Write denied by workspace policy" }
+          : {},
+      ...(format === "returned error"
+        ? {}
+        : {
+            toModelOutput: () =>
+              format === "error-text"
+                ? { type: "error-text" as const, value: "Write denied" }
+                : {
+                    type: "error-json" as const,
+                    value: { message: "Write denied" }
+                  }
+          })
+    });
+    await expect(
+      tool.execute({}, "call", new AbortController().signal)
+    ).rejects.toThrow("Write denied");
+  }
+);
+
+it("preserves a command's nonzero exit status for the model to interpret", async () => {
+  const tool = await openCodeTool("computer_exec", {
+    inputSchema: z.object({}),
+    execute: async () => ({ exitCode: 1, stdout: "", stderr: "No matches" })
+  });
+  expect(
+    (await tool.execute({}, "call", new AbortController().signal)).content
+  ).toContain('"exitCode":1');
+});
+
 it("validates SDK input, applies defaults and settles streaming tools", async () => {
   const tool = await openCodeTool("computer_exec", {
     inputSchema: z.object({ value: z.number().default(42) }),

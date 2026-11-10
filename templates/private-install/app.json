@@ -37,6 +37,10 @@
       {
         "name": "MODEL_TESTS",
         "class_name": "OpenCodeConnectionTest"
+      },
+      {
+        "name": "AGENT_BROWSERS",
+        "class_name": "AgentBrowser"
       }
     ],
     "code_update_strategy": {
@@ -55,6 +59,10 @@
     {
       "tag": "v2-native-model-tests",
       "new_sqlite_classes": ["OpenCodeConnectionTest"]
+    },
+    {
+      "tag": "v3-agent-browser",
+      "new_sqlite_classes": ["AgentBrowser"]
     }
   ],
   "worker_loaders": [

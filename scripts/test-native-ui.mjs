@@ -401,6 +401,12 @@ test("native UI contracts across desktop and mobile", async ({
       sessionControls.permissions = [];
       return json({ replied: true });
     }
+    if (path === "/v1/ui/agent-connection")
+      return json({
+        endpoint: origin + "/mcp",
+        browser: true,
+        authentication: "cloudflare-access-managed-oauth"
+      });
     if (path === "/v1/ui/settings/models") return json(catalog);
     if (path === "/v1/ui/settings") {
       if (request.method() === "PUT") {

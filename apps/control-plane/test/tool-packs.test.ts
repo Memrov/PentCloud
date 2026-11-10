@@ -158,6 +158,7 @@ describe("pack execution uses the existing remote receipt namespace", () => {
 });
 
 import { toolResultFiles, EVIDENCE_FILE_LIMIT } from "../src/native/evidence";
+import { digest } from "../src/native/domain";
 it("preserves oversized Unicode tool results in bounded evidence parts", () => {
   const record = {
     stdout: "🧪".repeat(EVIDENCE_FILE_LIMIT / 2),
@@ -175,6 +176,10 @@ it("preserves oversized Unicode tool results in bounded evidence parts", () => {
   );
   let offset = 0;
   for (const f of files.slice(0, -1)) {
+    // Every part must remain readable by the text evidence tool independently.
+    expect(() =>
+      new TextDecoder("utf-8", { fatal: true }).decode(f.bytes)
+    ).not.toThrow();
     bytes.set(f.bytes, offset);
     offset += f.bytes.length;
   }
@@ -195,6 +200,76 @@ it("keeps the discovery HTTP status outside a truncated model preview", () => {
   expect(result.httpStatus).toBe(200);
   expect(result.modelPreviewTruncated).toBe(true);
 });
+
+it.each(["🧪".repeat(10000), "\u0000".repeat(20000), "\\".repeat(40000)])(
+  "bounds scanner previews after UTF-8 encoding and JSON escaping",
+  (stdout) => {
+    const preview = packResultPreview({ stdout, exitCode: 0 }, "http", [
+      "evidence.json"
+    ]);
+    expect(
+      new TextEncoder().encode(JSON.stringify(preview)).byteLength
+    ).toBeLessThan(32768);
+    expect(preview.evidence).toEqual(["evidence.json"]);
+    expect(preview.exitCode).toBe(0);
+  }
+);
+
+it("preserves failure signals when an oversized package error is retained as evidence", () => {
+  const preview = packResultPreview(
+    {
+      error: "Denied: " + "🧪".repeat(10000),
+      rejected: true,
+      notExecuted: true,
+      isError: true
+    },
+    "metasploit",
+    ["evidence.json"]
+  );
+  expect(preview).toMatchObject({
+    rejected: true,
+    notExecuted: true,
+    isError: true,
+    evidence: ["evidence.json"]
+  });
+  expect(preview.error).toMatch(/^Denied:/);
+  expect(
+    new TextEncoder().encode(JSON.stringify(preview)).byteLength
+  ).toBeLessThan(32768);
+});
+
+it("maps an MCP tool error to the SDK failure envelope", () => {
+  const preview = packResultPreview(
+    { isError: true, content: [{ type: "text", text: "backend failure" }] },
+    "metasploit",
+    ["evidence.json"]
+  );
+  expect(preview.isError).toBe(true);
+  expect(preview.error).toMatch(/MCP error/);
+  expect(preview.evidence).toEqual(["evidence.json"]);
+});
+
+it.each([
+  { name: "short scanner result", value: { stdout: "", exitCode: -1 } },
+  {
+    name: "truncated scanner output",
+    value: { stdout: "x".repeat(40000), exitCode: -1 }
+  },
+  {
+    name: "truncated structured output",
+    value: { data: "x".repeat(40000), exitCode: -1 }
+  }
+])(
+  "preserves provenance through JSON publication of $name",
+  async ({ value }) => {
+    const preview = packResultPreview(value, "web-context", ["evidence.json"]);
+    expect(preview.httpStatus).toBeNull();
+    expect(preview.evidence).toEqual(["evidence.json"]);
+    expect(await digest(preview)).toBe(
+      await digest(JSON.parse(JSON.stringify(preview)))
+    );
+  }
+);
 
 it("replays completed file work without rereading a changed input", async () => {
   const s = storage();

@@ -84,7 +84,11 @@ import {
   readSource,
   type ImportReceipt
 } from "./source-context";
-import { parseByokProviders, type OpenCodeRoute } from "./opencode-models";
+import {
+  effectiveReasoningEffort,
+  parseByokProviders,
+  type OpenCodeRoute
+} from "./opencode-models";
 import type { NewRunInput } from "./types";
 import { MaterialStore, type StageMaterialInput } from "./material-store";
 import {
@@ -300,6 +304,20 @@ export class Coordinator extends DurableObject<NativeEnv> {
     .use(this.webSockets);
   private readonly launched = new Set<string>();
   private recovering: Promise<void> | undefined;
+  private recoveryStage: string | undefined;
+  private recoveryFailure:
+    | { at: number; stage: string; message: string }
+    | undefined;
+  private recoveryObservation:
+    | {
+        at: number;
+        id: string;
+        state: string;
+        drained: boolean;
+        terminal: boolean;
+        reason: string;
+      }
+    | undefined;
   private readonly initializing = new Map<
     string,
     Promise<{ repo: string; remote: string; head: string }>
@@ -396,8 +414,15 @@ export class Coordinator extends DurableObject<NativeEnv> {
     for (const schedule of await this.scheduler.list())
       if (schedule.callback === "recover")
         await this.scheduler.cancel(schedule.id);
-    // Preserve a pending native backoff across restart instead of pulling it forward.
-    if (!this.lifecycle.jobs.get(RECOVERY_JOB_ID)) await this.wake();
+    // A terminal receipt still owns the slot until recovery observes its drain.
+    // Rearm that handoff after a reset even if the native heartbeat row survived.
+    // wake() preserves any pending platform backoff.
+    const active = this.activeReceipt();
+    if (
+      !this.lifecycle.jobs.get(RECOVERY_JOB_ID) ||
+      (active && terminal(this.job(active.id).status))
+    )
+      await this.wake();
     await this.publish();
   }
   onJob({ job }: LifecycleJobContext): LifecycleJobOutcome {
@@ -416,6 +441,16 @@ export class Coordinator extends DurableObject<NativeEnv> {
       this.ctx.waitUntil(
         work
           .catch(async (error) => {
+            const failure = {
+              at: Date.now(),
+              stage: this.recoveryStage ?? "unknown",
+              message: this.safe(String(error))
+            };
+            this.recoveryFailure = failure;
+            console.error(
+              `pentagi.native.recovery_failed stage=${failure.stage}`,
+              failure
+            );
             try {
               this.activity(
                 await this.activityWriter("coordinator"),
@@ -423,14 +458,13 @@ export class Coordinator extends DurableObject<NativeEnv> {
                 "recovery.failed",
                 undefined,
                 undefined,
-                this.safe(String(error))
+                failure.message
               );
-            } catch {
-              console.error("pentagi.native.recovery_failed");
-            }
+            } catch {}
           })
           .finally(() => {
             if (this.recovering === work) this.recovering = undefined;
+            this.recoveryStage = undefined;
           })
       );
     } else this.lifecycle.trackAlarmWork(this.recovering);
@@ -444,9 +478,17 @@ export class Coordinator extends DurableObject<NativeEnv> {
       runtimeVersion(this.env)
     );
     this.put("platform:recovery", recovery);
+    const stage = this.recoveryStage ?? "unknown";
     if (recovery.sealed)
-      console.error("pentagi.native.coordinator_memory", recovery);
-    else console.warn("pentagi.native.coordinator_memory", recovery);
+      console.error(
+        `pentagi.native.coordinator_memory stage=${stage}`,
+        recovery
+      );
+    else
+      console.warn(
+        `pentagi.native.coordinator_memory stage=${stage}`,
+        recovery
+      );
     if (recovery.sealed) await this.lifecycle.jobs.cancel(RECOVERY_JOB_ID);
     else if (recovery.nextTime !== undefined)
       await this.lifecycle.jobs.reschedule(RECOVERY_JOB_ID, recovery.nextTime);
@@ -472,7 +514,9 @@ export class Coordinator extends DurableObject<NativeEnv> {
   /** A read-only snapshot never starts lifecycle capabilities or resumes an attempt. */
   async diagnostics() {
     const active = this.activeReceipt(),
-      jobs = this.orderedJobs();
+      jobs = this.orderedJobs(),
+      heartbeatDueAt = this.lifecycle.jobs.get(RECOVERY_JOB_ID)?.time ?? null,
+      alarmDueAt = await this.ctx.storage.getAlarm();
     const waiting = jobs.filter(
       (job) =>
         job.status === "created" && this.run(job.runId).phase !== "cancelled"
@@ -484,6 +528,16 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return {
       coordinator: {
         ...(recovery ? { recovery } : {}),
+        heartbeatDueAt,
+        alarmDueAt,
+        recoveryInFlight: Boolean(this.recovering),
+        recoveryStage: this.recoveryStage ?? null,
+        lastRecoveryFailure: this.recoveryFailure ?? null,
+        lastRecoveryObservation: this.recoveryObservation ?? null,
+        activeJobStatus: active ? this.job(active.id).status : null,
+        publicationPending: Boolean(
+          active && this.get(`publication:${active.input.runId}`)
+        ),
         ...(runtimeVersion(this.env)
           ? { version: runtimeVersion(this.env) }
           : {})
@@ -614,14 +668,17 @@ export class Coordinator extends DurableObject<NativeEnv> {
     });
   }
   private async recover() {
+    this.recoveryStage = "expire";
     this.loginChallenges.expire();
     this.ctx.storage.sql.exec(
       "DELETE FROM native_records WHERE key LIKE 'target-auth:%' OR (key LIKE 'browser-auth:%' AND json_extract(value,'$.expiresAt')<=?)",
       Date.now()
     );
     if (recoveryPending(this.get<RuntimeRecovery>("platform:recovery"))) return;
+    this.recoveryStage = "publications";
     for (const receipt of this.list<Publication | null>("publication:"))
       if (receipt) await this.projectAccepted(receipt.runId);
+    this.recoveryStage = "conversations";
     for (const [id] of this.ctx.storage.sql
       .exec<{ key: string }>(
         "SELECT key FROM native_records WHERE key LIKE 'conversation:%'"
@@ -652,11 +709,24 @@ export class Coordinator extends DurableObject<NativeEnv> {
         );
       }
     }
+    this.recoveryStage = "active";
     let active = this.activeReceipt();
     if (active) {
       const observedId = active.id,
         execution = await this.attempt(active.id).execution();
-      if (this.activeReceipt()?.id !== observedId) return;
+      const observation = {
+        at: Date.now(),
+        id: observedId,
+        state: execution.state,
+        drained: execution.drained,
+        terminal: terminal(this.job(observedId).status),
+        reason: "observed"
+      };
+      this.recoveryObservation = observation;
+      if (this.activeReceipt()?.id !== observedId) {
+        observation.reason = "owner-changed";
+        return;
+      }
       if (
         execution.recovery &&
         canonical(this.job(active.id).recovery) !==
@@ -685,9 +755,13 @@ export class Coordinator extends DurableObject<NativeEnv> {
       if (execution.result && !terminal(this.job(active.id).status))
         await this.complete(execution.result);
       active = this.activeReceipt();
-      if (active?.id !== observedId) return;
+      if (active?.id !== observedId) {
+        observation.reason = "owner-changed-after-result";
+        return;
+      }
       if (active && terminal(this.job(active.id).status)) {
         if (!execution.drained) {
+          observation.reason = "not-drained";
           if (this.job(active.id).status === "interrupted")
             await this.attempt(active.id).cancel();
           return;
@@ -700,12 +774,15 @@ export class Coordinator extends DurableObject<NativeEnv> {
             this.put("active", null);
           }
         });
+        observation.reason = "cleared";
       } else if (active) {
+        observation.reason = "active-running";
         if (recoveryPending(execution.recovery)) return;
         this.launch(active);
         return;
       }
     }
+    this.recoveryStage = "advance";
     await this.advance();
     await this.prepareNextMaterials();
     this.drainUnadmittedDiscovery();
@@ -1120,7 +1197,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
       !discoveries.length ||
       (!!run.discoveryDrained &&
         (!discoveries.some((job) => job.status !== "completed") ||
-          run.discoveryAcknowledged === true))
+          run.discoveryAcknowledged === true ||
+          run.discoveryBestEffort === true))
     );
   }
   async modelCredential(id: string) {
@@ -1488,7 +1566,8 @@ export class Coordinator extends DurableObject<NativeEnv> {
     const early =
       !run.discoveryDrained ||
       (discoveries.some((j) => j.status !== "completed") &&
-        !acknowledgeFailure);
+        !acknowledgeFailure &&
+        !run.discoveryBestEffort);
     const ids = normalizeUploadIds([
       ...(run.initialUploadIds ?? []),
       ...(job.materialUploadIds ?? [])
@@ -2615,14 +2694,16 @@ export class Coordinator extends DurableObject<NativeEnv> {
   async findings(runId: string, jobId: string) {
     await this.start();
     const run = this.run(runId),
-      job = this.jobs(runId).find(
+      jobs = this.jobs(runId).filter(
         (j) =>
-          j.id === jobId &&
           j.role === "reporter" &&
           j.status === "completed" &&
           j.outputCommit &&
           j.terminal?.tool === "report_result"
-      );
+      ),
+      job = jobId
+        ? jobs.find((j) => j.id === jobId)
+        : jobs.sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))[0];
     if (!job) throw new Error("404: accepted reporter is unavailable");
     using repo = await this.env.ARTIFACTS.get(run.repo);
     const bundle = await readFindings(
@@ -2633,7 +2714,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     return {
       version: 1,
       runId,
-      jobId,
+      jobId: job.id,
       commit: job.outputCommit!,
       ...(bundle ? { bundle } : {})
     };
@@ -3405,6 +3486,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       createdAt: Date.now(),
       wave: 0,
       phase: "discovery",
+      discoveryBestEffort: true,
       target,
       ...(programAccess ? { programAccess } : {}),
       authorization: {
@@ -3413,14 +3495,14 @@ export class Coordinator extends DurableObject<NativeEnv> {
         disclosureVersion: "2026-11-01"
       },
       maxDepth: 4,
-      maxJobs: 48,
+      maxJobs: 128,
       ...(uploadIds.length ? { initialUploadIds: uploadIds } : {})
     };
     const job = await this.makeJob(
       run,
       "pentester",
       "native_discovery",
-      { task: run.task, target: target.url, profile: "whatweb-stealthy-v2" },
+      { task: run.task, target: target.url, profile: "http-probes-v3" },
       undefined,
       undefined,
       `primary-${(await digest({ run: id, initial: true })).slice(0, 32)}`,
@@ -3429,7 +3511,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
     job.execution = {
       kind: "discovery",
       url: target.url,
-      profile: "whatweb-stealthy-v2"
+      profile: "http-probes-v3"
     };
     const writer = await this.activityWriter(id, true);
     const pushes: Promise<unknown>[] = [];
@@ -3539,7 +3621,10 @@ export class Coordinator extends DurableObject<NativeEnv> {
         ? {
             ...settings,
             model: run.modelsByRole[role].id,
-            reasoningEffort: "default"
+            reasoningEffort: effectiveReasoningEffort(
+              run.modelsByRole[role],
+              settings.reasoningEffort
+            )
           }
         : settings,
       ...(run.modelsByRole ? { modelConfig: run.modelsByRole[role] } : {}),
@@ -3978,7 +4063,33 @@ export class Coordinator extends DurableObject<NativeEnv> {
               (this.get<number>(`order:${a.id}`) ?? 0)
         )[0];
       if (!last) continue;
-      if (last.role === "reporter") {
+      const bugHunt =
+        /\b(?:find|discover|identify|hunt)\b.{0,120}\bvulnerabilit(?:y|ies)\b/i.test(
+          expected.task
+        );
+      const reporterSuccess =
+        last.status === "completed" &&
+        last.terminal?.tool === "report_result" &&
+        last.terminal.arguments?.success !== false;
+      const confirmedFinding =
+        bugHunt && reporterSuccess && last.findingsVersion === 1
+          ? (
+              await this.findings(expected.id, last.id)
+            ).bundle?.document.findings.some(
+              (finding) =>
+                finding.status === "confirmed" &&
+                !["info", "unknown"].includes(finding.severity)
+            )
+          : false;
+      const success =
+        reporterSuccess && (!bugHunt || confirmedFinding === true);
+      const continueResearch =
+        last.role === "reporter" &&
+        bugHunt &&
+        !success &&
+        last.terminal?.tool === "report_result" &&
+        jobs.length < expected.maxJobs - 1;
+      if (last.role === "reporter" && !continueResearch) {
         const writer = await this.activityWriter(expected.id);
         this.ctx.storage.transactionSync(() => {
           const run = this.run(expected.id);
@@ -3987,10 +4098,6 @@ export class Coordinator extends DurableObject<NativeEnv> {
             this.jobs(run.id).some((j) => !terminal(j.status))
           )
             return;
-          const success =
-            last.status === "completed" &&
-            last.terminal?.tool === "report_result" &&
-            last.terminal.arguments?.success !== false;
           this.put(`run:${run.id}`, {
             ...run,
             phase: "completed",
@@ -4013,28 +4120,42 @@ export class Coordinator extends DurableObject<NativeEnv> {
       }
       if (outstanding(this.admissionJobs()) >= 3) continue;
       const role: Role =
-        expected.phase === "reporting" ||
-        expected.wave >= 8 ||
-        jobs.length >= expected.maxJobs - 1
+        !continueResearch &&
+        (expected.phase === "reporting" || jobs.length >= expected.maxJobs - 1)
           ? "reporter"
           : "primary";
-      const context = jobs
+      const completed = jobs
         .filter((j) => j.terminal || j.inputError)
-        .map((j) => ({
-          id: j.id,
-          role: j.role,
-          status: j.status,
-          commit: j.outputCommit,
-          result: j.terminal,
-          ...(j.inputError ? { input_error: j.inputError } : {})
-        }));
+        .sort(
+          (a, b) =>
+            (a.finishedAt ?? a.createdAt) - (b.finishedAt ?? b.createdAt) ||
+            (this.get<number>(`order:${a.id}`) ?? 0) -
+              (this.get<number>(`order:${b.id}`) ?? 0)
+        );
+      const context = completed.slice(-24).map((j) => ({
+        id: j.id,
+        role: j.role,
+        status: j.status,
+        commit: j.outputCommit,
+        result: j.terminal,
+        ...(j.inputError ? { input_error: j.inputError } : {})
+      }));
       const args = {
         task: expected.task,
         instructions:
           role === "reporter"
             ? "Synthesize accepted findings and evidence; call report_result."
-            : "Review the accepted work and findings. Delegate only necessary remaining work, then yield. Call done when the objective is complete.",
-        results: context
+            : continueResearch
+              ? "Review the reporter's accepted assessment and continue the authorized vulnerability hunt. Pursue unresolved work or a new in-scope hypothesis, then yield; call done when ready for independent review."
+              : "Review the accepted work and findings. Delegate only necessary remaining work, then yield. Call done when the objective is complete.",
+        results: context,
+        earlierResultCount: completed.length - context.length,
+        ...(completed.length > context.length
+          ? {
+              earlierResultsPath:
+                ".pentagi/jobs/<job-id>/result.json in the accepted workspace"
+            }
+          : {})
       };
       const next = await this.makeJob(
           expected,

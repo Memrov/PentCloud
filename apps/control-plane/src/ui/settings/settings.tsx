@@ -53,6 +53,7 @@ import {
 import { PromptEditor } from "./prompt-editor";
 import { RuntimeRecoveryPanel } from "../components/runtime-recovery";
 import { ThemeControl } from "../components/theme-control";
+import { AgentConnection } from "./agent-connection";
 
 export default function Settings({
   embedded = false
@@ -242,6 +243,7 @@ export default function Settings({
             dirty={dirty}
             stale={catalog.stale}
           />
+          <AgentConnection />
           {error && (
             <Banner
               className="settings-banner"
@@ -329,7 +331,13 @@ export default function Settings({
                       variant="ghost"
                       disabled={disabled}
                       onClick={() =>
-                        setDraft(applyModelToAll(draft, selected.model))
+                        setDraft(
+                          applyModelToAll(
+                            draft,
+                            selected.model,
+                            selectedModel?.reasoningEfforts ?? []
+                          )
+                        )
                       }
                     >
                       Apply to all roles
@@ -358,7 +366,7 @@ export default function Settings({
                 <div className="settings-reasoning-field grid gap-4">
                   <Select<SettingsRoles[SettingsRoleId]["reasoningEffort"]>
                     label="Reasoning effort"
-                    description="OpenCode Go uses the model default"
+                    description="Default uses the strongest supported effort for new analysis"
                     items={reasoningOptions.map((effort) => ({
                       value: effort,
                       label: effort

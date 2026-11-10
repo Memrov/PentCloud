@@ -12,6 +12,11 @@ issuer, audience and expiry with JOSE. Arbitrary bearer text does not replace
 that check. Browser mutations and WebSocket upgrades reject foreign origins.
 Admitted operators share the installation's work; this is not tenant isolation.
 
+For renewable, per-user remote MCP access and a private Cloudflare UI browser,
+see [connect an agent](agent-connection.md). The endpoint uses this same Access
+identity validation and existing application routes. Account-administration
+credentials are not required by connected agents.
+
 New installations supply tool-pack capabilities through private native bindings
 with task ownership and bounded-profile checks. For retained shared-Kali
 installations, the gateway's default public HTTP handler returns 404 and

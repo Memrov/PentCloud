@@ -110,6 +110,14 @@ describe("settings UI model", () => {
       applyModelToAll(reset, "opencode-go:deepseek-v4-pro").searcher
         .searchProvider
     ).toBe("exa");
+    expect(
+      applyModelToAll(reset, "opencode-go:deepseek-v4-pro").searcher
+        .reasoningEffort
+    ).toBe("max");
+    expect(
+      applyModelToAll(reset, "opencode-go:other", ["default", "high"]).searcher
+        .reasoningEffort
+    ).toBe("default");
     expect(saved.searcher.searchProvider).toBeUndefined();
   });
 });

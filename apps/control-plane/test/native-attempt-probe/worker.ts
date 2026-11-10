@@ -379,7 +379,48 @@ export class ProbeAttempt extends NativeAttempt {
           apiCredential: async () => ({ targetURL: "https://example.com/" }),
           assertConversation: async () => {},
           assertEvidenceOwner: async () => {},
+          readEvidence: async (
+            requester: string,
+            job: string,
+            path: string
+          ) => {
+            if (
+              requester !== job ||
+              !path.startsWith(`.pentagi/evidence/${job}/`)
+            )
+              throw new Error("Fixture evidence ownership mismatch");
+            const published =
+              (await ctx.storage.get<Record<string, string>>(
+                "fixture:publishedEvidence"
+              )) ?? {};
+            const bytes = new Uint8Array(
+              await new Response(
+                await this.workspace.fs.readFile(`${this.directory}/${path}`)
+              ).arrayBuffer()
+            );
+            if (
+              !published[path] ||
+              (await evidenceBytesHash(bytes)) !== published[path]
+            )
+              throw new Error(
+                "Fixture evidence has not been published and verified"
+              );
+            return new Response(bytes);
+          },
           recordEvidence: async (_id: string, receipt: unknown) => {
+            const { manifestPath } = receipt as { manifestPath: string };
+            const manifest = JSON.parse(
+              await this.workspace.fs.readFile(
+                `${this.directory}/${manifestPath}`,
+                "utf8"
+              )
+            ) as { files: Array<{ path: string; sha256: string }> };
+            await ctx.storage.put(
+              "fixture:publishedEvidence",
+              Object.fromEntries(
+                manifest.files.map((file) => [file.path, file.sha256])
+              )
+            );
             const values =
               (await ctx.storage.get<unknown[]>("fixture:evidenceReceipts")) ??
               [];
@@ -489,9 +530,13 @@ export class ProbeAttempt extends NativeAttempt {
         await context.session.hook("http.request", async (event) => {
           const body = (await event.request.clone().json()) as {
             model: string;
+            reasoning_effort?: string;
           };
           await this.ctx.storage.put("fixture:pinnedModelRequest", {
             model: body.model,
+            ...(body.reasoning_effort
+              ? { reasoningEffort: body.reasoning_effort }
+              : {}),
             authenticated:
               event.request.headers.get("authorization") ===
               "Bearer fixture-model-key"
@@ -693,8 +738,9 @@ export class ProbeAttempt extends NativeAttempt {
       input.execution = {
         kind: "discovery",
         url: "http://127.0.0.1/",
-        profile:
-          kind === "native-discovery-legacy"
+        profile: kind.startsWith("native-discovery-http")
+          ? "http-probes-v3"
+          : kind === "native-discovery-legacy"
             ? "whatweb-polite-v1"
             : "whatweb-stealthy-v2"
       };
@@ -711,7 +757,11 @@ export class ProbeAttempt extends NativeAttempt {
       if (kind === "native-discovery-empty")
         await this.ctx.storage.put("fixture:whatwebEmpty", true);
     }
-    if (kind === "native-pinned-model" || kind === "sdk-terminal-cold") {
+    if (
+      kind === "native-pinned-model" ||
+      kind === "native-pinned-model-max" ||
+      kind === "sdk-terminal-cold"
+    ) {
       input.modelConfig = {
         id: "opencode:fixture-console",
         modelId: "fixture-console",
@@ -724,7 +774,8 @@ export class ProbeAttempt extends NativeAttempt {
         contextLength: 128000,
         outputLimit: 8192,
         compatibility: { reasoning_field: "reasoning_content" },
-        reasoningEfforts: ["default"],
+        reasoningEfforts:
+          kind === "native-pinned-model-max" ? ["default", "max"] : ["default"],
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportedParameters: [],
@@ -753,7 +804,9 @@ export class ProbeAttempt extends NativeAttempt {
           }
         })
       });
-      if (kind === "native-pinned-model") {
+      if (kind === "native-pinned-model-max")
+        input.settings.reasoningEffort = "max";
+      if (kind.startsWith("native-pinned-model")) {
         if (!origin) throw new Error("Scripted model origin is required");
         // The adviser publishes a text answer through the real execution path.
         input.role = "adviser";
@@ -785,7 +838,7 @@ export class ProbeAttempt extends NativeAttempt {
       fingerprint:
         kind === "toolbox-eviction" ||
         kind.startsWith("native-discovery") ||
-        kind === "native-pinned-model"
+        kind.startsWith("native-pinned-model")
           ? await digest(input)
           : "local-probe",
       prompt: "Probe",

@@ -189,11 +189,6 @@ function validateAndNormalizeRoles(
       !isSearchProvider(value.searchProvider)
     )
       throw new Error(`${role} search provider is invalid`);
-    if (
-      value.model.startsWith("opencode-go:") &&
-      value.reasoningEffort !== "default"
-    )
-      throw new Error(`${role} OpenCode Go requires default reasoning`);
     return [
       role,
       {

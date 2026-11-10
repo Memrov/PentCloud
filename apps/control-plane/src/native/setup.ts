@@ -298,6 +298,19 @@ export async function configureSetupAccess(
         type: "self_hosted",
         domain,
         session_duration: "24h",
+        oauth_configuration: {
+          enabled: true,
+          grant: { access_token_lifetime: "5m", session_duration: "168h" },
+          dynamic_client_registration: {
+            enabled: true,
+            allow_any_on_localhost: true,
+            allow_any_on_loopback: true,
+            allowed_uris: [
+              "https://chatgpt.com/connector_platform_oauth_redirect",
+              "https://chatgpt.com/connector/oauth/*"
+            ]
+          }
+        },
         policies: [
           {
             name: "Owner",

@@ -268,6 +268,49 @@ describe("native execution", () => {
     expect(v.noModel).toBe(0);
     expect(v.noScanner).toBe(0);
   });
+  it("publishes a timed-out tool-pack discovery without retrying the scanner", async () => {
+    const result = await probe("native-discovery-pack-timeout");
+    expect(result).toMatchObject({
+      modelRequests: 0,
+      modelKeyConfigured: false,
+      packRuns: 1,
+      result: {
+        status: "failed",
+        model: null,
+        executionKind: "discovery",
+        arguments: {
+          success: false,
+          scanStatus: "failed",
+          result: {
+            structuredContent: {
+              status: "failed",
+              http_status: null,
+              raw: { timedOut: true, error: "signal: killed" }
+            }
+          }
+        }
+      },
+      record: { status: "failed", model: null, execution_kind: "discovery" }
+    });
+    expect(result.result.outputCommit).toMatch(/^[a-f0-9]{40}$/);
+    expect(result.record.runtime_provenance).toEqual(result.result.runtime);
+    expect(result.replayed).toEqual(result.result);
+  });
+  it.each(["native-discovery-http", "native-discovery-http-failed"])(
+    "uses parallel native probes without starting scanners or models: %s",
+    async (kind) => {
+      const result = await probe(kind);
+      expect(result.httpMethods).toEqual(["HEAD", "GET"]);
+      expect(result.readies).toBe(0);
+      expect(result.modelRequests).toBe(0);
+      expect(result.result.model).toBeNull();
+      expect(result.result.status).toBe(
+        kind.endsWith("failed") ? "failed" : "completed"
+      );
+      expect(result.replayed).toEqual(result.result);
+      expect(result.evidence.length).toBeGreaterThan(0);
+    }
+  );
   it.each([
     "native-discovery",
     "native-discovery-failed",

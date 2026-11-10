@@ -21,6 +21,44 @@ export async function probeNativeDiscovery(
 ): Promise<Record<string, unknown>> {
   const { input, id, checks } = context;
 
+  if (context.kind.startsWith("native-discovery-http")) {
+    const methods: string[] = [];
+    context.attempt.targetFetch = async (request) => {
+      methods.push(request.method);
+      if (context.kind.endsWith("failed"))
+        throw new Error("Fixture unavailable");
+      return new Response(
+        request.method === "GET" ? "<title>Discovery fixture</title>" : null,
+        { status: 200 }
+      );
+    };
+    checks.httpMethods = methods;
+  }
+
+  if (context.kind === "native-discovery-pack-timeout") {
+    context.env.TOOL_PACKS = {
+      ready: async () => ({}),
+      run: async () => {
+        await context.ctx.storage.put(
+          "fixture:packRuns",
+          ((await context.ctx.storage.get<number>("fixture:packRuns")) ?? 0) + 1
+        );
+        return {
+          exitCode: -1,
+          timedOut: true,
+          truncated: false,
+          stdout: "",
+          stderr: "",
+          error: "signal: killed"
+        };
+      },
+      stop: async () => ({ stopped: true })
+    };
+    const state =
+      (await context.ctx.storage.get<Record<string, unknown>>("attempt"))!;
+    await context.ctx.storage.put("attempt", { ...state, toolPacks: true });
+  }
+
   // Exercise production admission too: bypassing run() hid stripped execution metadata.
   checks.result = await context.attempt.run(input);
   checks.record = JSON.parse(
@@ -35,6 +73,15 @@ export async function probeNativeDiscovery(
   checks.scannerArguments = await context.ctx.storage.get(
     "fixture:whatwebArguments"
   );
+  if (context.kind.startsWith("native-discovery-http")) {
+    checks.replayed = await context.attempt.run(input);
+    checks.readies = (await context.ctx.storage.get("fixture:readies")) ?? 0;
+    checks.evidence = (await context.ctx.storage.get("evidenceFiles")) ?? [];
+  }
+  if (context.kind === "native-discovery-pack-timeout") {
+    checks.replayed = await context.attempt.run(input);
+    checks.packRuns = await context.ctx.storage.get("fixture:packRuns");
+  }
   return checks;
 }
 export async function probePurgeFailure(
@@ -387,6 +434,16 @@ export async function probeJavascript(
   );
 
   return context.checks;
+}
+export async function probeJavascriptRoleTools(
+  context: ProbeScenarioContext
+): Promise<Record<string, unknown>> {
+  return {
+    result: await context.exec(
+      'import * as tools from "ws:tools"; export default () => Object.keys(tools).sort();',
+      "native-javascript"
+    )
+  };
 }
 export async function probePublish(
   context: ProbeScenarioContext
