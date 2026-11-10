@@ -219,6 +219,10 @@ export class FakeAttempt extends DurableObject<Bindings> {
   }
 }
 export class ProbeCoordinator extends Coordinator {
+  private artifactInfo!: {
+    get: (name: string) => Promise<{ name: string; remote: string }>;
+    create: (name: string) => Promise<object>;
+  };
   async bountyCheckErrorForTest() {
     const priorToken = Reflect.get(this.env, "CONTROL_TOKEN");
     const priorConnections = Reflect.get(this, "bountyConnections");
@@ -680,8 +684,17 @@ export class ProbeCoordinator extends Coordinator {
   }
 
   constructor(ctx: DurableObjectState, bindings: Bindings) {
-    const artifacts = {
+    const artifactInfo = {
       get: async (name: string) => ({
+        name,
+        remote: `https://example.invalid/${name}.git`
+      }),
+      create: async (_name: string) => ({})
+    };
+    const artifacts = {
+      create: async (name: string) => artifactInfo.create(name),
+      get: async (name: string) => ({
+        info: async () => artifactInfo.get(name),
         log: async () => {
           const row = ctx.storage.sql
             .exec<{
@@ -761,6 +774,7 @@ export class ProbeCoordinator extends Coordinator {
         }
       }
     } as unknown as NativeEnv);
+    this.artifactInfo = artifactInfo;
     this.workspace.artifacts.get = async (name: string) =>
       ({ name, remote: `https://example.invalid/${name}.git` }) as never;
     this.workspace.artifacts.delete = async (name: string) => {
@@ -1259,14 +1273,14 @@ export class ProbeCoordinator extends Coordinator {
   async createRaceScenario(mode: string) {
     await this.lifecycle.start();
     const repositories: string[] = [];
-    this.workspace.artifacts.get = async (name) => {
+    this.artifactInfo.get = async (name) => {
       if (!repositories.includes(name))
         throw Object.assign(new Error("missing"), { code: "NOT_FOUND" });
-      return { name, remote: `https://example.invalid/${name}.git` } as never;
+      return { name, remote: `https://example.invalid/${name}.git` };
     };
-    this.workspace.artifacts.create = async (name) => {
+    this.artifactInfo.create = async (name) => {
       repositories.push(name);
-      return {} as never;
+      return {};
     };
     this.workspace.artifacts.delete = async (name) => {
       repositories.splice(repositories.indexOf(name), 1);

@@ -3327,17 +3327,19 @@ export class Coordinator extends DurableObject<NativeEnv> {
     if (admitted && admitted.repo !== repo)
       throw new Error("409: run repository changed during initialization");
     if (!admitted) this.put(`project:owned:${runId}`, { runId, repo });
-    let info;
+    let info: { remote: string };
     try {
-      info = await this.workspace.artifacts.get(repo);
+      using handle = await this.env.ARTIFACTS.get(repo);
+      info = await handle.info();
     } catch (e) {
       if (!(e instanceof Error) || !("code" in e) || e.code !== "NOT_FOUND")
         throw e;
-      await this.workspace.artifacts.create(repo, {
+      await this.env.ARTIFACTS.create(repo, {
         description: "PentCloud immutable run evidence",
         setDefaultBranch: "main"
       });
-      info = await this.workspace.artifacts.get(repo);
+      using handle = await this.env.ARTIFACTS.get(repo);
+      info = await handle.info();
     }
     using remote = await this.env.ARTIFACTS.get(repo);
     const history = await remote.log({ ref: "main", limit: 1 });
