@@ -144,6 +144,7 @@ const roles = new Map<string, Role>([
   ["research-policy", "searcher"]
 ]);
 export function scenarioRole(kind: string): Role {
+  if (kind.startsWith("codex-role-")) return kind.slice(11) as Role;
   if (kind.startsWith("sdk-role-")) return kind.slice(9) as Role;
   if (
     ["package-only", "evidence", "memory"].some((prefix) =>

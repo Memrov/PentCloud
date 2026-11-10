@@ -843,6 +843,7 @@ export class ProbeAttempt extends NativeAttempt {
           : "local-probe",
       prompt: "Probe",
       promptDigest: "c".repeat(64),
+      ...(kind.startsWith("codex-role-") ? { toolPacks: true } : {}),
       ...(kind.startsWith("sdk-managed-specialist")
         ? { toolSkill: await pinToolSkill() }
         : {}),
@@ -855,6 +856,33 @@ export class ProbeAttempt extends NativeAttempt {
     if (kind === "prompt-compatibility")
       return probePromptCompatibility(context);
     if (kind.startsWith("package-only")) return probePackageOnly(context);
+    if (kind.startsWith("codex-role-")) {
+      const catalog = await this.codexToolCatalog();
+      const names = catalog.map((tool) => tool.name);
+      const read = await this.codexToolCall(
+        "computer_read",
+        { path: "README.md" },
+        "codex-read"
+      );
+      let crossRoleDenied = false;
+      try {
+        await this.codexToolCall("pentester", {}, "codex-cross-role");
+      } catch {
+        crossRoleDenied = true;
+      }
+      await this.cancel();
+      let lateCallDenied = false;
+      try {
+        await this.codexToolCall(
+          "computer_read",
+          { path: "README.md" },
+          "codex-after-cancel"
+        );
+      } catch {
+        lateCallDenied = true;
+      }
+      return { names, read, crossRoleDenied, lateCallDenied };
+    }
 
     const scenario = attemptScenario(kind);
     if (!scenario) throw new Error("Unknown probe");

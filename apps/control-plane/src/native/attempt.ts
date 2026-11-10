@@ -2878,6 +2878,93 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
       () => this.executeTool(name, raw, callId, signal)
     );
   }
+
+  /** Expose this attempt's existing role policy to the separate Codex runner. */
+  async codexToolCatalog(): Promise<
+    Array<{
+      name: string;
+      description: string;
+      inputSchema: Record<string, unknown>;
+    }>
+  > {
+    const state = await this.conversationActive();
+    const native = state.preparation
+      ? []
+      : catalogForRole(state.input.role, enabledTools(state.input));
+    const cloudflare = (await this.cloudflareTools()).filter(
+      (tool) => !state.preparation || preparationTool(tool.name)
+    );
+    const scanners =
+      !state.preparation &&
+      !state.toolPacks &&
+      ["coder", "maintenance", "pentester"].includes(state.input.role)
+        ? (await this.remoteTools(await this.remote())).filter((tool) =>
+            allowedRemoteTool(state.input.role, tool.name)
+          )
+        : [];
+    return [
+      ...native.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.input_schema
+      })),
+      ...cloudflare.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.input
+      })),
+      ...scanners.map((tool) => ({
+        name: tool.name,
+        description: tool.description ?? `Stock Kali MCP ${tool.name}`,
+        inputSchema: tool.inputSchema
+      }))
+    ];
+  }
+
+  /** Keep admission, cancellation, receipt and publication checks in PentCloud. */
+  async codexToolCall(
+    name: string,
+    args: Record<string, unknown>,
+    callId: string
+  ): Promise<unknown> {
+    if (
+      !/^[a-zA-Z0-9_-]{1,128}$/.test(name) ||
+      !/^[-a-zA-Z0-9:_]{1,160}$/.test(callId)
+    )
+      throw new Error("400: Invalid Codex tool identity");
+    const state = await this.conversationActive();
+    const catalog = await this.codexToolCatalog();
+    if (!catalog.some((tool) => tool.name === name))
+      throw new Error(
+        `403: Tool ${name} is unavailable for ${state.input.role}`
+      );
+    try {
+      if (
+        catalogForRole(state.input.role, enabledTools(state.input)).some(
+          (tool) => tool.name === name
+        )
+      )
+        return this.safe(await this.callTool(name, args, callId));
+      const cloudflare = (await this.cloudflareTools()).find(
+        (tool) => tool.name === name
+      );
+      if (cloudflare)
+        return this.callCloudflareTool(
+          cloudflare,
+          args,
+          callId,
+          this.abortController.signal
+        );
+      if (!state.toolPacks)
+        return this.safe(
+          await this.remoteCall(name, args, callId, this.abortController.signal)
+        );
+      throw new Error("403: Tool is unavailable");
+    } catch (error) {
+      throw new Error(this.error(error));
+    }
+  }
+
   private async executeTool(
     name: string,
     raw: Record<string, unknown>,

@@ -6,6 +6,13 @@ import { probe, roles, nativeNames } from "./runtime-fixture.mjs";
 describe("native sessions", () => {
   beforeAll(reset);
   afterAll(reset);
+  it.each(roles)("scopes the Codex bridge for %s", async (role) => {
+    const result = await probe(`codex-role-${role}`);
+    expect(result.names).toContain("computer_read");
+    expect(result.read.content).toContain("accepted baseline");
+    expect(result.crossRoleDenied).toBe(true);
+    expect(result.lateCallDenied).toBe(true);
+  });
   it("streams partial results, redacts secrets and retains terminal snapshots", async () => {
     const v = await probe("sdk-live-transport");
     expect(v).toMatchObject({
