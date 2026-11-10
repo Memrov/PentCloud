@@ -15,7 +15,8 @@ is sufficient within its limits. Keep your OpenCode key ready. Review
    **Protect with Cloudflare Access** off; the wizard creates the compatible
    hostname policy. Cloudflare copies the public repository into your
    GitHub/GitLab account and runs Workers Builds. No local CLI or Docker install
-   is needed. The first build prepares all eleven smaller tool images.
+   is needed. The first build prepares the Computer image and all eleven
+   smaller tool images.
 2. **Cloudflare:** open the deployed URL. In the wizard, enter your owner email
    and create the scoped first-setup token using its Cloudflare link. Account ID
    and Worker name are prefilled when supplied by Builds; otherwise copy them
@@ -40,8 +41,14 @@ The root `wrangler.jsonc` is the new-customer deployment. It deploys **one Worke
 containing the app, a private tool gateway through native
 [loopback bindings](https://developers.cloudflare.com/workers/runtime-apis/context/#exports),
 Durable Objects, Artifacts, Browser Run, Workers AI, Worker Loader and
-all eleven smaller tool Containers. New installs do not use Kali. Existing
-separate-Worker and legacy installations retain their private configurations.
+all eleven smaller tool Containers, plus one Computer Container per active attempt.
+The Computer pilot gives each role a Linux shell with direct Internet access;
+the model receives the pinned target scope and is responsible for following it.
+The container backend is experimental in the pinned Cloudflare Computer release.
+Shell writes through its mounted Workspace also bypass the role checks on
+`computer_write` and `computer_edit`; accepted results still pass Coordinator
+validation. New installs do not use Kali. Existing separate-Worker and legacy
+installations retain their private configurations.
 
 [Deploy buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
 do not deploy multiple Workers together, and subdirectory templates cannot import

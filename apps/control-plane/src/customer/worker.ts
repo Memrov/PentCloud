@@ -10,6 +10,7 @@ export { NativeDynamicWorkerTail } from "../native/dynamic-worker-tail";
 export { OpenCodeConnectionTest } from "../native/model-test";
 export { InternalHostRouter } from "agents/browser";
 export { TargetEgress } from "../native/target-egress";
+export { WorkspaceProxy } from "@cloudflare/computer";
 export { ProofQueue, ProofAttempt, WorkspaceServiceProxy } from "../worker";
 export {
   ToolPackGateway,

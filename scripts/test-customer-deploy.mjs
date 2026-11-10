@@ -8,7 +8,7 @@ import test from "node:test";
 import { verificationTasks } from "./verification-tasks.ts";
 const read = async (path) =>
   JSON.parse(await readFile(new URL("../" + path, import.meta.url), "utf8"));
-test("deployment button has one complete account-independent Worker and all eleven native tool images", async () => {
+test("deployment button includes the Computer pilot and all eleven native tool images", async () => {
   const config = await read("wrangler.jsonc"),
     packs = await read("infra/tool-packs/wrangler.jsonc"),
     pkg = await read("package.json");
@@ -17,9 +17,19 @@ test("deployment button has one complete account-independent Worker and all elev
   assert.equal(config.services, undefined);
   assert.equal(config.workers_dev, true);
   assert.equal(config.preview_urls, false);
-  assert.equal(config.containers.length, 11);
+  assert.equal(config.containers.length, 12);
+  const computer = config.containers.find(
+    (container) => container.class_name === "NativeAttempt"
+  );
+  assert.equal(
+    computer?.images.computer.dockerfile,
+    "infra/computer/Dockerfile"
+  );
+  assert.equal(config.vars.PENTCLOUD_COMPUTER_BACKEND, "container");
   assert.deepEqual(
-    config.containers.map((c) => c.class_name),
+    config.containers
+      .filter((c) => c.class_name !== "NativeAttempt")
+      .map((c) => c.class_name),
     packs.durable_objects.bindings.map((b) => b.class_name)
   );
   const classes = new Set(
@@ -75,7 +85,9 @@ test("selected Worker names isolate Artifacts and wizard metadata for each insta
 
 test("native image builds use the matching SDK base digests and isolate build-only tools", async () => {
   const config = await read("wrangler.jsonc");
-  for (const container of config.containers) {
+  for (const container of config.containers.filter(
+    (value) => value.class_name !== "NativeAttempt"
+  )) {
     const [pack, image] = Object.entries(container.images)[0],
       lock = await read(
         "node_modules/@memrov2/pentcloud-" + pack + "/tools.lock.json"

@@ -4,6 +4,7 @@ export { NativeDynamicWorkerTail } from "./native/dynamic-worker-tail";
 export { default } from "./native/worker";
 export { Coordinator } from "./native/coordinator";
 export { NativeAttempt } from "./native/attempt";
+export { WorkspaceProxy } from "@cloudflare/computer";
 export { TargetEgress } from "./native/target-egress";
 export { OpenCodeConnectionTest } from "./native/model-test";
 export { AgentBrowser } from "./native/agent-browser";

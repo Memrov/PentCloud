@@ -81,10 +81,11 @@ activity during active/unresolved work. The native 30-minute inactivity timeout
 stops idle Linux scratch state; durable results remain in Artifacts. Do not poll
 Kali awake. See [toolbox operations](../infra/cloudflare-kali/README.md).
 
-Cloudflare Computer provides workspace files/Git and a Worker shell/JavaScript
-subset. It does not provide arbitrary Linux binaries, npm, detached processes
-or unrestricted networking. Browser Run uses the stock persistent Chromium
-integration. An explicit readonly browser-view link is ephemeral access data:
+Customer pilot installations use Cloudflare Computer's attempt-owned Container
+backend for Linux shell commands, Node, Git, curl and direct network access.
+Existing app and legacy installations keep the Worker shell/JavaScript subset
+unless the Computer pilot is configured. Browser Run uses the stock persistent
+Chromium integration. An explicit readonly browser-view link is ephemeral access data:
 never save it into logs/model context/durable state. A connected view can incur
 normal usage after its connection-link expiry.
 

@@ -199,6 +199,7 @@ export type NativeEnv = Omit<
   TOOL_PACKS?: ToolPackService;
   TOOLBOX?: ToolboxService;
   ARTIFACTS_NAMESPACE?: string;
+  PENTCLOUD_COMPUTER_BACKEND?: "container";
   LEGACY_STATE_COMMIT?: string;
   OPENCODE_BYOK_PROVIDERS?: string;
   PENTCLOUD_VERIFICATION_EMAIL?: string;

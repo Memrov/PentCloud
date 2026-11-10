@@ -1,0 +1,24 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "pentcloud-computer-smoke",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": ["nodejs_compat", "enable_ctx_exports"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "COMPUTER", "class_name": "ComputerSmoke" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ComputerSmoke"] }
+  ],
+  "containers": [
+    {
+      "class_name": "ComputerSmoke",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "computer": { "dockerfile": "../../infra/computer/Dockerfile" }
+      }
+    }
+  ]
+}

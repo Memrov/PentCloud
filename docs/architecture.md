@@ -20,7 +20,9 @@ receives its relevant instructions, not the entire scope catalog. Managed
 requests pass through the shared target matcher. Browser Run adds native hostname
 guardrails and narrow CDP interception while Chromium handles HTTP transport.
 Installed scanner profiles have their own scope limits; they do not provide
-universal network confinement. Legacy Kali retains direct Internet access.
+universal network confinement. The customer Computer pilot and legacy Kali have
+direct Internet access. In the pilot, agents must follow the pinned scope in
+their instructions when using the Linux shell.
 [Capabilities and limits](operations/onboarding.md#bounty-scope-and-target-login).
 
 [Onboarding details and failure behavior](operations/onboarding.md).
@@ -37,7 +39,10 @@ and the installed scanner backend. Separate sessions do not provide network conf
 
 ## Execution backends and prompt ownership
 
-New installations deploy one customer Worker with eleven native tool packs.
+New installations deploy one customer Worker with eleven native tool packs and
+an attempt-owned Computer Container. The container gives every specialist a
+full Linux shell. It starts on first use and shares the attempt Workspace through
+Cloudflare Computer. The pinned container backend is experimental.
 `pentcloud_tool` exposes bounded request profiles; a runner belongs to one attempt
 and pack. The runtime validates the installed image and tool contract, records
 execution receipts and retires attempt-owned runtimes on cancellation. A profile

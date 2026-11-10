@@ -25,8 +25,9 @@ belongs to one owner or a trusted team in their own Cloudflare account. See
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Memrov/PentCloud)
 
 Choose your Cloudflare account and a Worker name. Cloudflare copies the repository
-and runs Workers Builds to deploy the app and eleven smaller tool packages in your
-account. Open the deployed app for the three-step setup wizard: protect it with
+and runs Workers Builds to deploy the app, a Computer container and eleven
+smaller tool packages in your account. Open the deployed app for the three-step
+setup wizard: protect it with
 Cloudflare Access, prepare the Artifacts workspace, and connect OpenCode. Existing
 configured installations open the app directly; revisit the wizard at `/setup`.
 See [deployment prerequisites and validation](docs/deployment.md).
