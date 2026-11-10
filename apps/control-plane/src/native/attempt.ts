@@ -1148,193 +1148,163 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
       this.inFlightTools--;
     }
   }
-  readonly plugin = Plugin.define({
-    id: "pentagi.native-attempt",
-    setup: async (ctx) => {
-      const state = await this.state();
-      await this.startup("plugin.setup.before", state);
-      const cloudflare = await this.cloudflareTools();
-      const allowedTools = catalogForRole(
-        state.input.role,
-        enabledTools(state.input)
-      );
-      const pinnedCatalog = await this.ctx.storage.get<{ tools: RemoteTool[] }>(
-        "remoteCatalog"
-      );
-      const scanners =
-        !state.toolPacks &&
-        ["coder", "maintenance", "pentester"].includes(state.input.role)
-          ? (state.result
-              ? (pinnedCatalog?.tools ?? [])
-              : await this.remoteTools(await this.remote())
-            ).filter((tool) => allowedRemoteTool(state.input.role, tool.name))
-          : [];
-      if (state.toolSkill)
-        await ctx.skill.transform((editor) => {
-          for (const skill of editor.list()) editor.remove(skill.id);
-          editor.add(embeddedToolSkill(state.toolSkill!));
-        });
-      let current = await this.state();
-      this.reloadConversation = async () => {
-        current = await this.state();
-        await ctx.agent.reload();
-        current = await this.state();
-        await this.startup("plugin.tools.before", state);
-        await ctx.tool.reload();
-        await this.startup("plugin.tools.after", state);
-      };
-      await ctx.agent.transform((editor) => {
-        for (const id of new Set(["build", profileName(state.input)]))
-          editor.update(id, (agent) => {
-            agent.system =
-              (current.input.context.sourceContexts
-                ? SOURCE_INSTRUCTIONS + "\n\n"
-                : "") +
-              (current.preparation
-                ? PREPARATION_INSTRUCTIONS + "\n\n" + current.prompt
-                : current.prompt);
-            const names = [
-              ...cloudflare
-                .filter(
-                  (tool) => !current.preparation || preparationTool(tool.name)
-                )
-                .map((tool) => tool.name),
-              ...(!current.preparation
-                ? allowedTools.map((tool) => nativeToolPermission(tool.name))
-                : []),
-              ...scanners.map((tool) => tool.name),
-              ...(scanners.length ? ["execute"] : [])
-            ];
-            agent.permissions = [
-              { action: "*", resource: "*", effect: "deny" },
-              ...names.map((action) => ({
-                action,
-                resource: "*",
-                effect: "allow" as const
-              })),
-              { action: "webfetch", resource: "*", effect: "deny" },
-              ...(!current.preparation && state.toolSkill
-                ? [
-                    {
-                      action: "skill",
-                      resource: "pentcloud-tools",
-                      effect: "allow" as const
-                    }
-                  ]
-                : []),
-              ...((current.preparation || state.toolSkill) &&
-              state.input.role === "primary"
-                ? [
-                    {
-                      action: "question",
-                      resource: "*",
-                      effect: "allow" as const
-                    }
-                  ]
-                : [])
-            ];
-          });
-      });
-      // Native CodeMode shares the outer call ID across nested calls. Stable indices
-      // distinguish repeated scanner calls and replay the same durable receipts.
-      await ctx.tool.hook("execute.before", (event) => {
-        if (event.tool === "execute")
-          this.codeModeSubcalls.set(String(event.id), 0);
-      });
-      await ctx.tool.hook("execute.after", (event) => {
-        if (event.tool === "execute")
-          this.codeModeSubcalls.delete(String(event.id));
-      });
-      await ctx.session.hook("model.request", async (request) => {
-        await this.startup("model.request.before", state);
-        const active = await this.conversationActive();
-        if (active.promotionPending)
-          throw new Error(
-            "409: Assessment workspace and tools are still being prepared"
-          );
-        if (active.proposal)
-          throw new Error("Terminal publication has started");
-        await this.preflightToolbox(active);
-        if (
-          request.model.providerID !==
-            this.selectedModel(active.input).provider ||
-          request.model.id !== this.selectedModel(active.input).modelId
-        )
-          throw new Error("The immutable selected OpenCode model is required");
-        await this.selectedModelKey(active.input);
-        request.headers["x-opencode-session"] = state.input.id;
-        request.headers["user-agent"] = "pentagi-native-opencode-v2/1";
-        await this.startup("model.request.ready", state);
-      });
-      await ctx.session.hook("title", (request) => {
-        request.result = `PentAGI ${state.input.role}`;
-      });
-      current = await this.state();
-      await this.startup("plugin.tools.before", state);
-      await ctx.tool.transform((tools) => {
-        for (const tool of tools.list()) {
-          if (
-            !(
-              (!current.preparation &&
-                state.toolSkill &&
-                tool.name === "skill") ||
-              ((current.preparation || state.toolSkill) &&
-                tool.name === "question" &&
-                state.input.role === "primary")
-            )
-          )
-            tools.remove(tool.id);
-        }
-        const allowed = catalogForRole(
+  private openCodePlugin: ReturnType<typeof Plugin.define> | undefined;
+  get plugin(): ReturnType<typeof Plugin.define> {
+    return (this.openCodePlugin ??= Plugin.define({
+      id: "pentagi.native-attempt",
+      setup: async (ctx) => {
+        const state = await this.state();
+        await this.startup("plugin.setup.before", state);
+        const cloudflare = await this.cloudflareTools();
+        const allowedTools = catalogForRole(
           state.input.role,
           enabledTools(state.input)
         );
-        for (const tool of current.preparation ? [] : allowed)
-          tools.add({
-            name: tool.name,
-            description: tool.description,
-            input: tool.input_schema,
-            options: {
-              codemode: false,
-              permission: nativeToolPermission(tool.name)
-            },
-            execute: async (args, context) => ({
-              content: JSON.stringify(
-                await this.callTool(
-                  tool.name,
-                  args as Record<string, unknown>,
-                  String(context.id),
-                  context.signal
-                )
-              )
-            })
+        const pinnedCatalog = await this.ctx.storage.get<{
+          tools: RemoteTool[];
+        }>("remoteCatalog");
+        const scanners =
+          !state.toolPacks &&
+          ["coder", "maintenance", "pentester"].includes(state.input.role)
+            ? (state.result
+                ? (pinnedCatalog?.tools ?? [])
+                : await this.remoteTools(await this.remote())
+              ).filter((tool) => allowedRemoteTool(state.input.role, tool.name))
+            : [];
+        if (state.toolSkill)
+          await ctx.skill.transform((editor) => {
+            for (const skill of editor.list()) editor.remove(skill.id);
+            editor.add(embeddedToolSkill(state.toolSkill!));
           });
-        for (const tool of cloudflare.filter(
-          (tool) => !current.preparation || preparationTool(tool.name)
-        ))
-          tools.add({
-            name: tool.name,
-            description: tool.description,
-            input: tool.input,
-            options: { codemode: false, permission: tool.name },
-            execute: (args, context) =>
-              this.callCloudflareTool(
-                tool,
-                args,
-                String(context.id),
-                context.signal
+        let current = await this.state();
+        this.reloadConversation = async () => {
+          current = await this.state();
+          await ctx.agent.reload();
+          current = await this.state();
+          await this.startup("plugin.tools.before", state);
+          await ctx.tool.reload();
+          await this.startup("plugin.tools.after", state);
+        };
+        await ctx.agent.transform((editor) => {
+          for (const id of new Set(["build", profileName(state.input)]))
+            editor.update(id, (agent) => {
+              agent.system =
+                (current.input.context.sourceContexts
+                  ? SOURCE_INSTRUCTIONS + "\n\n"
+                  : "") +
+                (current.preparation
+                  ? PREPARATION_INSTRUCTIONS + "\n\n" + current.prompt
+                  : current.prompt);
+              const names = [
+                ...cloudflare
+                  .filter(
+                    (tool) => !current.preparation || preparationTool(tool.name)
+                  )
+                  .map((tool) => tool.name),
+                ...(!current.preparation
+                  ? allowedTools.map((tool) => nativeToolPermission(tool.name))
+                  : []),
+                ...scanners.map((tool) => tool.name),
+                ...(scanners.length ? ["execute"] : [])
+              ];
+              agent.permissions = [
+                { action: "*", resource: "*", effect: "deny" },
+                ...names.map((action) => ({
+                  action,
+                  resource: "*",
+                  effect: "allow" as const
+                })),
+                { action: "webfetch", resource: "*", effect: "deny" },
+                ...(!current.preparation && state.toolSkill
+                  ? [
+                      {
+                        action: "skill",
+                        resource: "pentcloud-tools",
+                        effect: "allow" as const
+                      }
+                    ]
+                  : []),
+                ...((current.preparation || state.toolSkill) &&
+                state.input.role === "primary"
+                  ? [
+                      {
+                        action: "question",
+                        resource: "*",
+                        effect: "allow" as const
+                      }
+                    ]
+                  : [])
+              ];
+            });
+        });
+        // Native CodeMode shares the outer call ID across nested calls. Stable indices
+        // distinguish repeated scanner calls and replay the same durable receipts.
+        await ctx.tool.hook("execute.before", (event) => {
+          if (event.tool === "execute")
+            this.codeModeSubcalls.set(String(event.id), 0);
+        });
+        await ctx.tool.hook("execute.after", (event) => {
+          if (event.tool === "execute")
+            this.codeModeSubcalls.delete(String(event.id));
+        });
+        await ctx.session.hook("model.request", async (request) => {
+          await this.startup("model.request.before", state);
+          const active = await this.conversationActive();
+          if (active.promotionPending)
+            throw new Error(
+              "409: Assessment workspace and tools are still being prepared"
+            );
+          if (active.proposal)
+            throw new Error("Terminal publication has started");
+          await this.preflightToolbox(active);
+          if (
+            request.model.providerID !==
+              this.selectedModel(active.input).provider ||
+            request.model.id !== this.selectedModel(active.input).modelId
+          )
+            throw new Error(
+              "The immutable selected OpenCode model is required"
+            );
+          await this.selectedModelKey(active.input);
+          request.headers["x-opencode-session"] = state.input.id;
+          request.headers["user-agent"] = "pentagi-native-opencode-v2/1";
+          await this.startup("model.request.ready", state);
+        });
+        await ctx.session.hook("title", (request) => {
+          request.result = `PentAGI ${state.input.role}`;
+        });
+        current = await this.state();
+        await this.startup("plugin.tools.before", state);
+        await ctx.tool.transform((tools) => {
+          for (const tool of tools.list()) {
+            if (
+              !(
+                (!current.preparation &&
+                  state.toolSkill &&
+                  tool.name === "skill") ||
+                ((current.preparation || state.toolSkill) &&
+                  tool.name === "question" &&
+                  state.input.role === "primary")
               )
-          });
-        if (scanners.length) {
-          for (const tool of scanners) {
+            )
+              tools.remove(tool.id);
+          }
+          const allowed = catalogForRole(
+            state.input.role,
+            enabledTools(state.input)
+          );
+          for (const tool of current.preparation ? [] : allowed)
             tools.add({
               name: tool.name,
-              description: tool.description ?? `Stock Kali MCP ${tool.name}`,
-              input: tool.inputSchema,
-              options: { codemode: true },
+              description: tool.description,
+              input: tool.input_schema,
+              options: {
+                codemode: false,
+                permission: nativeToolPermission(tool.name)
+              },
               execute: async (args, context) => ({
                 content: JSON.stringify(
-                  await this.remoteCall(
+                  await this.callTool(
                     tool.name,
                     args as Record<string, unknown>,
                     String(context.id),
@@ -1343,95 +1313,136 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
                 )
               })
             });
+          for (const tool of cloudflare.filter(
+            (tool) => !current.preparation || preparationTool(tool.name)
+          ))
+            tools.add({
+              name: tool.name,
+              description: tool.description,
+              input: tool.input,
+              options: { codemode: false, permission: tool.name },
+              execute: (args, context) =>
+                this.callCloudflareTool(
+                  tool,
+                  args,
+                  String(context.id),
+                  context.signal
+                )
+            });
+          if (scanners.length) {
+            for (const tool of scanners) {
+              tools.add({
+                name: tool.name,
+                description: tool.description ?? `Stock Kali MCP ${tool.name}`,
+                input: tool.inputSchema,
+                options: { codemode: true },
+                execute: async (args, context) => ({
+                  content: JSON.stringify(
+                    await this.remoteCall(
+                      tool.name,
+                      args as Record<string, unknown>,
+                      String(context.id),
+                      context.signal
+                    )
+                  )
+                })
+              });
+            }
           }
-        }
-      });
-      await this.startup("plugin.tools.after", state);
-      await this.startup("plugin.setup.after", state);
-    }
-  });
-  readonly harness = new RecoveryGuardedHarness(
-    {
-      opencode: async ({ storage }) => {
-        await this.assertPlatformRecoveryOpen();
-        const state = await this.state();
-        await this.preflightToolbox(state);
-        await this.startup("opencode.create.before");
-        const profile = profileName(state.input);
-        // History survives the host's native idle close. A settled/cancelled
-        // session needs SQLite and plugins, never a model credential or admission.
-        const readOnly =
-          !!state.result ||
-          state.status === "settled" ||
-          this.stopped ||
-          !!(await this.ctx.storage.get<boolean>("cancelled"));
-        const model = this.selectedModel(state.input),
-          apiKey = readOnly
-            ? undefined
-            : await this.selectedModelKey(state.input);
-        // Load the embedded engine only for an authorized native session, not at
-        // Worker startup (which has its own platform CPU limit).
-        const { OpenCodeWorkerd } = await import("@opencode/sdk/workerd");
-        const runtime = await OpenCodeWorkerd.create({
-          storage,
-          // This attempt pins one explicitly configured model. Loading and
-          // normalizing the entire bundled models.dev catalog exceeds edge memory.
-          models: { fetch: false, snapshot: false },
-          config: {
-            default_agent: profile,
-            ...(profile === "build"
-              ? {}
-              : {
-                  agents: {
-                    [profile]: {
-                      mode: "primary" as const,
-                      description: `PentAGI ${state.input.role} specialist`,
-                      system: state.prompt
+        });
+        await this.startup("plugin.tools.after", state);
+        await this.startup("plugin.setup.after", state);
+      }
+    }));
+  }
+  private openCodeHarness: RecoveryGuardedHarness | undefined;
+  get harness(): RecoveryGuardedHarness {
+    return (this.openCodeHarness ??= new RecoveryGuardedHarness(
+      {
+        opencode: async ({ storage }) => {
+          await this.assertPlatformRecoveryOpen();
+          const state = await this.state();
+          await this.preflightToolbox(state);
+          await this.startup("opencode.create.before");
+          const profile = profileName(state.input);
+          // History survives the host's native idle close. A settled/cancelled
+          // session needs SQLite and plugins, never a model credential or admission.
+          const readOnly =
+            !!state.result ||
+            state.status === "settled" ||
+            this.stopped ||
+            !!(await this.ctx.storage.get<boolean>("cancelled"));
+          const model = this.selectedModel(state.input),
+            apiKey = readOnly
+              ? undefined
+              : await this.selectedModelKey(state.input);
+          // Load the embedded engine only for an authorized native session, not at
+          // Worker startup (which has its own platform CPU limit).
+          const { OpenCodeWorkerd } = await import("@opencode/sdk/workerd");
+          const runtime = await OpenCodeWorkerd.create({
+            storage,
+            // This attempt pins one explicitly configured model. Loading and
+            // normalizing the entire bundled models.dev catalog exceeds edge memory.
+            models: { fetch: false, snapshot: false },
+            config: {
+              default_agent: profile,
+              ...(profile === "build"
+                ? {}
+                : {
+                    agents: {
+                      [profile]: {
+                        mode: "primary" as const,
+                        description: `PentAGI ${state.input.role} specialist`,
+                        system: state.prompt
+                      }
+                    }
+                  }),
+              ...(apiKey
+                ? {
+                    providers: {
+                      [model.provider]: nativeProvider(
+                        model,
+                        apiKey,
+                        state.input.settings.reasoningEffort
+                      )
                     }
                   }
-                }),
-            ...(apiKey
-              ? {
-                  providers: {
-                    [model.provider]: nativeProvider(
-                      model,
-                      apiKey,
-                      state.input.settings.reasoningEffort
-                    )
-                  }
-                }
-              : {})
-          },
-          plugins: [...(apiKey ? [nativeModelPlugin(model)] : []), this.plugin]
-        });
-        await this.startup("opencode.create.after");
-        return runtime;
-      }
-    },
-    async () => {
-      if (await this.ctx.storage.get<string>("purgedRunId")) return false;
-      if (
-        recoveryPending(
-          await this.ctx.storage.get<RuntimeRecovery>("platform:recovery")
+                : {})
+            },
+            plugins: [
+              ...(apiKey ? [nativeModelPlugin(model)] : []),
+              this.plugin
+            ]
+          });
+          await this.startup("opencode.create.after");
+          return runtime;
+        }
+      },
+      async () => {
+        if (await this.ctx.storage.get<string>("purgedRunId")) return false;
+        if (
+          recoveryPending(
+            await this.ctx.storage.get<RuntimeRecovery>("platform:recovery")
+          )
         )
-      )
-        return false;
-      const state = await this.ctx.storage.get<AttemptState>("attempt");
-      if (!state || state.input.execution) return false;
-      // Lifecycle starts under the platform's30-second concurrency gate. Cold
-      // readiness belongs to execute(), outside that gate, and existing recovery
-      // polling will relaunch it. Never cold-boot an SDK host inside an alarm wake.
-      return (
-        !!state.result ||
-        state.status === "settled" ||
-        !(await this.needsToolbox(state)) ||
-        this.toolboxPreflightReady
-      );
-    }
-  );
-  readonly lifecycle = Lifecycle.install(this)
-    .use(this.cloudBrowser)
-    .use(this.harness);
+          return false;
+        const state = await this.ctx.storage.get<AttemptState>("attempt");
+        if (!state || state.input.execution) return false;
+        // Lifecycle starts under the platform's30-second concurrency gate. Cold
+        // readiness belongs to execute(), outside that gate, and existing recovery
+        // polling will relaunch it. Never cold-boot an SDK host inside an alarm wake.
+        return (
+          !!state.result ||
+          state.status === "settled" ||
+          !(await this.needsToolbox(state)) ||
+          this.toolboxPreflightReady
+        );
+      }
+    ));
+  }
+  readonly lifecycle = this.codexEnabled
+    ? Lifecycle.install(this).use(this.cloudBrowser)
+    : Lifecycle.install(this).use(this.cloudBrowser).use(this.harness);
 
   async onAlarmMemoryLimit(context: MemoryLimitContext): Promise<void> {
     if (await this.ctx.storage.get<string>("purgedRunId")) return;
@@ -2555,7 +2566,7 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
         status: "settled",
         result
       });
-      await this.harness.abort().catch(() => false);
+      if (!this.codexEnabled) await this.harness.abort().catch(() => false);
       return result;
     }
   }
@@ -2621,8 +2632,9 @@ export class NativeAttempt extends withWorkspaceContainer(NativeAttemptBase) {
     if (state && !state.result) await this.interrupted(state);
     if (state && this.codexEnabled)
       await this.env.CODEX_RUNNER?.cancelNative(state.input.id);
-    if (state) await this.harness.abort().catch(() => false);
-    if (state?.preparation) await this.harness.dispose();
+    if (state && !this.codexEnabled)
+      await this.harness.abort().catch(() => false);
+    if (state?.preparation && !this.codexEnabled) await this.harness.dispose();
     await this.toolbox?.detach().catch(() => undefined);
     if (!(await this.unresolvedRemote()).length && !this.inFlightTools)
       await this.retireToolboxIfStopped();
