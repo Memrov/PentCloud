@@ -3474,7 +3474,9 @@ export class Coordinator extends DurableObject<NativeEnv> {
       throw new Error("409: Run creation identity reused with changed input");
     if (!intent)
       this.put("onboarding:creation:" + id, { input: creationInput, target });
+    console.info("pentcloud.run_creation stage=project");
     const project = await this.project(id);
+    console.info("pentcloud.run_creation stage=job");
     const run: RunRecord = {
       id,
       task: input.task,
@@ -3515,7 +3517,9 @@ export class Coordinator extends DurableObject<NativeEnv> {
       url: target.url,
       profile: "http-probes-v3"
     };
+    console.info("pentcloud.run_creation stage=activity");
     const writer = await this.activityWriter(id, true);
+    console.info("pentcloud.run_creation stage=admission");
     const pushes: Promise<unknown>[] = [];
     this.ctx.storage.transactionSync(() => {
       this.assertAdmissionOpen();
@@ -3579,6 +3583,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       this.activity(writer, id, "run.started");
     });
     await Promise.all(pushes);
+    console.info("pentcloud.run_creation stage=publish");
     await this.publish();
     return {
       run: publicRun(this.run(id)),
