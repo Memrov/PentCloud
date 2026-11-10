@@ -1044,13 +1044,16 @@ export class Coordinator extends DurableObject<NativeEnv> {
       run = this.get<RunRecord>("run:" + id);
     if (this.get("purged:run:" + id))
       throw new Error("410: This draft/run was deleted");
-    const jobs = run ? this.jobs(id) : [],
+    const stage =
+        receipt && this.get<string>("onboarding:creation-stage:" + id),
+      jobs = run ? this.jobs(id) : [],
       root =
         jobs.find((j) =>
           run!.activation ? !j.execution && !j.parentJobId : !!j.execution
         ) ?? jobs.find((j) => !j.parentJobId);
     return {
       ...(receipt ? receipt : {}),
+      ...(stage ? { diagnosticStage: stage } : {}),
       ...(run && root
         ? { accepted: { run: publicRun(run), rootJob: publicJob(root) } }
         : {})
@@ -3474,9 +3477,9 @@ export class Coordinator extends DurableObject<NativeEnv> {
       throw new Error("409: Run creation identity reused with changed input");
     if (!intent)
       this.put("onboarding:creation:" + id, { input: creationInput, target });
-    console.info("pentcloud.run_creation stage=project");
+    this.put("onboarding:creation-stage:" + id, "project");
     const project = await this.project(id);
-    console.info("pentcloud.run_creation stage=job");
+    this.put("onboarding:creation-stage:" + id, "job");
     const run: RunRecord = {
       id,
       task: input.task,
@@ -3517,9 +3520,9 @@ export class Coordinator extends DurableObject<NativeEnv> {
       url: target.url,
       profile: "http-probes-v3"
     };
-    console.info("pentcloud.run_creation stage=activity");
+    this.put("onboarding:creation-stage:" + id, "activity");
     const writer = await this.activityWriter(id, true);
-    console.info("pentcloud.run_creation stage=admission");
+    this.put("onboarding:creation-stage:" + id, "admission");
     const pushes: Promise<unknown>[] = [];
     this.ctx.storage.transactionSync(() => {
       this.assertAdmissionOpen();
@@ -3583,7 +3586,7 @@ export class Coordinator extends DurableObject<NativeEnv> {
       this.activity(writer, id, "run.started");
     });
     await Promise.all(pushes);
-    console.info("pentcloud.run_creation stage=publish");
+    this.put("onboarding:creation-stage:" + id, "publish");
     await this.publish();
     return {
       run: publicRun(this.run(id)),
