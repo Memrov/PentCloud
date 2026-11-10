@@ -92,6 +92,13 @@ revision. The customer/root connection continues to use `npm run build` and
 `npm run deploy`. These are configuration instructions; no existing connection
 is changed by the repository update.
 
+For an opt-in Computer container pilot on an existing separate Worker, run
+`node scripts/enable-computer-container.mjs` after applying its private
+`PENTCLOUD_DEPLOY_CONFIG` and before the Vite build. Deploy without
+`--containers-rollout=none`, which skips building and updating the container.
+The helper adds only the `NativeAttempt` container and the backend selection
+variable; it preserves the installation's bindings and never prints its config.
+
 ## Retired result Workflow
 
 Result acceptance and publication use Coordinator's durable native recovery wake;

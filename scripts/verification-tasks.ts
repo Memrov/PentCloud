@@ -47,7 +47,7 @@ export const verificationTasks = {
   "gate:node": fresh(
     [
       "node --test scripts/test-native-test-harness.mjs scripts/test-native-canary-defaults.mjs",
-      "node --test scripts/test-native-auth.mjs scripts/test-browser-run-qa.mjs scripts/test-cloudflare-build-config.mjs",
+      "node --test scripts/test-native-auth.mjs scripts/test-browser-run-qa.mjs scripts/test-cloudflare-build-config.mjs scripts/test-enable-computer-container.mjs",
       "node --test apps/control-plane/test/native-kali-canary/contract.node.mjs"
     ],
     ["gate:toolpacks:bundle"]
