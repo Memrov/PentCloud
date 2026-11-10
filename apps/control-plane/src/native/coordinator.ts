@@ -3330,6 +3330,11 @@ export class Coordinator extends DurableObject<NativeEnv> {
     if (admitted && admitted.repo !== repo)
       throw new Error("409: run repository changed during initialization");
     if (!admitted) this.put(`project:owned:${runId}`, { runId, repo });
+    if (this.env.PENTCLOUD_AGENT_ENGINE === "codex") {
+      if (!this.env.CODEX_RUNNER)
+        throw new Error("503: Codex runner service binding is unavailable");
+      return this.env.CODEX_RUNNER.prepareProject(runId);
+    }
     let info: { remote: string };
     try {
       using handle = await this.env.ARTIFACTS.get(repo);

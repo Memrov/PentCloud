@@ -196,6 +196,11 @@ export type NativeEnv = Omit<
   "TOOLBOX" | "OPENCODE_BYOK_PROVIDERS"
 > & {
   CODEX_RUNNER?: {
+    prepareProject(runId: string): Promise<{
+      repo: string;
+      remote: string;
+      head: string;
+    }>;
     startNative(request: {
       id: string;
       role: Role;
