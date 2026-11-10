@@ -186,50 +186,62 @@ const identity = { name: "PentCloud", email: "pentcloud@invalid" };
 
 /** One admission authority for the one shared toolbox; session data lives in attempts. */
 export class Coordinator extends DurableObject<NativeEnv> {
-  readonly workspace = new Workspace({
-    storage: this.ctx.storage as unknown as DurableObjectStorageLike,
-    git: createGitClient(),
-    defaultGitIdentity: identity,
-    artifacts: { binding: this.env.ARTIFACTS }
-  });
-  private readonly materials = new MaterialStore({
-    fs: this.workspace.fs,
-    get: <T>(key: string) => this.get<T>(key),
-    put: (key, value) => this.put(key, value),
-    ...(this.env.AI
-      ? {
-          convert: async (input: { name: string; blob: Blob }) => {
-            const raw: unknown = await this.env.AI.toMarkdown(input);
-            const value = (Array.isArray(raw) ? raw[0] : raw) as {
-              format: string;
-              data?: string;
-              error?: string;
-              mimetype?: string;
-            };
-            return value;
+  private workspaceInstance?: Workspace;
+  get workspace(): Workspace {
+    return (this.workspaceInstance ??= new Workspace({
+      storage: this.ctx.storage as unknown as DurableObjectStorageLike,
+      git: createGitClient(),
+      defaultGitIdentity: identity,
+      artifacts: { binding: this.env.ARTIFACTS }
+    }));
+  }
+  private materialsInstance?: MaterialStore;
+  private get materials(): MaterialStore {
+    return (this.materialsInstance ??= new MaterialStore({
+      fs: this.workspace.fs,
+      get: <T>(key: string) => this.get<T>(key),
+      put: (key, value) => this.put(key, value),
+      ...(this.env.AI
+        ? {
+            convert: async (input: { name: string; blob: Blob }) => {
+              const raw: unknown = await this.env.AI.toMarkdown(input);
+              const value = (Array.isArray(raw) ? raw[0] : raw) as {
+                format: string;
+                data?: string;
+                error?: string;
+                mimetype?: string;
+              };
+              return value;
+            }
           }
-        }
-      : {})
-  });
-  private readonly definitionMaterials = new MaterialStore({
-    ownerKind: "target-definition",
-    fs: this.workspace.fs,
-    get: <T>(key: string) => this.get<T>(key),
-    put: (key, value) => this.put(key, value)
-  });
+        : {})
+    }));
+  }
+  private definitionMaterialsInstance?: MaterialStore;
+  private get definitionMaterials(): MaterialStore {
+    return (this.definitionMaterialsInstance ??= new MaterialStore({
+      ownerKind: "target-definition",
+      fs: this.workspace.fs,
+      get: <T>(key: string) => this.get<T>(key),
+      put: (key, value) => this.put(key, value)
+    }));
+  }
   private definitionBusy = 0;
-  private readonly definitions = new TargetDefinitions({
-    get: <T>(key: string) => this.get<T>(key),
-    put: (key, value) => this.put(key, value),
-    materials: this.definitionMaterials,
-    runMaterials: this.materials,
-    read: async (path) => this.workspace.fs.readFile(path),
-    validate: (id) => {
-      this.assertAdmissionOpen();
-      if (this.onboarding.target(id).kind !== "api")
-        throw new Error("409: Choose an API target");
-    }
-  });
+  private definitionsInstance?: TargetDefinitions;
+  private get definitions(): TargetDefinitions {
+    return (this.definitionsInstance ??= new TargetDefinitions({
+      get: <T>(key: string) => this.get<T>(key),
+      put: (key, value) => this.put(key, value),
+      materials: this.definitionMaterials,
+      runMaterials: this.materials,
+      read: async (path) => this.workspace.fs.readFile(path),
+      validate: (id) => {
+        this.assertAdmissionOpen();
+        if (this.onboarding.target(id).kind !== "api")
+          throw new Error("409: Choose an API target");
+      }
+    }));
+  }
   private readonly onboarding = new OnboardingStore({
     get: <T>(key: string) => this.get<T>(key),
     put: (key, value) => this.put(key, value),
