@@ -8,10 +8,23 @@ describe("native sessions", () => {
   afterAll(reset);
   it.each(roles)("scopes the Codex bridge for %s", async (role) => {
     const result = await probe(`codex-role-${role}`);
-    expect(result.names).toContain("computer_read");
+    for (const name of nativeNames) expect(result.names).toContain(name);
     expect(result.read.content).toContain("accepted baseline");
     expect(result.crossRoleDenied).toBe(true);
     expect(result.lateCallDenied).toBe(true);
+    const resultTool = {
+      primary: "done",
+      coder: "code_result",
+      maintenance: "maintenance_result",
+      memorist: "memorist_result",
+      pentester: "hack_result",
+      searcher: "search_result",
+      reporter: "report_result"
+    }[role];
+    if (resultTool) expect(result.names).toContain(resultTool);
+    expect(result.names.includes("pentcloud_tool")).toBe(
+      ["coder", "maintenance", "pentester"].includes(role)
+    );
   });
   it("streams partial results, redacts secrets and retains terminal snapshots", async () => {
     const v = await probe("sdk-live-transport");

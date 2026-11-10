@@ -864,9 +864,13 @@ export class ProbeAttempt extends NativeAttempt {
         { path: "README.md" },
         "codex-read"
       );
+      const forbidden =
+        input.role === "reporter" ? "hack_result" : "report_result";
+      if (names.includes(forbidden))
+        throw new Error("Cross-role result tool leaked");
       let crossRoleDenied = false;
       try {
-        await this.codexToolCall("pentester", {}, "codex-cross-role");
+        await this.codexToolCall(forbidden, {}, "codex-cross-role");
       } catch {
         crossRoleDenied = true;
       }
