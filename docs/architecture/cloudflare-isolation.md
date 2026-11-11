@@ -14,7 +14,7 @@ The development deployment uses separate Workers for the public UI, Coordinator 
 | `pentcloud-dev-tools` | Thin tool gateway, with one service binding to each isolated tool Worker |
 | `pentcloud-dev-tool-*` | One Durable Object and container per tool pack |
 
-The public UI Worker has no Coordinator, Attempt, or tool implementation. Its service and Durable Object bindings point to the separate owners. Existing Durable Object namespace IDs survived the transfer. The UI Worker retains the existing target secret bindings and exposes only `TargetSecretBroker` over a private service binding. Coordinator and Attempt resolve target credentials through that broker.
+The public UI Worker has no Coordinator, Attempt, or tool implementation. Its service and Durable Object bindings point to the separate owners. Existing Durable Object namespace IDs survived the transfer. The UI Worker retains the existing target secret bindings and exposes only `TargetSecretBroker` over a private service binding. Coordinator and Attempt resolve target credentials through that broker. The dev UI route is explicit in the split config so a private build config without routes cannot unpublish `dev.pentcloud.dev`.
 
 ## Deployment order
 

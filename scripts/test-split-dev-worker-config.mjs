@@ -82,3 +82,14 @@ void test("private config may omit retired proof migrations", () => {
     "pentcloud-dev-app"
   );
 });
+
+void test("UI route is explicit when the private config has no route", () => {
+  const privateConfig = structuredClone(source);
+  delete privateConfig.routes;
+  const stages = splitDevWorkerConfigs(privateConfig);
+  assert.deepEqual(stages["05-source-ui"].routes, [
+    { pattern: "dev.pentcloud.dev", custom_domain: true }
+  ]);
+  assert.equal(stages["04-coordinator-bound"].routes, undefined);
+  assert.equal(stages["04-attempt-bound"].routes, undefined);
+});

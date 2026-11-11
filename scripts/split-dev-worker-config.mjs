@@ -132,6 +132,10 @@ export function splitDevWorkerConfigs(input) {
   delete committed.containers;
   const finalSource = clone(committed);
   finalSource.main = "src/ui-entry.ts";
+  delete finalSource.route;
+  finalSource.routes = [
+    { pattern: "dev.pentcloud.dev", custom_domain: true }
+  ];
 
   return {
     "01-source-convert": source,
