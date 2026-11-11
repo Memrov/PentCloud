@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const wrangler = join(root, "node_modules/.bin/wrangler");
+const deployEnv = { ...process.env };
+delete deployEnv.WRANGLER_CI_OVERRIDE_NAME;
+delete deployEnv.WRANGLER_CI_MATCH_TAG;
 const packs = [
   "recon",
   "http",
@@ -31,7 +34,7 @@ function deploy(config, rollout) {
       "--keep-vars",
       ...(process.env.PENTCLOUD_DEPLOY_DRY_RUN === "1" ? ["--dry-run"] : [])
     ],
-    { cwd: root, stdio: "inherit" }
+    { cwd: root, env: deployEnv, stdio: "inherit" }
   );
   if (result.error || result.status !== 0)
     throw new Error(

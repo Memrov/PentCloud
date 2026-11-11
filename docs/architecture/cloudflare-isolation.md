@@ -28,7 +28,7 @@ For container backed Durable Object commits, deploy the source with `--container
 
 The Artifact adapter and MCP Worker deploy from the pilot's `wrangler.artifacts.jsonc` and `wrangler.mcp.jsonc`. The Workflow Worker deploys from `wrangler.workflow.jsonc`. The runner's `cloudflare.config.ts` binds these Workers and the new Workflow name. The two Workflow entrypoints are event driven; run preparation begins with an HTTP `202` and continues through a durable Workflow step.
 
-Cloudflare Builds watches the `feat/container-computer-pilot` GitHub branch. Its build command writes the private Wrangler config, applies the dev bindings, and calls `scripts/build-split-dev.mjs`. Its deploy command calls `scripts/deploy-split-dev.mjs`, which updates the eleven tool Workers and gateway before the Coordinator, Attempt, and UI Workers. The deploy script rejects a public route on either internal Worker. Run it locally with `PENTCLOUD_DEPLOY_DRY_RUN=1` to verify every generated deployment without uploading.
+Cloudflare Builds watches the `feat/container-computer-pilot` GitHub branch. Its build command writes the private Wrangler config, applies the dev bindings, and calls `scripts/build-split-dev.mjs`. Its deploy command calls `scripts/deploy-split-dev.mjs`, which updates the eleven tool Workers and gateway before the Coordinator, Attempt, and UI Workers. Both scripts clear Cloudflare Builds' `WRANGLER_CI_OVERRIDE_NAME` and `WRANGLER_CI_MATCH_TAG` in child processes so Wrangler deploys each named Worker instead of forcing the connected UI Worker name. The deploy script rejects a public route on either internal Worker. Run it locally with `PENTCLOUD_DEPLOY_DRY_RUN=1` to verify every generated deployment without uploading.
 
 ## Verification
 

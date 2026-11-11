@@ -11,9 +11,12 @@ const stages = [
 ];
 
 function run(command, args, options = {}) {
+  const environment = { ...process.env, ...options.env };
+  delete environment.WRANGLER_CI_OVERRIDE_NAME;
+  delete environment.WRANGLER_CI_MATCH_TAG;
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? root,
-    env: { ...process.env, ...options.env },
+    env: environment,
     stdio: "inherit"
   });
   if (result.error || result.status !== 0)
