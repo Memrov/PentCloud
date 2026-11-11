@@ -71,3 +71,14 @@ void test("staged transfer refuses an unexpected migration history", () => {
     /Missing existing SQLite class/
   );
 });
+
+void test("private config may omit retired proof migrations", () => {
+  const privateConfig = structuredClone(source);
+  privateConfig.migrations = privateConfig.migrations.filter(
+    (migration) => migration.tag !== "v1"
+  );
+  assert.equal(
+    splitDevWorkerConfigs(privateConfig)["05-source-ui"].name,
+    "pentcloud-dev-app"
+  );
+});

@@ -98,7 +98,9 @@ export function splitDevWorkerConfigs(input) {
     throw new Error(
       "Expected the existing private pentcloud-dev-app config with legacy migrations"
     );
-  for (const className of liveClasses)
+  // Retired proof classes may be absent from the private migration history.
+  // The active state owners must be present before preparing a transfer.
+  for (const className of ["Coordinator", "NativeAttempt"])
     if (
       !input.migrations.some((m) =>
         (m.new_sqlite_classes ?? []).includes(className)
