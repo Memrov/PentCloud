@@ -215,6 +215,8 @@ export type NativeEnv = Omit<
     }>;
     cancelNative(id: string): Promise<void>;
   };
+  RUN_PREPARATION_WORKFLOW?: Workflow;
+  TARGET_SECRETS?: { read(name: string): Promise<string> };
   PENTCLOUD_AGENT_ENGINE?: "codex";
   OPENCODE_GO_API_KEY?: string;
   TOOL_PACKS?: ToolPackService;

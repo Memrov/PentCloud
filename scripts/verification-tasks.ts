@@ -40,14 +40,17 @@ export const verificationTasks = {
   ),
   "gate:app": done(["gate:app:bundle"]),
   "gate:toolpacks:bundle": fresh(
-    "npm run build --workspace @pentcloud/tool-packs",
+    [
+      "npm run build --workspace @pentcloud/tool-packs",
+      "npm run build:split --workspace @pentcloud/tool-packs"
+    ],
     ["gate:app:types"]
   ),
   "gate:go": fresh("node scripts/verify-go.mjs", ["gate:static"]),
   "gate:node": fresh(
     [
       "node --test scripts/test-native-test-harness.mjs scripts/test-native-canary-defaults.mjs",
-      "node --test scripts/test-native-auth.mjs scripts/test-browser-run-qa.mjs scripts/test-cloudflare-build-config.mjs scripts/test-enable-computer-container.mjs",
+      "node --test scripts/test-native-auth.mjs scripts/test-browser-run-qa.mjs scripts/test-cloudflare-build-config.mjs scripts/test-enable-computer-container.mjs scripts/test-split-dev-worker-config.mjs infra/tool-packs/scripts/test-prepare-dev-transfer.mjs",
       "node --test apps/control-plane/test/native-kali-canary/contract.node.mjs"
     ],
     ["gate:toolpacks:bundle"]

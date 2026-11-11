@@ -286,6 +286,16 @@ describe("target network scope", () => {
         "PENTCLOUD_TARGET_PASS"
       )
     ).resolves.toBe("target-password");
+    const broker = {
+      read: async (name: string) =>
+        name === "PENTCLOUD_TARGET_PASS" ? "broker-password" : ""
+    };
+    await expect(
+      readTargetSecret({ TARGET_SECRETS: broker }, "PENTCLOUD_TARGET_PASS")
+    ).resolves.toBe("broker-password");
+    await expect(
+      readTargetSecret({ TARGET_SECRETS: broker }, "OPENCODE_GO_API_KEY")
+    ).rejects.toThrow(/target credential/i);
     await expect(readTargetSecret({}, "PENTCLOUD_TARGET_PASS")).rejects.toThrow(
       /Cloudflare/i
     );

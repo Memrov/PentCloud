@@ -1,0 +1,73 @@
+{
+  "name": "pentcloud-dev-tools",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-10",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "services": [
+    {
+      "binding": "RECON",
+      "service": "pentcloud-dev-tool-recon",
+      "entrypoint": "ReconService"
+    },
+    {
+      "binding": "HTTP",
+      "service": "pentcloud-dev-tool-http",
+      "entrypoint": "HttpService"
+    },
+    {
+      "binding": "NUCLEI",
+      "service": "pentcloud-dev-tool-nuclei",
+      "entrypoint": "NucleiService"
+    },
+    {
+      "binding": "SQLMAP",
+      "service": "pentcloud-dev-tool-sqlmap",
+      "entrypoint": "SqlmapService"
+    },
+    {
+      "binding": "SERVICE",
+      "service": "pentcloud-dev-tool-service",
+      "entrypoint": "ServiceService"
+    },
+    {
+      "binding": "WEB_CONTEXT",
+      "service": "pentcloud-dev-tool-web-context",
+      "entrypoint": "WebContextService"
+    },
+    {
+      "binding": "PCAP",
+      "service": "pentcloud-dev-tool-pcap",
+      "entrypoint": "PcapService"
+    },
+    {
+      "binding": "FILE_ANALYSIS",
+      "service": "pentcloud-dev-tool-file-analysis",
+      "entrypoint": "FileService"
+    },
+    {
+      "binding": "PASSWORD",
+      "service": "pentcloud-dev-tool-password",
+      "entrypoint": "PasswordService"
+    },
+    {
+      "binding": "REFERENCE",
+      "service": "pentcloud-dev-tool-reference",
+      "entrypoint": "ReferenceService"
+    },
+    {
+      "binding": "METASPLOIT",
+      "service": "pentcloud-dev-tool-metasploit",
+      "entrypoint": "MetasploitService"
+    }
+  ]
+}

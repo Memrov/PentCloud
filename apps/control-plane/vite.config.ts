@@ -23,20 +23,22 @@ export default defineConfig(({ mode }) => ({
             : [
                 cloudflare({
                   configPath:
-                    mode === "customer"
+                    process.env.PENTCLOUD_WRANGLER_CONFIG ??
+                    (mode === "customer"
                       ? "../../wrangler.jsonc"
-                      : "./wrangler.jsonc",
+                      : "./wrangler.jsonc"),
                   viteEnvironment: { name: "worker" }
                 })
               ])
         ],
   build: {
     outDir:
-      mode === "customer"
+      process.env.PENTCLOUD_SPLIT_OUT_DIR ??
+      (mode === "customer"
         ? "dist-customer"
         : mode === "browser-fixture"
           ? "dist/client"
-          : "dist"
+          : "dist")
   },
   environments: {
     worker: {

@@ -4,6 +4,7 @@
 node_modules/
 dist/
 dist-customer/
+dist-split-*/
 coverage/
 .wrangler/
 .dev.vars*
@@ -32,3 +33,5 @@ docs/superpowers/
 # Pinned source and prepared images for native customer deployment
 .pentcloud-tools/
 .vitest/
+/apps/control-plane/.split-*.jsonc
+/infra/tool-packs/.split-*.jsonc

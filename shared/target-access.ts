@@ -447,7 +447,11 @@ export async function readTargetSecret(
             typeof binding === "object" &&
             typeof Reflect.get(binding, "get") === "function"
           ? await (binding as { get(): Promise<string> }).get()
-          : undefined;
+          : await (
+              Reflect.get(env, "TARGET_SECRETS") as
+                | { read(name: string): Promise<string> }
+                | undefined
+            )?.read(name);
   } catch {
     throw new Error("503: Cloudflare target secret unavailable");
   }

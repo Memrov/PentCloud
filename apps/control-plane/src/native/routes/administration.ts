@@ -5,7 +5,13 @@ import { normalizeUploadIds } from "../materials";
 export async function routeAdministration(
   context: RouteContext
 ): Promise<Response | undefined> {
-  const { request, url, path, coordinator, history, identity } = context;
+  const { request, url, path, coordinator, history, identity, env } = context;
+  const preparation = path.match(/^\/runs\/([^/]+)\/preparation$/);
+  if (preparation && request.method === "GET")
+    return Response.json(
+      await coordinator.runPreparation(decodeURIComponent(preparation[1]!)),
+      { headers: { "Cache-Control": "no-store" } }
+    );
   if (path === "/runs" && request.method === "GET") {
     const view = url.searchParams.get("view") ?? "active";
     if (!["active", "archived", "trash", "all"].includes(view))
@@ -28,10 +34,15 @@ export async function routeAdministration(
     if (value.upload_ids !== undefined)
       value.upload_ids = normalizeUploadIds(value.upload_ids);
     return Response.json(
-      await coordinator.createRun({
-        ...value,
-        actor: identity
-      } as unknown as import("../types").NewRunInput),
+      await (env.RUN_PREPARATION_WORKFLOW
+        ? coordinator.enqueueRun({
+            ...value,
+            actor: identity
+          } as unknown as import("../types").NewRunInput)
+        : coordinator.createRun({
+            ...value,
+            actor: identity
+          } as unknown as import("../types").NewRunInput)),
       { status: 202 }
     );
   }

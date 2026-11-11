@@ -25,7 +25,7 @@ export {
   PasswordRunner,
   ReferenceRunner,
   MetasploitRunner
-} from "../../../../infra/tool-packs/src/worker";
+} from "../../../../infra/tool-packs/src/legacy-worker";
 const nativeEnv = (env: NativeEnv): NativeEnv => ({
   ...env,
   TOOL_PACKS: (exports as unknown as { ToolPackGateway: ToolPackService })

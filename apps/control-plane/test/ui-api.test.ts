@@ -284,6 +284,48 @@ describe("operator UI API client", () => {
     );
   });
 
+  it("follows asynchronous run preparation to the admitted root job", async () => {
+    const run = {
+      id: "run-async",
+      status: "created",
+      baselineRepo: "run-async",
+      inputCommit: "abc",
+      maxDepth: 4,
+      maxJobs: 128
+    };
+    const rootJob = {
+      id: "root-async",
+      runId: "run-async",
+      role: "pentester",
+      status: "created",
+      revision: 0
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ runId: "run-async", preparing: true }, 202))
+      .mockResolvedValueOnce(
+        json({
+          state: "ready",
+          result: { run, rootJob }
+        })
+      );
+    const created = await createRun(
+      {
+        runId: "run-async",
+        task: "Inspect",
+        launchTime: "2026-11-10T00:00:00Z"
+      },
+      fetcher
+    );
+    expect(created.run.id).toBe("run-async");
+    expect(created.rootJob.id).toBe("root-async");
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      "/v1/ui/runs/run-async/preparation",
+      { cache: "no-store" }
+    );
+  });
+
   it("rejects malformed safe projections and preserves steer conflicts", async () => {
     await expect(
       listRuns(

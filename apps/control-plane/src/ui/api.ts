@@ -380,6 +380,35 @@ export async function createRun(
     fetcher
   );
   if (!isRecord(value)) throw new Error("invalid create run response");
+  if (value.preparing === true && value.runId === input.runId) {
+    for (let poll = 0; poll < 300; poll++) {
+      const preparation = await request(
+        `/v1/ui/runs/${encodeURIComponent(input.runId)}/preparation`,
+        { cache: "no-store" },
+        fetcher
+      );
+      if (!isRecord(preparation))
+        throw new Error("invalid run preparation response");
+      if (preparation.state === "ready" && isRecord(preparation.result))
+        return {
+          run: parseRun(preparation.result.run),
+          rootJob: parseJob(preparation.result.rootJob)
+        };
+      if (preparation.state === "failed")
+        throw new APIError(
+          500,
+          typeof preparation.error === "string"
+            ? preparation.error
+            : "Run preparation failed"
+        );
+      if (preparation.state !== "preparing")
+        throw new Error("invalid run preparation state");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    throw new Error(
+      "Run preparation continues in the background. Retry the same run to resume."
+    );
+  }
   return { run: parseRun(value.run), rootJob: parseJob(value.rootJob) };
 }
 

@@ -3397,6 +3397,71 @@ export class Coordinator extends DurableObject<NativeEnv> {
     if (!head) throw new Error("Run initialization produced no commit");
     return { repo, remote: info.remote, head: head.hash };
   }
+  async enqueueRun(input: NewRunInput) {
+    await this.start();
+    const id = identifier(input.run_id, "run id");
+    if (
+      id.length > 54 ||
+      typeof input.task !== "string" ||
+      !input.task.trim() ||
+      input.task.length > 32000
+    )
+      throw new Error("400: invalid run id or objective");
+    this.assertAdmissionOpen();
+    if (!this.env.RUN_PREPARATION_WORKFLOW)
+      throw new Error("503: run preparation workflow is unavailable");
+    const normalized: NewRunInput = {
+      ...input,
+      run_id: id,
+      upload_ids: normalizeUploadIds(input.upload_ids)
+    };
+    const key = `run:preparation:${id}`;
+    const fingerprint = canonical(normalized);
+    const prior = this.get<{ fingerprint: string }>(key);
+    if (prior && prior.fingerprint !== fingerprint)
+      throw new Error("409: run identity reused with changed objective");
+    if (!prior) this.put(key, { fingerprint, input: normalized });
+    try {
+      await this.env.RUN_PREPARATION_WORKFLOW.create({
+        id: `prepare-${id}`,
+        params: { input: normalized }
+      });
+    } catch (error) {
+      // An identical retry may find that the first request created the Workflow.
+      try {
+        const instance = await this.env.RUN_PREPARATION_WORKFLOW.get(
+          `prepare-${id}`
+        );
+        const status = await instance.status();
+        if (status.status === "errored" || status.status === "terminated")
+          await instance.restart();
+      } catch {
+        throw error;
+      }
+    }
+    return { runId: id, preparing: true };
+  }
+
+  async runPreparation(id: string) {
+    await this.start();
+    id = identifier(id, "run id");
+    if (!this.get(`run:preparation:${id}`))
+      throw new Error("404: run preparation not found");
+    if (!this.env.RUN_PREPARATION_WORKFLOW)
+      throw new Error("503: run preparation workflow is unavailable");
+    const status = await (
+      await this.env.RUN_PREPARATION_WORKFLOW.get(`prepare-${id}`)
+    ).status();
+    if (status.status === "complete")
+      return { state: "ready", result: status.output };
+    if (status.status === "errored" || status.status === "terminated")
+      return {
+        state: "failed",
+        error: status.error?.message ?? "Run preparation failed"
+      };
+    return { state: "preparing" };
+  }
+
   async createRun(input: NewRunInput) {
     const id = identifier(input.run_id, "run id");
     this.creations.set(id, (this.creations.get(id) ?? 0) + 1);

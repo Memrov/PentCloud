@@ -1,6 +1,6 @@
 {
   "name": "pentcloud-tool-packs",
-  "main": "src/worker.ts",
+  "main": "src/legacy-worker.ts",
   "compatibility_date": "2026-11-05",
   "compatibility_flags": [
     "nodejs_compat"

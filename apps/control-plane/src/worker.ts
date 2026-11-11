@@ -6,6 +6,7 @@ export { Coordinator } from "./native/coordinator";
 export { NativeAttempt } from "./native/attempt";
 export { WorkspaceProxy } from "@cloudflare/computer";
 export { TargetEgress } from "./native/target-egress";
+export { TargetSecretBroker } from "./native/target-secret-broker";
 export { OpenCodeConnectionTest } from "./native/model-test";
 export { AgentBrowser } from "./native/agent-browser";
 export { InternalHostRouter } from "agents/browser";

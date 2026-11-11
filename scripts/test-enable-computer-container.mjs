@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  enableArtifactService,
   enableCodexRunner,
-  enableComputerContainer
+  enableComputerContainer,
+  enableRunPreparationWorkflow
 } from "./enable-computer-container.mjs";
 
 const template = JSON.parse(
@@ -37,6 +39,44 @@ test("container pilot preserves private installation metadata", () => {
     "../../infra/computer/Dockerfile"
   );
   assert.deepEqual(enableComputerContainer(result), result);
+});
+
+test("Codex dev app reaches Artifacts through a private service", () => {
+  const result = enableArtifactService({
+    ...template,
+    artifacts: [{ binding: "ARTIFACTS", namespace: "pentcloud-dev-work" }]
+  });
+  assert.equal(result.artifacts, undefined);
+  assert(
+    result.services.some(
+      (entry) =>
+        entry.binding === "ARTIFACTS" &&
+        entry.service === "pentcloud-artifacts-dev" &&
+        entry.entrypoint === "ArtifactService"
+    )
+  );
+  assert.deepEqual(enableArtifactService(result), result);
+  assert.throws(
+    () =>
+      enableArtifactService({
+        ...result,
+        artifacts: [{ binding: "ARTIFACTS", namespace: "other" }]
+      }),
+    /one owner/
+  );
+});
+
+test("Codex dev app binds the small run preparation Workflow", () => {
+  const result = enableRunPreparationWorkflow(template);
+  assert.deepEqual(result.workflows, [
+    {
+      name: "pentcloud-run-preparation-v1",
+      binding: "RUN_PREPARATION_WORKFLOW",
+      class_name: "RunPreparationWorkflow",
+      script_name: "codex-role-workflow-dev"
+    }
+  ]);
+  assert.deepEqual(enableRunPreparationWorkflow(result), result);
 });
 
 test("container pilot rejects a conflicting NativeAttempt image", () => {

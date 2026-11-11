@@ -1,0 +1,48 @@
+{
+  "name": "pentcloud-dev-tool-sqlmap",
+  "main": "src/packs/sqlmap.ts",
+  "compatibility_date": "2026-11-10",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RUNNER",
+        "class_name": "SqlmapRunner"
+      }
+    ]
+  },
+  "containers": [
+    {
+      "class_name": "SqlmapRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "sqlmap": {
+          "dockerfile": "Dockerfile",
+          "build_context": "../../.pentcloud-tools",
+          "build_vars": {
+            "PACK": "sqlmap",
+            "RUNTIME_IMAGE": "docker.io/library/python@sha256:bdd0cc97663b9b920570d0f1b4601ee18ed895221a0594ca1d9b5e2f26adba83"
+          }
+        }
+      },
+      "name": "pentcloud-dev-tools-sqlmap"
+    }
+  ],
+  "exports": {
+    "SqlmapRunner": {
+      "type": "durable-object",
+      "storage": "sqlite",
+      "container": "pentcloud-dev-tools-sqlmap"
+    }
+  }
+}

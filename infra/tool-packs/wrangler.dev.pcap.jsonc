@@ -1,0 +1,48 @@
+{
+  "name": "pentcloud-dev-tool-pcap",
+  "main": "src/packs/pcap.ts",
+  "compatibility_date": "2026-11-10",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RUNNER",
+        "class_name": "PcapRunner"
+      }
+    ]
+  },
+  "containers": [
+    {
+      "class_name": "PcapRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "pcap": {
+          "dockerfile": "Dockerfile",
+          "build_context": "../../.pentcloud-tools",
+          "build_vars": {
+            "PACK": "pcap",
+            "RUNTIME_IMAGE": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2"
+          }
+        }
+      },
+      "name": "pentcloud-dev-tools-pcap"
+    }
+  ],
+  "exports": {
+    "PcapRunner": {
+      "type": "durable-object",
+      "storage": "sqlite",
+      "container": "pentcloud-dev-tools-pcap"
+    }
+  }
+}

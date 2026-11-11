@@ -61,12 +61,58 @@ export function enableCodexRunner(config) {
   };
 }
 
+export function enableArtifactService(config) {
+  const namespace = config.artifacts?.find(
+    (entry) => entry.binding === "ARTIFACTS"
+  );
+  const binding = {
+    binding: "ARTIFACTS",
+    service: "pentcloud-artifacts-dev",
+    entrypoint: "ArtifactService"
+  };
+  const services = config.services ?? [];
+  const existing = services.find((service) => service.binding === "ARTIFACTS");
+  if (existing && JSON.stringify(existing) !== JSON.stringify(binding))
+    throw new Error("ARTIFACTS is already bound to another service.");
+  if (!namespace) {
+    if (existing && !config.artifacts?.length) return config;
+    throw new Error("Expected one Artifacts namespace binding.");
+  }
+  if (config.artifacts.length !== 1 || existing)
+    throw new Error("ARTIFACTS must have one owner.");
+  const result = {
+    ...config,
+    services: [...services, binding]
+  };
+  delete result.artifacts;
+  return result;
+}
+
+export function enableRunPreparationWorkflow(config) {
+  const binding = {
+    name: "pentcloud-run-preparation-v1",
+    binding: "RUN_PREPARATION_WORKFLOW",
+    class_name: "RunPreparationWorkflow",
+    script_name: "codex-role-workflow-dev"
+  };
+  const workflows = config.workflows ?? [];
+  const existing = workflows.find(
+    (workflow) => workflow.binding === binding.binding
+  );
+  if (existing && JSON.stringify(existing) !== JSON.stringify(binding))
+    throw new Error("RUN_PREPARATION_WORKFLOW is already bound elsewhere.");
+  return {
+    ...config,
+    workflows: existing ? workflows : [...workflows, binding]
+  };
+}
+
 async function main() {
   const path = resolve(process.argv[2] ?? "apps/control-plane/wrangler.jsonc");
   const config = JSON.parse(await readFile(path, "utf8"));
   await writeFile(
     path,
-    `${JSON.stringify(enableCodexRunner(enableComputerContainer(config)), null, 2)}\n`,
+    `${JSON.stringify(enableRunPreparationWorkflow(enableArtifactService(enableCodexRunner(enableComputerContainer(config)))), null, 2)}\n`,
     { mode: 0o600 }
   );
   console.log("Enabled the Computer container in the private build checkout.");

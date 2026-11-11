@@ -1,0 +1,48 @@
+{
+  "name": "pentcloud-dev-tool-nuclei",
+  "main": "src/packs/nuclei.ts",
+  "compatibility_date": "2026-11-10",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RUNNER",
+        "class_name": "NucleiRunner"
+      }
+    ]
+  },
+  "containers": [
+    {
+      "class_name": "NucleiRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "nuclei": {
+          "dockerfile": "Dockerfile",
+          "build_context": "../../.pentcloud-tools",
+          "build_vars": {
+            "PACK": "nuclei",
+            "RUNTIME_IMAGE": "docker.io/library/alpine@sha256:85f2b723e106c34644cd5851d7e81ee87da98ac54672b29947c052a45d31dc2f"
+          }
+        }
+      },
+      "name": "pentcloud-dev-tools-nuclei"
+    }
+  ],
+  "exports": {
+    "NucleiRunner": {
+      "type": "durable-object",
+      "storage": "sqlite",
+      "container": "pentcloud-dev-tools-nuclei"
+    }
+  }
+}

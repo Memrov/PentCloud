@@ -1,0 +1,48 @@
+{
+  "name": "pentcloud-dev-tool-http",
+  "main": "src/packs/http.ts",
+  "compatibility_date": "2026-11-10",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RUNNER",
+        "class_name": "HttpRunner"
+      }
+    ]
+  },
+  "containers": [
+    {
+      "class_name": "HttpRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "http": {
+          "dockerfile": "Dockerfile",
+          "build_context": "../../.pentcloud-tools",
+          "build_vars": {
+            "PACK": "http",
+            "RUNTIME_IMAGE": "docker.io/alpine/curl@sha256:96a0479d24c465a7d8d29ebf5ebe92b82536e8443a870d2654e66d3ac235441f"
+          }
+        }
+      },
+      "name": "pentcloud-dev-tools-http"
+    }
+  ],
+  "exports": {
+    "HttpRunner": {
+      "type": "durable-object",
+      "storage": "sqlite",
+      "container": "pentcloud-dev-tools-http"
+    }
+  }
+}

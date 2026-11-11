@@ -1,0 +1,48 @@
+{
+  "name": "pentcloud-dev-tool-metasploit",
+  "main": "src/packs/metasploit.ts",
+  "compatibility_date": "2026-11-10",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RUNNER",
+        "class_name": "MetasploitRunner"
+      }
+    ]
+  },
+  "containers": [
+    {
+      "class_name": "MetasploitRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "metasploit": {
+          "dockerfile": "Dockerfile",
+          "build_context": "../../.pentcloud-tools",
+          "build_vars": {
+            "PACK": "metasploit",
+            "RUNTIME_IMAGE": "docker.io/metasploitframework/metasploit-framework@sha256:8096709486bce8b5f35980f2aea42dc7cd83e34ebbeb4d56eab3339847de258d"
+          }
+        }
+      },
+      "name": "pentcloud-dev-tools-metasploit"
+    }
+  ],
+  "exports": {
+    "MetasploitRunner": {
+      "type": "durable-object",
+      "storage": "sqlite",
+      "container": "pentcloud-dev-tools-metasploit"
+    }
+  }
+}
